@@ -29,11 +29,18 @@ case "${1:-train}" in
       --tau-steps "${TAU_STEPS:-4}" --history-steps 6 --history-stride "${HISTORY_STRIDE:-4}" \
       --manifold-dim "${MANIFOLD_DIM:-64}" --hidden-dim "${HIDDEN_DIM:-512}" \
       --context-dim "${CONTEXT_DIM:-64}" --curriculum-interval "${CURRICULUM_INTERVAL:-4}" \
+      --dynamics-max-steps "${DYNAMICS_MAX_STEPS:-4}" \
       --window-stride "${WINDOW_STRIDE:-4}" --max-windows "${MAX_WINDOWS:-0}" \
       --device "${DEVICE:-cpu}" "${pinn[@]}" ;;
   audit)
     "$PYTHON" -m climate_manifold.audit --checkpoint "$RUN/manifold.pt" --archive "$ARCHIVE" \
       "${info[@]}" --output "$RUN/geometry-audit.json" ;;
+  pure-drift-validation)
+    "$PYTHON" -m climate_manifold.dynamics_evaluate --checkpoint "$RUN/manifold.pt" \
+      --archive "$ARCHIVE" "${info[@]}" --split validation \
+      --output "$RUN/pure-drift-validation.json" --forecast-output "$RUN/pure-drift-validation.npz" \
+      --steps "${DYNAMICS_EVAL_STEPS:-20}" --max-cases "${MAX_CASES:-0}" \
+      --device "${DEVICE:-cpu}" ;;
   selection|validation|test|drift-validation)
     split="$1"; drift=()
     [[ "$split" != selection ]] || split=expert_validation
@@ -42,5 +49,5 @@ case "${1:-train}" in
       "${info[@]}" --split "$split" --output "$RUN/$1.json" --forecast-output "$RUN/$1.npz" \
       --members "${MEMBERS:-4}" --tau-steps "${TAU_STEPS:-4}" --max-cases "${MAX_CASES:-0}" \
       --device "${DEVICE:-cpu}" "${drift[@]}" ;;
-  *) echo 'Use preflight | train | audit | selection | validation | drift-validation | test' >&2;exit 2 ;;
+  *) echo 'Use preflight | train | audit | selection | validation | drift-validation | pure-drift-validation | test' >&2;exit 2 ;;
 esac

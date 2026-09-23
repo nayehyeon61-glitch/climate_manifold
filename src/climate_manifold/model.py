@@ -57,7 +57,7 @@ class ClimateManifold(nn.Module):
             self.requires_grad_(False)
             self.pinn.requires_grad_(True)
 
-    def pinn_losses(self,batch,warmup=False):
+    def pinn_losses(self,batch,warmup=False,rollout=None):
         """Physical 6h dynamics of decoded A fields, never FM integration time tau.
 
         Upper-air equations constrain info_head, encoder and latent_drift. The
@@ -66,6 +66,10 @@ class ClimateManifold(nn.Module):
         """
         if self.pinn is None or self.phase!='A':
             raise ValueError('Hybrid PINN loss is an enabled A-only objective')
+        if rollout is not None:
+            if warmup:raise ValueError('PINN closure warmup uses the observed first pair only')
+            from .dynamics import trajectory_pinn_losses
+            return trajectory_pinn_losses(self,batch,rollout)
         information=batch['information'];future=batch['information_targets'][:,0]
         z=self.raw_encode(batch['origin'],information)
         dt=batch['dt_hours'][:,0]
@@ -79,6 +83,15 @@ class ClimateManifold(nn.Module):
         values['pinn_surface_tendency']=(error.square()*t.metric).sum(-1).mean()
         values['pinn_total']=values['pinn_total']+self.pinn.config.tendency_weight*values['pinn_surface_tendency']
         return values
+
+    def pure_drift_rollout(self,origin,information,dt_hours):
+        """Free latent drift with pure decoder outputs; no truth or origin offset."""
+        from .dynamics import pure_drift_rollout
+        return pure_drift_rollout(self,origin,information,dt_hours)
+
+    def dynamics_losses(self,batch,steps):
+        from .dynamics import dynamics_losses
+        return dynamics_losses(self,batch,steps)
 
     def raw_encode(self,x,information=None):
         z=self.core.manifold.encode(x);encoder=self.information
@@ -230,6 +243,8 @@ def curriculum(epoch,interval=2):
     return phase,{'reconstruction':1.,'forecast_anchor':.1,'physics':.1,'invariant':.05,'metric':.1,
         'latent_dynamics':.1 if phase>=2 else 0.,'ae_delta':.05 if phase>=2 else 0.,
         'decoded_drift':.05 if phase>=2 else 0.,'static_l2':.05,'info_reconstruction':.05,
+        'direct_state':.1 if phase>=2 else 0.,'direct_information':.05 if phase>=2 else 0.,
+        'direct_static':.05 if phase>=2 else 0.,
         'fm':1. if phase>=3 else 0.,'state_crps':.25 if phase>=3 else 0.,
         'information_geometry':.02 if phase>=4 else 0.,'info_distribution':.1 if phase>=4 else 0.,
         'transition_crps':.25 if phase>=5 else 0.,'loss_delta':.02 if phase>=5 else 0.,

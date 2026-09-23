@@ -18,6 +18,7 @@ forecast = ["torchdiffeq>=0.2.4"]
 [project.scripts]
 train-climate-manifold = "climate_manifold.train:main"
 evaluate-climate-manifold = "climate_manifold.forecast:main"
+evaluate-climate-dynamics = "climate_manifold.dynamics_evaluate:main"
 audit-climate-manifold = "climate_manifold.audit:main"
 prepare-climate-manifold-data = "climate_manifold.fixed_step_data:main"
 prepare-climate-manifold-information = "climate_manifold.physical_information:main"

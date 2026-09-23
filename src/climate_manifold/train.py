@@ -16,6 +16,19 @@ from .physical_information import load_information, fit_information, digest, inf
 from .architecture import ManifoldConfig
 from .archive import load_archive, field_grid, build_split, validate_split
 from .temporal_supervision import TemporalWindowDataset, NonSingletonBatchSampler, fit_temporal_statistics, area_weights
+from .dynamics import rollout_steps
+
+
+DIRECT_WEIGHTS={'direct_state':.1,'direct_information':.05,'direct_static':.05}
+
+
+def dynamics_enabled(args):
+    return getattr(args,'dynamics_max_steps',0)>0 and args.profile in ('process','dynamics')
+
+
+def minimum_dynamics_epochs(max_steps,interval):
+    """First joint epoch with active pure-decoder losses at the full horizon."""
+    return (math.ceil(math.log2(max_steps))+1)*interval+1
 
 def source_commit():
     root=Path(__file__).resolve().parents[2]
@@ -111,12 +124,22 @@ def batch_loss(model,batch,args,epoch,streams):
     metrics=model.scores(generated,truth,batch['dt_hours'],batch['pair_observed_mask'])
     teacher=model.teacher_loss(batch,info,streams['fm']);metrics.update(teacher)
     metrics.update(model.geometry_losses(batch,info))
+    direct_rollout=None
+    if dynamics_enabled(args):
+        # Fixed full horizon on validation; training alone grows its horizon.
+        steps=(rollout_steps(schedule_epoch,args.curriculum_interval,args.dynamics_max_steps)
+               if model.training else args.dynamics_max_steps)
+        direct_metrics,direct_rollout=model.dynamics_losses(batch,steps)
+        metrics.update(direct_metrics)
     phase,weights=curriculum(schedule_epoch,args.curriculum_interval)
+    scheduled_phase=phase
     if args.profile!='process':
         phase=2 if args.profile=='dynamics' else 1
         _,weights=curriculum(3 if phase==2 else 1,2)
         if args.profile=='information':weights.update(ae_delta=.05,decoded_drift=.05,latent_dynamics=.1,information_geometry=.02)
         for key in ('fm','state_crps','transition_crps','loss_delta','loss_trajectory','info_distribution'):weights[key]=0.
+    if not dynamics_enabled(args) or scheduled_phase<2:
+        for key in DIRECT_WEIGHTS:weights[key]=0.
     if args.loss_weights:
         # Overrides set plateau strength, not the activation epoch.
         for key,value in json.loads(args.loss_weights).items():
@@ -129,7 +152,7 @@ def batch_loss(model,batch,args,epoch,streams):
     for key,weight in weights.items():
         if key in metrics:metrics['weighted_'+key]=metrics[key]*weight;total=total+metrics['weighted_'+key]
     if pc is not None:
-        metrics.update(model.pinn_losses(batch))
+        metrics.update(model.pinn_losses(batch,rollout=direct_rollout))
         weight=pc.weight*min(1.,schedule_epoch/pc.ramp_epochs)
         metrics['pinn_weight']=generated.new_tensor(weight)
         metrics['pinn_warmup']=generated.new_tensor(0.)
@@ -139,6 +162,11 @@ def batch_loss(model,batch,args,epoch,streams):
     metrics['loss']=total
     metrics['selection']=metrics['state_crps']+metrics['transition_crps']+.1*metrics['loss_trajectory']+.1*metrics['mean_state']
     if aux:metrics['selection']=metrics['selection']+metrics['reconstruction']+.05*(metrics['ae_delta']+metrics['decoded_drift'])
+    if direct_rollout is not None:
+        # Coordinate-space MSE is deliberately excluded from checkpoint selection.
+        direct_selection=sum(weight*metrics[key] for key,weight in DIRECT_WEIGHTS.items() if key in metrics)
+        metrics['direct_selection']=direct_selection
+        metrics['selection']=metrics['selection']+direct_selection
     if pc is not None:
         # Fixed plateau weight for selection; independent of the training ramp.
         metrics['selection']=metrics['selection']+pc.weight*metrics['pinn_total']
@@ -154,6 +182,9 @@ def train(args):
     if args.batch_size<2 or args.members<2 or args.epochs<1:raise ValueError('Require batch>=2, members>=2, epochs>=1')
     if min(args.tau_steps,args.window_stride,args.curriculum_interval)<1 or min(args.max_windows,args.patience)<0:
         raise ValueError('Invalid sampling/curriculum counts')
+    max_dynamics=getattr(args,'dynamics_max_steps',0)
+    if isinstance(max_dynamics,bool) or not isinstance(max_dynamics,int) or not 0<=max_dynamics<=20:
+        raise ValueError('dynamics_max_steps must be an integer between 0 and the 20-step data horizon')
     if args.max_windows==1:
         raise ValueError('max_windows must be 0 (all) or >=2 for the manifold metric')
     if not math.isfinite(args.learning_rate) or args.learning_rate<=0 or not math.isfinite(args.weight_decay) or args.weight_decay<0:
@@ -176,9 +207,10 @@ def train(args):
     warmup_epochs=pinn_config.warmup_epochs if pinn_config else 0
     if args.stage=='A':
         min_joint=5*args.curriculum_interval+1 if args.profile=='process' else 1
+        if dynamics_enabled(args):min_joint=max(min_joint,minimum_dynamics_epochs(max_dynamics,args.curriculum_interval))
         if pinn_config:min_joint=max(min_joint,pinn_config.ramp_epochs)
         if args.epochs<warmup_epochs+min_joint:
-            raise ValueError(f'A must complete warm-up, curriculum and PINN ramp; require >={warmup_epochs+min_joint} epochs')
+            raise ValueError(f'A must complete warm-up, curriculum, full dynamics horizon and PINN ramp; require >={warmup_epochs+min_joint} epochs')
     torch.manual_seed(args.seed);np.random.seed(args.seed)
     device=args.device
     states,_,schema=load_archive(args.archive)
@@ -228,7 +260,8 @@ def train(args):
                                      'drift':model.core.manifold.latent_drift,'a_sampler':model.a_sampler,
                                      'information':model.information,'context':model.a_context,
                                      'info_decoder':model.info_head,'pinn':model.pinn}
-                            selected={k:values[k] for k in ('reconstruction','ae_delta','decoded_drift','static_l2','information_geometry',
+                            selected={k:values[k] for k in ('reconstruction','ae_delta','decoded_drift','latent_dynamics','direct_state',
+                                'direct_information','direct_static','static_l2','information_geometry',
                                 'fm','state_crps','transition_crps','loss_trajectory','pinn_total','pinn_surface_tendency') if k in values}
                             selected.update({k:v for k,v in values.items() if k.startswith('weighted_')})
                             record['gradient_first_batch']=gradient_diagnostics(selected,{k:list(m.parameters()) for k,m in modules.items() if m is not None})
@@ -268,6 +301,18 @@ def train(args):
         'source_commit':source_commit(),
         'source_file_sha256':{str(f.relative_to(Path(__file__).parent)):digest(f) for f in sorted(Path(__file__).parent.glob('*.py'))},
         'optimizer_groups':[{'name':g['name'],'lr':g['lr']} for g in groups],
+        'dynamics_training':{'format':'climate_manifold.dynamics_training.v1','enabled':dynamics_enabled(args),
+            'max_steps':max_dynamics if dynamics_enabled(args) else 0,'step_hours':config.step_hours,
+            'training_horizon_hours':max_dynamics*config.step_hours if dynamics_enabled(args) else 0,
+            'profile':args.profile,'curriculum_interval':args.curriculum_interval,
+            'rollout':'free raw-z drift, Euler dt_hours/24, pure decoder with no origin residual',
+            'target':'stop-gradient E(future surface, fixed origin information)',
+            'replaced_losses':['latent_dynamics','decoded_drift'] if dynamics_enabled(args) else [],
+            'direct_plateau_weights':{key:float(json.loads(args.loss_weights or '{}').get(key,value)) for key,value in DIRECT_WEIGHTS.items()},
+            'selection_weights':DIRECT_WEIGHTS,'selection_horizon':'full configured horizon on validation',
+            'joint_pinn_pairs':'all predicted adjacent pairs' if dynamics_enabled(args) and model.pinn is not None else 'legacy first pair',
+            'gradient_policy':'encoder, decoder, drift and information heads jointly trained; future latent target detached',
+            'ensemble_policy':'existing 120h FM/CRPS/trajectory objectives retained; no per-member latent MSE'},
         'resume':'best weights only; optimizer/RNG not stored; same-stage resume is not implemented',
         'sampling_contract':'origin-fixed information/history; persistent independent member noise; raw-z auxiliary A sampler; 20 physical steps at 6h'}
     torch.save(payload,output);write_json(output.with_suffix('.metrics.json'),rows)
@@ -275,7 +320,7 @@ def train(args):
     write_json(output.with_suffix('.manifest.json'),{'checkpoint_sha256':digest(output),'stage':args.stage})
     return output
 
-def main(argv=None):
+def parser():
     p=argparse.ArgumentParser(description=__doc__)
     for k in ('archive','output'):p.add_argument('--'+k,required=True)
     p.add_argument('--information');p.add_argument('--stage',choices=['A'],default='A')
@@ -288,10 +333,16 @@ def main(argv=None):
     p.add_argument('--learning-rate',type=float,default=.001);p.add_argument('--weight-decay',type=float,default=.0001)
     p.add_argument('--loss-weights',help='A-only JSON plateau coefficients; preserves six-phase activation schedule')
     p.add_argument('--a-quality-max',type=float);p.add_argument('--gradient-audit',action='store_true')
+    p.add_argument('--dynamics-max-steps',type=int,default=4,
+                   help='Pure-decoder latent drift training horizon; default 4 (24h), 0 restores legacy A objectives')
     p.add_argument('--pinn',action='store_true',help='Add physical-time Hybrid PINN to enriched A')
     p.add_argument('--pinn-levels',nargs='+',type=int,default=[500,850])
     p.add_argument('--pinn-weight',type=float,default=.1)
     p.add_argument('--pinn-warmup-epochs',type=int,default=1)
     p.add_argument('--pinn-ramp-epochs',type=int,default=3)
-    p.add_argument('--device',default='cpu');a=p.parse_args(argv);print(train(a));return 0
+    p.add_argument('--device',default='cpu')
+    return p
+
+def main(argv=None):
+    a=parser().parse_args(argv);print(train(a));return 0
 if __name__=='__main__':main()

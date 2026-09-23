@@ -7,7 +7,7 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 | 구성 | 포함 내용 |
 |---|---|
 | 표현 | DCT + 전역 autoencoder, **manifold 64차원 / 은닉층 폭 512** |
-| 물리 동역학 | latent drift, 6시간 tendency/AE delta, 물리·불변량·거리 손실 |
+| 물리 동역학 | latent drift의 **다단계 자유 rollout**, 미래 latent·기후장·정보 감독, tendency/AE delta·물리 제약 |
 | 정보 | Z850/Z500/Z250, U850/V850, 고정 지형 고도·경사, 정보 복원·분포 손실 |
 | Hybrid PINN | 선택적으로 기압면 운동량·열역학·연속·층후 제약 및 learned closure |
 | A 보조 sampler | raw latent에서 flow matching, 상태·전이 분포 및 120시간 경로 손실 |
@@ -34,7 +34,8 @@ python scripts/smoke_climate_manifold.py --output runs/smoke-a64
 ```
 
 Smoke는 실제 기본 크기 **64/512**에서 PINN warm-up 1 epoch + A curriculum 6 epochs,
-checkpoint 재로딩, 120시간 보조/순수 drift 예측, tangent/AE audit를 확인합니다.
+다단계 drift 학습, checkpoint 재로딩, 120시간 보조/기존 anchored drift/새 pure drift 예측,
+tangent/AE audit를 확인합니다.
 빠른 소형 확인에는 `--tiny`를 추가합니다. 출력 디렉터리는 매번 새 경로를 사용합니다.
 합성 필드는 소프트웨어 검증용이며 ERA5 예측력의 근거가 아닙니다.
 
@@ -54,13 +55,21 @@ bash scripts/run_climate_manifold.sh preflight
 bash scripts/run_climate_manifold.sh train
 bash scripts/run_climate_manifold.sh audit
 bash scripts/run_climate_manifold.sh validation
+bash scripts/run_climate_manifold.sh pure-drift-validation
 ```
 
 이 명령은 **A만** 학습합니다. 기본은 60 epochs, batch 2, members 4, tau steps 4,
 manifold 64, hidden 512, 6시간 × 20 전이입니다. PINN은 1 epoch closure warm-up 후
 3 epochs에 걸쳐 가중치를 올립니다. A의 6단계 curriculum 간격은 4 epochs이며,
-전체 활성화 후에만 최적 checkpoint를 선택합니다. `PINN=0`이면 기존 정보 학습만
-수행합니다. 정보가 없는 surface 실험은 `MODE=surface PINN=0`을 사용합니다.
+전체 활성화 후에만 최적 checkpoint를 선택합니다. `PINN=0`이면 PINN 없이 정보·동역학
+학습을 수행합니다. 정보가 없는 surface 실험은 `MODE=surface PINN=0`을 사용합니다.
+
+`process`·`dynamics` profile에는 **A 자체의 미래 표현 학습**이 기본 적용됩니다.
+현재 raw latent에서 기존 drift를 반복 적용하고, 같은 origin 정보로 인코딩한 미래 latent와
+순수 decoder의 미래 기후장·정보를 감독합니다. 새 큰 예측기를 추가하지 않고
+encoder·decoder·drift를 함께 학습합니다. 기본 직접 감독 구간은 **6 → 12 → 24시간**이며
+기존 120시간 ensemble 학습도 유지합니다. `DYNAMICS_MAX_STEPS=0`은 새 경로를 끄고
+기존 A 손실 동작을 재현하는 ablation입니다. [구조·손실·학습/평가 계약](docs/dynamics_training.md)을 참고하세요.
 
 직접 명령도 가능합니다.
 
@@ -121,9 +130,13 @@ A 학습·선택에 필요한 shard가 준비되면 학습을 시작합니다. �
   AE/tangent oracle은 관측된 미래를 쓰므로 예측 성능이 아닙니다.
 - `validation.json`: CRPS, transition CRPS, RMSE, spread, coverage, persistence 비교.
 - `validation.npz`: 첫 평가 초기시각의 물리 단위 `[members,20,state_dim]` 예측 및 실제 valid time.
+- `pure-drift-validation.json/.npz`: 초기장 복원 잔차를 더하지 않은 **encoder → A drift → decoder** 평가.
 
 `run_climate_manifold.sh drift-validation`은 residual을 정확히 0으로 둔 drift 대조 실험입니다.
 점수 인터페이스를 위해 같은 경로를 복제할 뿐 확률 앙상블은 아닙니다.
+이 기존 명령에는 여전히 초기장 복원 잔차가 더해집니다. 새 명령인
+`pure-drift-validation`은 이를 제거한 decoder 출력으로 평가하며, 첫 6시간 오차에는
+초기 재구성 오차의 영향도 포함됩니다. 두 평가 경로를 같은 방식의 결과로 혼동하지 않습니다.
 설정 확정 후에만 `run_climate_manifold.sh test`로 최종 test를 평가합니다.
 
 원본 결과와 분할을 맞추기 위해 `train / expert_validation / calibration / validation / test`
@@ -133,10 +146,11 @@ A 학습·선택에 필요한 shard가 준비되면 학습을 시작합니다. �
 정규화는 train에서만 적합하고 평가 시 checkpoint에 고정된 통계를 씁니다.
 미래 정보는 손실의 label로만 쓰며, rollout 조건에는 시작시각 정보만 들어갑니다.
 
-독립 A의 보조/drift 예측은 `decode(z_t) + x_origin - decode(z_origin)`로 원점을 고정합니다. 따라서
+독립 A의 기존 보조/anchored drift 예측은 `decode(z_t) + x_origin - decode(z_origin)`로 원점을 고정합니다. 따라서
 출력은 decoder manifold의 원점별 평행이동 위에 있으며, 모든 예측을 하나의 동일한
 decoder image로 엄밀히 투영했다고 해석해서는 안 됩니다.
-반면 후단 주실험은 `anchor none`을 강제하여 **decoder 출력만으로 예측**합니다.
+반면 새 A 다단계 직접 감독·pure drift 평가와 후단 주실험은 **decoder 출력만으로 예측**합니다.
+기존 A checkpoint는 그대로 불러올 수 있지만, 새 동역학 감독을 학습한 것으로 바뀌지는 않습니다.
 
 표현을 다른 NN/ODE에 연결할 때:
 
