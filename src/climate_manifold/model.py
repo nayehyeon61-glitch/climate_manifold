@@ -1,0 +1,254 @@
+"""Climate Manifold A: physical representation and auxiliary process learning."""
+from __future__ import annotations
+import math
+import torch
+from torch import nn
+from .architecture import ManifoldCore, drift_per_day
+from .nn import mlp
+from .temporal_supervision import TemporalObjective
+
+FORMAT='climate_manifold.a.v1'
+
+def fair_crps(x,y,weight=None):
+    if x.shape[1]<2 or x.shape[:1]+x.shape[2:]!=y.shape: raise ValueError('CRPS requires [B,M>=2,...] and matching truth')
+    m=x.shape[1];ordered=x.sort(dim=1).values
+    ranks=torch.arange(1,m+1,device=x.device,dtype=x.dtype)*2-m-1
+    score=(x-y[:,None]).abs().mean(1)-(ordered*ranks.reshape(1,m,*([1]*(x.ndim-2)))).sum(1)/(m*(m-1))
+    if weight is None: return score.mean()
+    return (score*weight).sum()/weight.expand_as(score).sum()
+
+class ClimateManifold(nn.Module):
+    def __init__(self,config,schema,mean,scale,statistics,info_metadata=None,
+                 pinn_config=None,information_mean=None,information_scale=None):
+        super().__init__()
+        self.core=ManifoldCore(config,schema,mean,scale)
+        self.temporal=TemporalObjective(schema,mean,scale,statistics)
+        self.info_metadata=info_metadata
+        f=math.prod(info_metadata['shape']) if info_metadata else 0
+        r,h,c=config.manifold_dim,config.hidden_dim,config.context_dim
+        self.information=mlp(f,h,r) if f else None
+        self.info_head=mlp(r,h,f) if f else None
+        # Raw-z coordinates make A's own sampler invariant to the later q seal.
+        self.a_context=mlp(r,h,c)
+        self.a_sampler=mlp(2*r+c+2,h,r)
+        self.pinn=None
+        if pinn_config is not None:
+            from .hybrid_pinn import HybridPINN, HybridPINNConfig
+            if isinstance(pinn_config,dict):pinn_config=HybridPINNConfig(**pinn_config)
+            if info_metadata is None or information_mean is None or information_scale is None:
+                raise ValueError('Hybrid PINN requires enriched information and its training-only normalization')
+            self.pinn=HybridPINN(pinn_config,info_metadata,information_mean,information_scale,r,h)
+        self.phase='A';self.set_phase('A')
+
+    @property
+    def config(self): return self.core.config
+
+    def set_phase(self,phase='A'):
+        if phase!='A':raise ValueError('Climate Manifold supports A only')
+        self.phase='A'
+        self.requires_grad_(True)
+
+    def set_pinn_warmup(self,enabled):
+        """Warm up the closure on observed physical pairs; then restore ordinary A."""
+        if self.phase!='A' or self.pinn is None:
+            raise ValueError('PINN warm-up is only available in enabled stage A')
+        self.set_phase('A')
+        if enabled:
+            self.requires_grad_(False)
+            self.pinn.requires_grad_(True)
+
+    def pinn_losses(self,batch,warmup=False):
+        """Physical 6h dynamics of decoded A fields, never FM integration time tau.
+
+        Upper-air equations constrain info_head, encoder and latent_drift. The
+        accompanying observed surface tendency retains a gradient to the surface
+        decoder without applying pressure-level equations to 10m/2m fields.
+        """
+        if self.pinn is None or self.phase!='A':
+            raise ValueError('Hybrid PINN loss is an enabled A-only objective')
+        information=batch['information'];future=batch['information_targets'][:,0]
+        z=self.raw_encode(batch['origin'],information)
+        dt=batch['dt_hours'][:,0]
+        if warmup:
+            return self.pinn(information.detach(),future.detach(),information,future,z.detach(),dt)
+        next_z=z+dt[:,None]/24*self.core.manifold.latent_drift(z)
+        values=self.pinn(self.info_head(z),self.info_head(next_z),information,future,z,dt)
+        surface0=self.core.manifold.decode(z);surface1=self.core.manifold.decode(next_z)
+        t=self.temporal
+        error=((surface1-surface0)-(batch['targets'][:,0]-batch['origin']))*t.scale/dt[:,None]/t.tendency_scale
+        values['pinn_surface_tendency']=(error.square()*t.metric).sum(-1).mean()
+        values['pinn_total']=values['pinn_total']+self.pinn.config.tendency_weight*values['pinn_surface_tendency']
+        return values
+
+    def raw_encode(self,x,information=None):
+        z=self.core.manifold.encode(x);encoder=self.information
+        if encoder is not None:
+            if information is None or information.shape[:-1]!=x.shape[:-1]:
+                raise ValueError('Enriched checkpoint requires matching origin information; never substitute zero/missing fields')
+            z=z+encoder(information)
+        elif information is not None:raise ValueError('Surface-only model does not accept enriched information')
+        return z
+
+    def encode(self,x,information=None):
+        return (self.raw_encode(x,information)-self.core.latent_mean)/self.core.latent_scale
+
+    def context(self,history,information,auxiliary=True):
+        if not auxiliary:raise ValueError('Only the A auxiliary sampler is available')
+        ci=None if information is None else information[:,None].expand(-1,history.shape[1],-1)
+        return self.a_context(self.raw_encode(history,ci).mean(1))
+
+    @torch.no_grad()
+    def seal(self,states,information=None):
+        if bool(self.core.manifold_ready):raise ValueError('Seal only once, after selecting the best A')
+        raw=torch.cat([self.raw_encode(states[i:i+256],None if information is None else information[i:i+256])
+                       for i in range(0,len(states),256)])
+        self.core.latent_mean.copy_(raw.mean(0));self.core.latent_scale.copy_(raw.std(0,unbiased=False).clamp_min(.05))
+        self.core.manifold_ready.fill_(True)
+
+    def auxiliary_field(self,r,z,context,tau,hours):
+        return self.a_sampler(torch.cat((r,z,context,tau[:,None],hours[:,None]/self.config.horizon_hours),-1))
+
+    def rollout(self,history,information,*,members=4,tau_steps=4,steps=None,generator=None,noise=None,
+                auxiliary=True,drift_only=False,trace=None,return_q=False):
+        steps=self.config.horizon_steps if steps is None else steps
+        if not 1<=steps<=self.config.horizon_steps or members<2 or tau_steps<1:raise ValueError('Invalid physical horizon/member/tau contract')
+        b=len(history);r=self.config.manifold_dim
+        noise=torch.randn(b,members,r,device=history.device,generator=generator) if noise is None else noise
+        if noise.shape!=(b,members,r):raise ValueError('Noise must be [B,M,r]')
+        q0=self.encode(history[:,-1],information);q=q0[:,None].expand(-1,members,-1).reshape(b*members,r)
+        context=self.context(history,information,auxiliary).repeat_interleave(members,0)
+        origin=history[:,-1];offset=origin-self.core.decode(q0)
+        paths=[origin[:,None].expand(-1,members,-1)];qs=[q.reshape(b,members,r)]
+        for j in range(steps):
+            prev=q;hours=q.new_full((len(q),),j*self.config.step_hours)
+            if auxiliary and not drift_only:
+                z=q*self.core.latent_scale+self.core.latent_mean
+                residual=noise.reshape(b*members,r)*self.config.residual_noise_std
+                for k in range(tau_steps):
+                    tau=q.new_full((len(q),),k/tau_steps)
+                    v=self.auxiliary_field(residual,z,context,tau,hours)
+                    v2=self.auxiliary_field(residual+v/(2*tau_steps),z,context,tau+.5/tau_steps,hours)
+                    residual=residual+v2/tau_steps
+                residual=residual/self.core.latent_scale
+                drift=drift_per_day(self.core,q)
+                q=q+self.config.step_hours/24*(drift+residual)
+                decomposition={'drift_per_day':drift,'residual_per_day':residual,'final_per_day':drift+residual}
+            else:
+                drift=drift_per_day(self.core,q)
+                q=q+self.config.step_hours/24*drift
+                decomposition={'drift_per_day':drift,'residual_per_day':torch.zeros_like(drift),'final_per_day':drift}
+            if not bool(torch.isfinite(q).all()):raise FloatingPointError('Nonfinite recurrent q')
+            paths.append(self.core.decode(q).reshape(b,members,-1)+offset[:,None]);qs.append(q.reshape(b,members,r))
+            if trace is not None:
+                row={'input':prev.detach().clone(),'output':q.detach().clone(),
+                    **{k:v.detach().clone() for k,v in decomposition.items() if k.endswith('per_day')}}
+                trace.append(row)
+        result=torch.stack(paths,2)
+        return (result,torch.stack(qs,2)) if return_q else result
+
+    def teacher_loss(self,batch,information,generator):
+        """One randomly selected actual 6h pair per window; labels never condition rollout."""
+        history=batch['history'];target=torch.cat((batch['origin'][:,None],batch['targets']),1)
+        b=len(history);p=torch.randint(self.config.horizon_steps,(b,),device=history.device,generator=generator)
+        rows=torch.arange(b,device=history.device);x,y=target[rows,p],target[rows,p+1]
+        dt=batch['dt_hours'][rows,p,None]/24
+        z=self.raw_encode(x,information)
+        with torch.no_grad():label=(self.raw_encode(y,information)-self.raw_encode(x,information))/dt-self.core.manifold.latent_drift(self.raw_encode(x,information))
+        source=torch.randn(z.shape,device=z.device,generator=generator)*self.config.residual_noise_std
+        tau=torch.rand(b,device=z.device,generator=generator)
+        pred=self.auxiliary_field((1-tau[:,None])*source+tau[:,None]*label,z,
+            self.context(history,information,True),tau,p.to(z)*self.config.step_hours)
+        return {'fm':(pred-(label-source)).square().mean()}
+
+    def geometry_losses(self,batch,information):
+        x=batch['origin'];y=batch['targets'][:,0];dt=batch['dt_hours'][:,0,None]
+        z=self.raw_encode(x,information);zy=self.raw_encode(y,information)
+        rx=self.core.manifold.decode(z);ry=self.core.manifold.decode(zy)
+        next_z=z+dt/24*self.core.manifold.latent_drift(z);dr=self.core.manifold.decode(next_z)
+        t=self.temporal;true=(y-x)*t.scale/dt/t.tendency_scale
+        ae=(ry-rx)*t.scale/dt/t.tendency_scale;dv=(dr-rx)*t.scale/dt/t.tendency_scale
+        weighted=lambda e:(e.square()*t.metric).sum(-1).mean()
+        values=self.core.physics.reconstruction_losses(rx,x)
+        values.update(ae_delta=weighted(ae-true),decoded_drift=weighted(dv-true),
+            forecast_anchor=weighted(dr-rx+x-y),latent_dynamics=(next_z-zy.detach()).square().mean(),
+            latent_variance=z.var(0,unbiased=False).mean())
+        if len(x)<2:raise ValueError('A geometry requires batch >=2')
+        values['metric']=((z-z.roll(1,0)).square().mean(-1).clamp_min(1e-12).sqrt()
+            -self.core.physics.pair_distance(x,x.roll(1,0)).detach()).square().mean()
+        values.update(t.state_metrics(rx,x,'reconstruction'))
+        values.update(t.state_metrics(ae,true,'ae_tendency'));values.update(t.state_metrics(dv,true,'drift_tendency'))
+        if information is not None:
+            fitted=self.info_head(z);sh=self.info_metadata['shape'];cells=sh[1]*sh[2]
+            mask=torch.tensor([v['kind']=='static' for v in self.info_metadata['variables']],device=x.device).repeat_interleave(cells)
+            w=t.area.flatten().repeat(sh[0]);error=(fitted-information.detach()).square()*w
+            values['static_l2']=error[:,mask].sum(-1).mean()/max(1,int(mask.sum())//cells)
+            values['info_reconstruction']=error[:,~mask].sum(-1).mean()/max(1,int((~mask).sum())//cells)
+            # Paired fixed-target geometry; not marginal MMD of two trainable encoders.
+            target_dist=((information-information.roll(1,0)).square()*w).sum(-1).div(sh[0]).sqrt().detach()
+            latent_dist=(z-z.roll(1,0)).square().mean(-1).clamp_min(1e-12).sqrt()
+            values['information_geometry']=(latent_dist-target_dist).square().mean()
+        return values
+
+    def scores(self,generated,truth,dt,mask):
+        t=self.temporal;v=t(generated,truth,dt,mask)
+        ds=generated.diff(dim=2)*t.scale/dt[:,None,:,None]/t.tendency_scale
+        dy=truth.diff(dim=1)*t.scale/dt[:,:,None]/t.tendency_scale
+        v['state_crps']=fair_crps(generated[:,:,1:],truth[:,1:],t.metric)
+        v['transition_crps']=fair_crps(ds,dy,t.metric)
+        v['mean_state']=((generated[:,:,1:].mean(1)-truth[:,1:]).square()*t.metric).sum(-1).mean()
+        v['ensemble_variance']=(generated[:,:,1:].var(1,unbiased=False)*t.metric).sum(-1).mean()
+        v['rmse']=v['mean_state'].sqrt();v['spread']=v['ensemble_variance'].sqrt()
+        lo,hi=generated[:,:,1:].quantile(.1,dim=1),generated[:,:,1:].quantile(.9,dim=1)
+        v['coverage80']=(((truth[:,1:]>=lo)&(truth[:,1:]<=hi)).to(generated)*t.metric).sum(-1).mean()
+        cells=self.config.grid[1]*self.config.grid[2]
+        for i,name in enumerate(t.names):
+            sl=slice(i*cells,(i+1)*cells)
+            v['state_crps_'+name]=fair_crps(generated[:,:,1:,sl],truth[:,1:,sl],t.area.flatten())
+            v['transition_crps_'+name]=fair_crps(ds[:,:,:,sl],dy[:,:,sl],t.area.flatten())
+        return v
+
+    def information_scores(self,qs,origin_info,future_info,dt,info_scale,info_tendency_scale):
+        sh=self.info_metadata['shape'];cells=sh[1]*sh[2]
+        z=qs*self.core.latent_scale+self.core.latent_mean
+        decoded=self.info_head(z)
+        pred=decoded-decoded[:,:,:1]+origin_info[:,None,None]
+        truth=torch.cat((origin_info[:,None],future_info),1)
+        out={}
+        for i,var in enumerate(self.info_metadata['variables']):
+            if var['kind']=='static':continue
+            sl=slice(i*cells,(i+1)*cells)
+            out['info_crps_'+var['name']]=fair_crps(pred[:,:,1:,sl],truth[:,1:,sl],self.temporal.area.flatten())
+            dp=pred[:,:,:,sl].diff(dim=2)*info_scale[sl]/dt[:,None,:,None]/info_tendency_scale[sl]
+            dy=truth[:,:,sl].diff(dim=1)*info_scale[sl]/dt[:,:,None]/info_tendency_scale[sl]
+            out['info_transition_'+var['name']]=fair_crps(dp,dy,self.temporal.area.flatten())
+        out['info_distribution']=torch.stack(list(out.values())).mean()
+        return out
+
+def curriculum(epoch,interval=2):
+    if interval<1:raise ValueError('Curriculum interval must be positive')
+    phase=min(6,1+(epoch-1)//interval)
+    return phase,{'reconstruction':1.,'forecast_anchor':.1,'physics':.1,'invariant':.05,'metric':.1,
+        'latent_dynamics':.1 if phase>=2 else 0.,'ae_delta':.05 if phase>=2 else 0.,
+        'decoded_drift':.05 if phase>=2 else 0.,'static_l2':.05,'info_reconstruction':.05,
+        'fm':1. if phase>=3 else 0.,'state_crps':.25 if phase>=3 else 0.,
+        'information_geometry':.02 if phase>=4 else 0.,'info_distribution':.1 if phase>=4 else 0.,
+        'transition_crps':.25 if phase>=5 else 0.,'loss_delta':.02 if phase>=5 else 0.,
+        'loss_trajectory':.1 if phase>=6 else 0.}
+
+def gradient_diagnostics(losses,groups):
+    """Reusable parameter lists, explicit zero for frozen/unused groups."""
+    groups={k:[p for p in v if p.requires_grad] for k,v in groups.items()};out={};vectors={}
+    for name,loss in losses.items():
+        if not loss.requires_grad:continue
+        for group,params in groups.items():
+            if not params:continue
+            grads=torch.autograd.grad(loss,params,retain_graph=True,allow_unused=True)
+            vec=torch.cat([(torch.zeros_like(p) if g is None else g).flatten() for p,g in zip(params,grads)])
+            out[f'gradient/{name}/{group}']=float(vec.detach().norm());vectors[name,group]=vec.detach()
+    names=list(losses)
+    for group in groups:
+        for a,b in zip(names,names[1:]):
+            if (a,group) in vectors and (b,group) in vectors:
+                x,y=vectors[a,group],vectors[b,group];den=x.norm()*y.norm()
+                out[f'cosine/{a}:{b}/{group}']=float(x@y/den) if den>1e-12 else 0.
+    return out
