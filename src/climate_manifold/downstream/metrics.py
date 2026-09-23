@@ -13,6 +13,65 @@ def gaussian_crps(mean, std, truth):
     return std*(z*(2*cdf-1)+2*density-1/math.sqrt(math.pi))
 
 
+class LatentDiagnostics:
+    """Within-representation audits; future observations are diagnostic targets only."""
+
+    def __init__(self, schema, lead_hours):
+        c, _, _ = field_grid(schema)
+        self.metric = torch.as_tensor(area_weights(schema), dtype=torch.float64).flatten().repeat(c)/c
+        self.leads = np.asarray(lead_hours, dtype=float)
+        self.dt = torch.tensor(np.diff(np.r_[0., self.leads]), dtype=torch.float64)[None, :, None]
+        self.count = 0
+        self.sums = {}
+
+    def update(self, prediction, target_q, target_reconstruction, cycle_q, truth):
+        values = [prediction['predicted_latent'], prediction['origin_latent'],
+                  target_q, target_reconstruction, cycle_q, truth,
+                  prediction['mean'], prediction['reconstructed_origin']]
+        if not all(torch.isfinite(x).all() for x in values):
+            raise FloatingPointError('Nonfinite latent reconstruction diagnostic')
+        q, q0, target, reconstruction, cycle, truth, field, origin_field = [x.detach().cpu().double() for x in values]
+        dq = torch.cat((q0[:, None], q), 1).diff(dim=1)/self.dt
+        dy = torch.cat((q0[:, None], target), 1).diff(dim=1)/self.dt
+        terms = {
+            'latent_mse': (q-target).square().mean(-1),
+            'latent_persistence_mse': (q0[:, None]-target).square().mean(-1),
+            'latent_tendency_mse': (dq-dy).square().mean(-1),
+            'predicted_tendency2': dq.square().mean(-1),
+            'target_tendency2': dy.square().mean(-1),
+            'latent_cycle_mse': (q-cycle).square().mean(-1),
+            'future_reconstruction_mse': ((reconstruction-truth).square()*self.metric).sum(-1),
+            'projected_persistence_mse': ((origin_field[:, None]-truth).square()*self.metric).sum(-1),
+            'forecast_vs_reconstructed_target_mse': ((field-reconstruction).square()*self.metric).sum(-1),
+        }
+        for key, value in terms.items():
+            total = value.sum(0)
+            self.sums[key] = self.sums.get(key, torch.zeros_like(total))+total
+        self.count += len(q)
+
+    def result(self):
+        if not self.count:
+            return {'case_count': 0, 'aggregate': None, 'by_lead': []}
+        s = {key:value/self.count for key,value in self.sums.items()}
+        def summarize(index=None):
+            get = lambda key:s[key].mean() if index is None else s[key][index]
+            names = {'latent_rmse':'latent_mse', 'latent_persistence_rmse':'latent_persistence_mse',
+                     'latent_tendency_rmse_per_hour':'latent_tendency_mse', 'latent_cycle_rmse':'latent_cycle_mse',
+                     'future_reconstruction_normalized_rmse':'future_reconstruction_mse',
+                     'projected_persistence_normalized_rmse':'projected_persistence_mse',
+                     'forecast_vs_reconstructed_target_normalized_rmse':'forecast_vs_reconstructed_target_mse'}
+            result = {name:float(get(key).sqrt()) for name,key in names.items()}
+            amplitude = get('target_tendency2').sqrt()
+            result['latent_tendency_amplitude_ratio'] = (float(get('predicted_tendency2').sqrt()/amplitude)
+                                                        if amplitude > 1e-15 else None)
+            return result
+        return {'case_count':self.count, 'aggregate':summarize(),
+                'by_lead':[dict(lead_hours=float(h), **summarize(i)) for i,h in enumerate(self.leads)],
+                'limits':'Latent errors use representation-specific standardized coordinates and cannot rank different encoders. '
+                         'Future reconstruction uses observed future fields with origin information only; it is not a forecast '
+                         'or a rigorous forecast-error lower bound. Cycle consistency does not guarantee physical validity.'}
+
+
 class ForecastMetrics:
     def __init__(self, schema, mean, scale, lead_hours):
         self.schema, self.grid = schema, field_grid(schema)

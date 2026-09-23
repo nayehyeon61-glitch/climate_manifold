@@ -12,6 +12,7 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 | Hybrid PINN | 선택적으로 기압면 운동량·열역학·연속·층후 제약 및 learned closure |
 | A 보조 sampler | raw latent에서 flow matching, 상태·전이 분포 및 120시간 경로 손실 |
 | 데이터/평가 | ERA5 변환·shard 다운로드, train-only 정규화, 지연시간별 진단·CRPS·geometry audit |
+| 후단 주실험 | **Frozen encoder → latent MLP/Neural ODE → frozen decoder**; raw·재구성 전용 AE와 비교 |
 
 **512는 manifold 차원이 아니라 MLP 은닉층 폭입니다.** 잠재 상태는 격자별 64채널이
 아닌 전체 입력 기후장을 압축한 단일 64차원 벡터입니다. A 보조 sampler는 원래 A의
@@ -127,13 +128,15 @@ A 학습·선택에 필요한 shard가 준비되면 학습을 시작합니다. �
 
 원본 결과와 분할을 맞추기 위해 `train / expert_validation / calibration / validation / test`
 이름과 5-way embargo를 유지합니다. 여기서 `expert_validation`은 **A checkpoint 선택용**
-이름이며 전문가 모델을 뜻하지 않습니다. `calibration` 구간은 이번 학습에 사용하지
-않습니다. 정규화는 train에서만 적합하고 평가 시 checkpoint에 고정된 통계를 씁니다.
+이름이며 전문가 모델을 뜻하지 않습니다. `calibration` 구간은 독립 A 학습에서 사용하지
+않으며 후단 예측기 실험에서는 checkpoint 선택에 사용합니다.
+정규화는 train에서만 적합하고 평가 시 checkpoint에 고정된 통계를 씁니다.
 미래 정보는 손실의 label로만 쓰며, rollout 조건에는 시작시각 정보만 들어갑니다.
 
-예측은 `decode(z_t) + x_origin - decode(z_origin)`로 원점을 고정합니다. 따라서
+독립 A의 보조/drift 예측은 `decode(z_t) + x_origin - decode(z_origin)`로 원점을 고정합니다. 따라서
 출력은 decoder manifold의 원점별 평행이동 위에 있으며, 모든 예측을 하나의 동일한
 decoder image로 엄밀히 투영했다고 해석해서는 안 됩니다.
+반면 후단 주실험은 `anchor none`을 강제하여 **decoder 출력만으로 예측**합니다.
 
 표현을 다른 NN/ODE에 연결할 때:
 
@@ -147,8 +150,29 @@ x_reconstructed = model.core.manifold.decode(z)
 q = model.encode(x, information)      # sealed train mean/scale로 표준화된 좌표
 ```
 
-이 저장소에는 독립 A 학습과 **MLP·Neural ODE·ClimODE 연결 및 비교 실험 코드**가
-포함됩니다. [후단 모델 연결·공통 평가 안내](docs/downstream.md)를 참고하세요.
+## Manifold 공간에서의 예측 실험
+
+학습된 A를 고정한 뒤 **encoder → latent 예측기 → decoder**로 미래 기상장을
+예측합니다. MLP·Neural ODE 각각 raw 입력, Climate Manifold, 같은 차원의 재구성
+전용 Plain AE를 비교합니다. Decoder 가중치는 고정하되 gradient는 예측기로 전달합니다.
+
+```bash
+export A_CHECKPOINT=/absolute/path/to/manifold.pt
+export ARCHIVE=/absolute/path/to/surface.npz
+export INFO=/absolute/path/to/information_pinn_shards
+export RUN=runs/latent_comparison_001
+export DEVICE=cuda EPOCHS=20 AE_EPOCHS=20 SEEDS='7 19 43'
+bash scripts/run_model_comparison.sh
+```
+
+기본은 **2개 예측기 × 3개 표현 × 3개 seed**입니다. `MODELS=neural_ode`로 한 계열만
+실행할 수 있습니다. 주실험에는 ClimODE용 상수가 필요하지 않습니다.
+기상장 점수로 비교하고, latent 예측·변화량·미래 재구성 진단을 함께 저장합니다.
+서로 다른 latent 좌표계의 오차를 그대로 비교하여 표현의 우열을 판단하지 않습니다.
+
+ClimODE는 격자 미분이 필요하므로 복원된 격자를 입력으로 받는 **별도 보조 실험**입니다.
+`scripts/run_climode_comparison.sh`로 실행하며 주실험 결과와 구분합니다.
+[연결 계약·실행 명령·공통 평가 안내](docs/downstream.md)를 참고하세요.
 PINN은 희소 기압면의 근사 물리 제약이며 완전한 primitive-equation solver가
 아닙니다. 실제 장기 안정성·태풍 이동·앙상블 보정 성능은 별도 실험이 필요합니다.
 기존 Hydra checkpoint는 새 모델로 자동 재해석하지 않습니다.

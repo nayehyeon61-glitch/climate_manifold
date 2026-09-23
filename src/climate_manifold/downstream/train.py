@@ -1,4 +1,4 @@
-"""Train a downstream predictor while keeping Climate Manifold A frozen."""
+"""Train a downstream predictor with a frozen Climate Manifold or plain AE."""
 import argparse
 import hashlib
 from dataclasses import asdict
@@ -15,6 +15,7 @@ from ..train import load_checkpoint as load_a, data_contract, write_json, source
 from ..physical_information import digest
 from ..temporal_supervision import TemporalWindowDataset, TemporalObjective
 from .pipeline import ForecastPipeline, PredictorConfig
+from .protocol import validate_experiment
 
 FORMAT = 'climate_manifold.downstream.v1'
 
@@ -53,7 +54,13 @@ def load_predictor(path,device='cpu'):
     p=torch.load(path,map_location='cpu',weights_only=False)
     if p.get('format')!=FORMAT or not p.get('a_was_sealed'):
         raise ValueError('Not a standalone downstream checkpoint with a sealed A')
-    model=ForecastPipeline(new_a(p['a_metadata']),PredictorConfig(**p['config']),p['constants'],p['a_metadata']['schema'])
+    config=PredictorConfig(**p['config'])
+    representation=None
+    if config.representation == 'plain_ae':
+        from .plain_ae import new_plain_ae
+        representation=new_plain_ae(p['a_metadata'])
+        representation.core.manifold_ready.fill_(True)
+    model=ForecastPipeline(new_a(p['a_metadata']),config,p['constants'],p['a_metadata']['schema'],representation)
     model.load_state_dict(p['model'],strict=True)
     return model.to(device).eval(),p
 
@@ -97,12 +104,27 @@ def train(args):
     config=PredictorConfig(model=args.model,bridge=args.bridge,anchor=args.anchor,hidden_dim=args.hidden_dim,
         ode_substeps=args.ode_substeps,condition_information=not args.no_information_conditioning,
         climode_attention=not args.no_climode_attention,climode_step_hours=args.climode_step_hours,
-        velocity_iterations=args.velocity_iterations)
+        velocity_iterations=args.velocity_iterations,representation=args.representation)
+    experiment=validate_experiment(config,args.experiment)
+    if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
+        raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
+    representation=representation_payload=None
+    if args.representation == 'plain_ae':
+        from .plain_ae import load_plain_ae
+        if not args.ae_checkpoint:raise ValueError('Plain AE control requires --ae-checkpoint')
+        representation,representation_payload=load_plain_ae(args.ae_checkpoint)
+        if representation_payload['a_sha256'] != digest(args.a_checkpoint):
+            raise ValueError('Plain AE was trained against a different reference A/data contract')
+    elif args.ae_checkpoint:
+        raise ValueError('--ae-checkpoint is only used with --representation plain_ae')
     data=data_contract(args.archive,args.information,p['mode'],a.config,p)
     # All variants share train / downstream-selection calibration / untouched validation,test.
     loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows),batch_size=args.batch_size,
         shuffle=(name=='train'),generator=torch.Generator().manual_seed(args.seed)) for name in ('train','calibration')]
-    model=ForecastPipeline(a,config,constants,p['schema']).to(args.device)
+    # A and AE construction consume different RNG amounts. Reset so equal-size
+    # latent predictors start with identical weights for the same forecast seed.
+    torch.manual_seed(args.seed)
+    model=ForecastPipeline(a,config,constants,p['schema'],representation).to(args.device)
     temporal=TemporalObjective(p['schema'],p['mean'],p['scale'],p['statistics']).to(args.device)
     parameters=[x for x in model.parameters() if x.requires_grad]
     optimizer=torch.optim.AdamW(parameters,lr=args.learning_rate) if parameters else None
@@ -131,12 +153,18 @@ def train(args):
         print(json.dumps({'model':args.model,'bridge':args.bridge,'epoch':epoch,'selection_state_mse':score}),flush=True)
     model.load_state_dict(best_state)
     if model.bridge.manifold is not None:
-        for key,value in p['model'].items():
+        frozen_state=(representation_payload or p)['model']
+        for key,value in frozen_state.items():
             if not torch.equal(value.cpu(),model.bridge.manifold.state_dict()[key].cpu()):
-                raise AssertionError('Frozen A changed: '+key)
+                raise AssertionError('Frozen representation changed: '+key)
     metadata={k:v for k,v in p.items() if k!='model'}
     payload={'format':FORMAT,'a_was_sealed':True,'a_metadata':metadata,'a_sha256':digest(args.a_checkpoint),
         'config':asdict(config),'constants':constants,'model':best_state,'horizon_steps':args.horizon_steps,
+        'experiment':experiment,
+        'representation_sha256':(digest(args.ae_checkpoint) if representation is not None else
+                                 digest(args.a_checkpoint) if config.bridge != 'raw' else None),
+        'representation_metadata':({k:v for k,v in representation_payload.items() if k not in ('model','a_metadata')}
+                                   if representation_payload else None),
         'lead_hours':leads.cpu().tolist(),'options':vars(args),'best_epoch':best_epoch,'best_selection_state_mse':best,
         'selection_split':'calibration','training_seconds':time.perf_counter()-started,'source_commit':source_commit(),
         'implementation':'official_climode_custom_data_adaptation' if args.model=='climode' else 'local_'+args.model,
@@ -161,7 +189,10 @@ def parser():
     p=argparse.ArgumentParser(description=__doc__)
     for key in ('a-checkpoint','archive','output'):p.add_argument('--'+key,required=True)
     p.add_argument('--information');p.add_argument('--constants')
-    p.add_argument('--model',choices=['mlp','neural_ode','climode','persistence'],default='mlp')
+    p.add_argument('--model',choices=['mlp','neural_ode','climode','persistence'],default='neural_ode')
+    p.add_argument('--experiment',choices=['primary','auxiliary'],default='primary')
+    p.add_argument('--representation',choices=['climate_manifold','plain_ae'],default='climate_manifold')
+    p.add_argument('--ae-checkpoint')
     p.add_argument('--bridge',choices=['raw','latent','decoded'],default='latent')
     p.add_argument('--anchor',choices=['none','origin'],default='none')
     for name,value in dict(epochs=20,batch_size=2,hidden_dim=128,ode_substeps=2,horizon_steps=20,

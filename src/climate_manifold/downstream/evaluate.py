@@ -8,7 +8,8 @@ import torch
 from ..train import data_contract,write_json
 from ..physical_information import digest
 from .train import load_predictor,windows
-from .metrics import ForecastMetrics
+from .metrics import ForecastMetrics,LatentDiagnostics
+from .protocol import experiment_contract
 
 
 def evaluate(checkpoint,archive,output,*,information=None,split='validation',max_cases=0,
@@ -24,6 +25,8 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
     ds=windows(data,model.a_config,split,origin_stride,max_cases)
     leads=torch.tensor(p['lead_hours'],device=device,dtype=torch.float32)
     metrics=ForecastMetrics(a['schema'],a['mean'],a['scale'],p['lead_hours'])
+    latent_metrics=LatentDiagnostics(a['schema'],p['lead_hours']) if model.config.bridge=='latent' else None
+    diagnostic_failures=[];inference_seconds=0.
     origins=[];successful=[];failures=[];saved=False
     if str(device).startswith('cuda'):
         torch.cuda.synchronize();torch.cuda.reset_peak_memory_stats()
@@ -34,12 +37,27 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             origin_ns=int(batch['origin_time_ns'][0].cpu())
             label=str(np.datetime64(origin_ns,'ns'))+'Z';origins.append(label)
             try:
+                if str(device).startswith('cuda'):torch.cuda.synchronize()
+                forecast_start=time.perf_counter()
                 prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads)
             except FloatingPointError as exc:
                 failures.append({'origin':label,'error':str(exc)});continue
+            finally:
+                if str(device).startswith('cuda'):torch.cuda.synchronize()
+                inference_seconds+=time.perf_counter()-forecast_start
             metrics.update(prediction['mean'],batch['targets'][:,:len(leads)],batch['origin'],
                            prediction['std'],prediction['reconstructed_origin'])
             successful.append(label)
+            target_q=None
+            if latent_metrics is not None:
+                # Post-forecast audit only: never pass future fields/information to the predictor.
+                try:
+                    target_q=model.bridge.encode_history(batch['targets'][:,:len(leads)],batch.get('information'))
+                    target_reconstruction=model.bridge.decode(target_q)
+                    cycle_q=model.bridge.encode_history(prediction['mean'],batch.get('information'))
+                    latent_metrics.update(prediction,target_q,target_reconstruction,cycle_q,batch['targets'][:,:len(leads)])
+                except FloatingPointError as exc:
+                    diagnostic_failures.append({'origin':label,'error':str(exc)});target_q=None
             if forecast_output and not saved:
                 path=Path(forecast_output);path.parent.mkdir(parents=True,exist_ok=True)
                 origin=np.datetime64(origin_ns,'ns')
@@ -50,6 +68,10 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                         'origin_time':origin,'schema_json':json.dumps(a['schema']),'checkpoint_sha256':digest(checkpoint)}
                 if prediction['std'] is not None:
                     values['std']=prediction['std'][0].cpu().numpy()*np.asarray(a['scale'])
+                if prediction['predicted_latent'] is not None:
+                    values['predicted_latent']=prediction['predicted_latent'][0].cpu().numpy()
+                    values['origin_latent']=prediction['origin_latent'][0].cpu().numpy()
+                    if target_q is not None:values['diagnostic_target_latent']=target_q[0].cpu().numpy()
                 np.savez_compressed(path,**values);saved=True
     if str(device).startswith('cuda'):torch.cuda.synchronize()
     report={'format':'climate_manifold.downstream_evaluation.v1','checkpoint_sha256':digest(checkpoint),
@@ -57,9 +79,13 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'information_sha256':a['information_sha256'],'config':p['config'],'conditioning':p['conditioning'],
             'implementation':p['implementation'],'training_contract':p['training_contract'],
             'constants_sha256':p['constants_sha256'],
+            'experiment':p.get('experiment',experiment_contract(p['config'])),
+            'representation_sha256':p.get('representation_sha256',p['a_sha256'] if model.config.bridge!='raw' else None),
             'split':split,'origin_times':origins,'successful_origin_times':successful,'lead_hours':p['lead_hours'],
             'finite_forecast_fraction':len(successful)/len(origins),'failed_origins':failures,
-            'scores':metrics.result(),'inference_seconds':time.perf_counter()-start,
+            'scores':metrics.result(),'inference_seconds':inference_seconds,'evaluation_seconds':time.perf_counter()-start,
+            'latent_diagnostics':latent_metrics.result() if latent_metrics is not None else None,
+            'latent_diagnostic_failures':diagnostic_failures,
             'trainable_parameters':p['trainable_parameters'],'total_parameters':p['total_parameters'],
             'training_seconds':p['training_seconds'],'seed':p['options']['seed'],
             'cuda_peak_memory_bytes':torch.cuda.max_memory_allocated() if str(device).startswith('cuda') else None,

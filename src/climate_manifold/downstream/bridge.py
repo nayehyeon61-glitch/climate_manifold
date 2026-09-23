@@ -1,4 +1,7 @@
-"""Causal A -> predictor middleware. No future fields enter these methods."""
+"""Frozen representation middleware; forecasting supplies only observed history.
+
+Evaluation may separately encode future targets for labelled diagnostics.
+"""
 import torch
 from torch import nn
 
@@ -11,7 +14,7 @@ class ManifoldBridge(nn.Module):
         if mode not in self.MODES or anchor not in ('none', 'origin'):
             raise ValueError('Expected raw/latent/decoded bridge and none/origin anchor')
         if not bool(manifold.core.manifold_ready):
-            raise ValueError('Downstream experiments require a sealed, trained A checkpoint')
+            raise ValueError('Downstream experiments require a sealed, trained representation checkpoint')
         self.mode, self.anchor = mode, anchor
         self.dimension = manifold.config.manifold_dim if mode == 'latent' else manifold.config.state_dim
         # Raw baselines do not instantiate unused A parameters.

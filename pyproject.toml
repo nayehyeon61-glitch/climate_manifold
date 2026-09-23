@@ -24,6 +24,7 @@ prepare-climate-manifold-information = "climate_manifold.physical_information:ma
 train-manifold-predictor = "climate_manifold.downstream.train:main"
 evaluate-manifold-predictor = "climate_manifold.downstream.evaluate:main"
 compare-manifold-predictors = "climate_manifold.downstream.compare:main"
+train-plain-manifold-ae = "climate_manifold.downstream.plain_ae:main"
 
 [tool.setuptools.package-data]
 "climate_manifold._vendor.climode" = ["LICENSE"]
