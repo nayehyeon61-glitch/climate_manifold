@@ -50,7 +50,8 @@ def compare(reports,output,climode_reference_reports=None):
                 if row.get(key)!=first.get(key):raise ValueError('Unfair comparison: mismatched '+key)
             if _regime(row)['training_mode']=='joint' and _regime(row)['initialization']!=_regime(first)['initialization']:
                 raise ValueError('Unfair comparison: mismatched initialization')
-            for key in ('hidden_dim','ode_substeps','condition_information','climode_attention','climode_step_hours','velocity_iterations'):
+            for key in ('hidden_dim','ode_substeps','condition_information','climode_attention','climode_step_hours','velocity_iterations',
+                        'latent_max_speed','latent_max_acceleration','latent_layout'):
                 if row['config'].get(key)!=first['config'].get(key):raise ValueError('Unfair comparison: mismatched '+key)
         latent = [row for row in group if row['config']['bridge']=='latent']
         if latent and _regime(first)['training_mode']=='joint':
@@ -70,6 +71,8 @@ def compare(reports,output,climode_reference_reports=None):
         rows.append(dict(model=cfg['model'],bridge=cfg['bridge'],anchor=cfg['anchor'],seed=report['seed'],
             representation=contract['representation'],prediction_space=contract['prediction_space'],
             **_regime(report), representation_sha256=report.get('representation_sha256'),
+            latent_layout=cfg.get('latent_layout','global') if cfg['bridge']=='latent' else None,
+            latent_shape=report.get('latent_shape'),implementation=report.get('implementation'),
             objective_weights=report.get('objective_weights'),
             normalized_rmse=aggregate.get('normalized_rmse'),wind_speed_rmse_mps=aggregate.get('wind_speed_rmse_mps'),
             finite_forecast_fraction=report['finite_forecast_fraction'],trainable_parameters=report['trainable_parameters'],

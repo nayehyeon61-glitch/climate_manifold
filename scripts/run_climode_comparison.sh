@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# Auxiliary experiment: jointly train E-D-ClimODE on grids; raw reference is optional.
+# Default: spatial E -> latent ClimODE -> D. Explicit raw/decoded are auxiliary.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+if [[ "${CLIMODE_BRIDGES:-latent}" == latent ]]; then
+  [[ "${TRAINING_MODE:-joint}" == joint ]] || {
+    echo 'Latent ClimODE is a joint spatial experiment; use raw/decoded for legacy controls' >&2; exit 2;
+  }
+  export MODELS=climode
+  exec bash scripts/run_model_comparison.sh
+fi
 : "${ARCHIVE:?Set the original canonical surface archive}"
 : "${CONSTANTS:?ClimODE needs aligned real orography and land-sea mask NPZ}"
 : "${RUN:?Set a new auxiliary comparison experiment directory}"
@@ -9,11 +16,13 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 PYTHON="${PYTHON:-python}"
 export PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}"
 read -r -a seeds <<< "${SEEDS:-7 19 43}"
-read -r -a bridges <<< "${CLIMODE_BRIDGES:-raw decoded}"
+read -r -a bridges <<< "$CLIMODE_BRIDGES"
 [[ ${#seeds[@]} -gt 0 ]] || { echo 'SEEDS must be nonempty' >&2; exit 2; }
 [[ ${#bridges[@]} -gt 0 ]] || { echo 'CLIMODE_BRIDGES must be nonempty' >&2; exit 2; }
 for mode in "${bridges[@]}"; do
-  [[ "$mode" == raw || "$mode" == decoded ]] || { echo 'CLIMODE_BRIDGES: raw and/or decoded' >&2; exit 2; }
+  [[ "$mode" == raw || "$mode" == decoded ]] || {
+    echo 'CLIMODE_BRIDGES must be latent alone, or an auxiliary selection of raw and/or decoded' >&2; exit 2;
+  }
 done
 info=(); [[ -z "${INFO:-}" ]] || info=(--information "$INFO")
 training_mode="${TRAINING_MODE:-joint}"
@@ -24,7 +33,14 @@ if [[ "$initialization" == pretrained && -z "${A_CHECKPOINT:-}" ]]; then
 fi
 setup=(--training-mode "$training_mode" --initialization "$initialization"
   --manifold-dim "${MANIFOLD_DIM:-64}" --manifold-hidden-dim "${MANIFOLD_HIDDEN_DIM:-512}"
+  --latent-channels "${LATENT_CHANNELS:-32}" --spatial-downsample "${SPATIAL_DOWNSAMPLE:-2}"
+  --spatial-hidden-dim "${SPATIAL_HIDDEN_DIM:-64}"
   --context-dim "${CONTEXT_DIM:-64}" --history-steps "${HISTORY_STEPS:-6}" --history-stride "${HISTORY_STRIDE:-4}")
+if [[ -n "${LATENT_LAYOUT:-}" ]]; then
+  setup+=(--latent-layout "$LATENT_LAYOUT")
+elif [[ "$initialization" == fresh ]]; then
+  setup+=(--latent-layout spatial)
+fi
 [[ -z "${A_CHECKPOINT:-}" ]] || setup+=(--a-checkpoint "$A_CHECKPOINT")
 [[ -z "${MODE:-}" ]] || setup+=(--mode "$MODE")
 # Keep metadata/construction matched to a fresh primary PINN experiment. Joint decoded

@@ -6,17 +6,18 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 
 | 구성 | 포함 내용 |
 |---|---|
-| 표현 | DCT + 전역 autoencoder, **manifold 64차원 / 은닉층 폭 512** |
+| 표현 | 공동 학습 기본: **공간 CNN E/D, 32채널·공간 2배 축소**; 독립 A/legacy: DCT + 전역 64/512 |
 | 물리 동역학 | latent drift의 **다단계 자유 rollout**, 미래 latent·기후장·정보 감독, tendency/AE delta·물리 제약 |
 | 정보 | Z850/Z500/Z250, U850/V850, 고정 지형 고도·경사, 정보 복원·분포 손실 |
 | Hybrid PINN | 선택적으로 기압면 운동량·열역학·연속·층후 제약 및 learned closure |
 | A 보조 sampler | raw latent에서 flow matching, 상태·전이 분포 및 120시간 경로 손실 |
 | 데이터/평가 | ERA5 변환·shard 다운로드, train-only 정규화, 지연시간별 진단·CRPS·geometry audit |
-| 예측 주실험 | **Encoder → latent MLP/Neural ODE → decoder 공동 학습**; 같은 구조에서 물리·정보 제약 off/on 비교 |
+| 예측 주실험 | **Encoder → 공간 Neural ODE / latent ClimODE → decoder 공동 학습**; 같은 구조에서 물리·정보 제약 off/on 비교 |
 
-**512는 manifold 차원이 아니라 MLP 은닉층 폭입니다.** 잠재 상태는 격자별 64채널이
-아닌 전체 입력 기후장을 압축한 단일 64차원 벡터입니다. A 보조 sampler는 원래 A의
-분포 학습에 필요하므로 유지했으며, Hydra의 B 모델과는 별개입니다.
+공동 학습의 기본 latent는 **32×ceil(H/2)×ceil(W/2)**입니다. 예를 들어 18×36 격자는
+32×9×18 잠재장으로 표현합니다. **전역 64차원 병목은 새 기본 경로에 없습니다.**
+기존 독립 A와 `--latent-layout global`의 64/512 설정은 유지하며, 그때 512는 MLP 은닉층
+폭입니다. A 보조 sampler는 독립 A의 분포 학습용이고 공동 예측기 및 Hydra B와 별개입니다.
 
 ## 설치 및 합성 검증
 
@@ -24,7 +25,7 @@ Python 3.10 이상, Linux/macOS 환경을 권장합니다. CUDA 학습은 사용
 PyTorch를 먼저 설치하세요. 아래 명령은 저장소 루트에서 실행합니다.
 
 ```bash
-git clone https://github.com/nayehyeon61-glitch/climate_manifold.git
+git clone --branch feature/joint-manifold-forecast https://github.com/nayehyeon61-glitch/climate_manifold.git
 cd climate_manifold
 python -m venv .venv
 source .venv/bin/activate
@@ -33,7 +34,8 @@ python -m pytest -q
 python scripts/smoke_climate_manifold.py --output runs/smoke-a64
 ```
 
-Smoke는 실제 기본 크기 **64/512**에서 PINN warm-up 1 epoch + A curriculum 6 epochs,
+전체 테스트에는 공간 E–ClimODE–D의 공동 학습·저장·평가 검증이 포함됩니다.
+위의 별도 A 전용 smoke는 **64/512**에서 PINN warm-up 1 epoch + A curriculum 6 epochs,
 다단계 drift 학습, checkpoint 재로딩, 120시간 보조/기존 anchored drift/새 pure drift 예측,
 tangent/AE audit를 확인합니다.
 빠른 소형 확인에는 `--tiny`를 추가합니다. 출력 디렉터리는 매번 새 경로를 사용합니다.
@@ -168,8 +170,9 @@ q = model.encode(x, information)      # sealed train mean/scale로 표준화된 
 
 기본 실험은 **encoder → latent 예측기 → decoder 전체를 한 번에 학습**합니다.
 미래 기상장 손실이 세 구성요소 모두로 역전파됩니다. A 사전학습, frozen A,
-Plain AE 사전학습은 필요하지 않습니다. 현재 global latent 64 / hidden 512 구조를
-그대로 사용하며 이번 변경이 공간 격자·메시 encoder를 새로 구현한 것은 아닙니다.
+Plain AE 사전학습은 필요하지 않습니다. 기본 공간 CNN E/D를 Neural ODE와 latent ClimODE에
+똑같이 연결합니다. 두 예측기 모두 공간 latent history를 받아 미래 latent를 만들고,
+decoder가 미래 기상장으로 복원합니다. 이는 새로운 메시를 만드는 모델은 아닙니다.
 
 ```bash
 export ARCHIVE=/absolute/path/to/surface.npz
@@ -181,7 +184,7 @@ bash scripts/run_model_comparison.sh
 ```
 
 PINN에 필요한 전체 필드가 없으면 `PINN=0`으로 실행합니다. Surface-only는 `INFO`를
-설정하지 않습니다. 기본 **2개 예측기 × 2개 손실 구성 × 3개 seed**를 처음부터 학습합니다.
+설정하지 않습니다. 기본 **Neural ODE·latent ClimODE × 2개 손실 구성 × 3개 seed**를 처음부터 학습합니다.
 각 pair는 같은 encoder·예측기·decoder 초기화, 입력, 차원, 예측/변화량/재구성 손실을
 공유하며 추가 물리·정보 제약만 off/on합니다. `MODELS=neural_ode`로 범위를 줄일 수 있습니다.
 각 seed에서 표현도 다시 학습합니다. `A_CHECKPOINT`는 선택 사항이며, 가중치를
@@ -191,14 +194,15 @@ encoder·decoder가 고정되지 않습니다.
 [공동 학습 구조·손실·단일 실행 명령](docs/joint_training.md)과
 [실험 계약·평가·기존 frozen 대조군](docs/downstream.md)을 참고하세요.
 
-ClimODE는 격자 미분이 필요하므로 **E → D → ClimODE** 공동 학습을 별도 보조 실험으로
-지원합니다. 이것은 latent 안에서 ClimODE가 동작하는 구조가 아닙니다.
-`scripts/run_climode_comparison.sh`는 raw ClimODE와 이 경로를 비교합니다.
+`scripts/run_climode_comparison.sh`도 기본은 **E → latent ClimODE → D** 공동 학습이며
+추가 제약 off/on을 비교합니다. 잠재 채널의 transport는 학습한 표현의 동역학이고 실제
+풍속의 보존 방정식과 같다고 해석하지 않습니다. 물리/PINN 제약은 복원된 물리 변수에
+적용합니다. 원본 계열의 raw/decoded ClimODE는 명시적으로 선택하는 보조 기준선입니다.
 
 **평가 기준은 ClimODE 방식의 변수·lead별 RMSE/ACC, 확률 출력의 CRPS입니다.**
 `bash scripts/run_climode_benchmark.sh`는 같은 데이터의 Raw ClimODE 기준선과
-공동 예측 실험을 연결하고 개선율 CSV를 만듭니다. 정렬된 실제 지형·육해 마스크
-`CONSTANTS`가 필요합니다. [평가 정의와 원논문과의 차이](docs/climode_evaluation.md)를 참고하세요.
+공동 예측 실험을 연결하고 개선율 CSV를 만듭니다. Raw ClimODE 기준선에만 정렬된 실제 지형·육해 마스크
+`CONSTANTS`가 필요하며, 잠재 ClimODE 주실험에는 필요하지 않습니다. [평가 정의와 원논문과의 차이](docs/climode_evaluation.md)를 참고하세요.
 기존 checkpoint를 재평가할 수 있지만, 재평가만으로 공동 학습된 모델이 되지는 않습니다.
 
 PINN은 희소 기압면의 근사 물리 제약이며 완전한 primitive-equation solver가

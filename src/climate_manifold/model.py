@@ -21,6 +21,8 @@ class ClimateManifold(nn.Module):
     def __init__(self,config,schema,mean,scale,statistics,info_metadata=None,
                  pinn_config=None,information_mean=None,information_scale=None):
         super().__init__()
+        if config.representation_kind != 'global':
+            raise ValueError('Spatial configurations require SpatialClimateManifold')
         self.core=ManifoldCore(config,schema,mean,scale)
         self.temporal=TemporalObjective(schema,mean,scale,statistics)
         self.info_metadata=info_metadata

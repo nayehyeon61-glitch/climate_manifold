@@ -24,6 +24,7 @@ def _args(archive, output, *extra):
         '--epochs','1','--batch-size','2','--max-windows','2','--window-stride','1',
         '--horizon-steps','2','--hidden-dim','24','--manifold-dim','4',
         '--manifold-hidden-dim','24','--context-dim','8','--history-stride','1',
+        '--latent-layout','global',
         '--device','cpu',*extra,
     ])
 

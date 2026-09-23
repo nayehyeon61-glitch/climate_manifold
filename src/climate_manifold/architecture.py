@@ -1,7 +1,8 @@
-"""A-only representation: global DCT autoencoder and intrinsic drift."""
+"""Representation configuration and legacy global DCT autoencoder/drift."""
 from __future__ import annotations
 from dataclasses import dataclass
 import math
+from numbers import Integral, Real
 import torch
 from torch import nn
 from .nn import FieldDCT, mlp
@@ -19,16 +20,43 @@ class ManifoldConfig:
     hidden_dim: int = 512
     context_dim: int = 64
     residual_noise_std: float = 1.0  # raw intrinsic z / day, before sealing
+    # Legacy checkpoints omit these fields and remain global representations.
+    representation_kind: str = 'global'
+    latent_channels: int = 32
+    spatial_downsample: int = 2
+    spatial_hidden_dim: int = 64
 
     def __post_init__(self):
         object.__setattr__(self, 'grid', tuple(self.grid))
-        if len(self.grid)!=3 or min(self.grid)<1 or math.prod(self.grid)!=self.state_dim:
+        if (len(self.grid)!=3 or any(isinstance(v, bool) or not isinstance(v, Integral) or v < 1 for v in self.grid)
+                or isinstance(self.state_dim, bool) or not isinstance(self.state_dim, Integral)
+                or math.prod(self.grid)!=self.state_dim):
             raise ValueError('grid must be (variables, lat, lon) and multiply to state_dim')
-        if min(self.history_steps,self.history_stride,self.horizon_steps,self.step_hours,
-               self.manifold_dim,self.hidden_dim,self.context_dim)<1 or self.manifold_dim>=self.state_dim:
-            raise ValueError('Positive dimensions and manifold_dim < state_dim are required')
-        if not math.isfinite(self.residual_noise_std) or self.residual_noise_std<=0:
+        if self.representation_kind not in ('global', 'spatial'):
+            raise ValueError('representation_kind must be global or spatial')
+        names = ('history_steps', 'history_stride', 'horizon_steps', 'step_hours',
+                 'manifold_dim', 'hidden_dim', 'context_dim', 'latent_channels',
+                 'spatial_downsample', 'spatial_hidden_dim')
+        if any(isinstance(getattr(self, name), bool) or not isinstance(getattr(self, name), Integral)
+               or getattr(self, name) < 1 for name in names):
+            raise ValueError('Positive integral dimensions are required')
+        if self.representation_kind == 'spatial':
+            if min(self.latent_grid[1:]) < 2:
+                raise ValueError('Spatial downsampling must retain at least two latitude and longitude cells')
+            object.__setattr__(self, 'manifold_dim', math.prod(self.latent_grid))
+        elif self.manifold_dim >= self.state_dim:
+            raise ValueError('Global manifold_dim < state_dim is required')
+        if (isinstance(self.residual_noise_std, bool) or not isinstance(self.residual_noise_std, Real)
+                or not math.isfinite(self.residual_noise_std) or self.residual_noise_std<=0):
             raise ValueError('residual_noise_std must be finite and positive')
+
+    @property
+    def latent_grid(self):
+        if self.representation_kind != 'spatial':
+            return None
+        factor = self.spatial_downsample
+        return (self.latent_channels, (self.grid[1]+factor-1)//factor,
+                (self.grid[2]+factor-1)//factor)
 
     @property
     def history_span_steps(self):return (self.history_steps-1)*self.history_stride+1

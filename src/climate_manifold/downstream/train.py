@@ -1,7 +1,7 @@
 """Jointly train a manifold and its forecaster; frozen checkpoints remain optional."""
 import argparse
 import hashlib
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import json
 import math
 from pathlib import Path
@@ -18,7 +18,7 @@ from ..temporal_supervision import TemporalWindowDataset, TemporalObjective
 from .pipeline import ForecastPipeline, PredictorConfig
 from .protocol import validate_experiment
 
-FORMAT = 'climate_manifold.downstream.v2'
+FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
 
 
@@ -47,7 +47,13 @@ def windows(data,config,split,stride=1,max_windows=0,*,information_targets=False
 
 
 def new_a(metadata, sealed=True):
-    model=ClimateManifold(ManifoldConfig(**metadata['config']),metadata['schema'],metadata['mean'],metadata['scale'],
+    config=ManifoldConfig(**metadata['config'])
+    if config.representation_kind=='spatial':
+        from ..spatial import SpatialClimateManifold
+        constructor=SpatialClimateManifold
+    else:
+        constructor=ClimateManifold
+    model=constructor(config,metadata['schema'],metadata['mean'],metadata['scale'],
         metadata['statistics'],metadata['information_metadata'],pinn_config=metadata.get('pinn_config'),
         information_mean=metadata.get('information_mean'),information_scale=metadata.get('information_scale'))
     # Only used to construct a saved pipeline, whose strict state loading follows.
@@ -60,7 +66,7 @@ def load_predictor(path,device='cpu'):
     if not manifest.exists() or json.loads(manifest.read_text())['checkpoint_sha256']!=digest(path):
         raise ValueError('Downstream checkpoint manifest/hash mismatch')
     p=torch.load(path,map_location='cpu',weights_only=False)
-    if p.get('format') not in (FORMAT,LEGACY_FORMAT):
+    if p.get('format') not in (FORMAT,LEGACY_FORMAT,'climate_manifold.downstream.v2'):
         raise ValueError('Not a standalone forecast checkpoint')
     config=PredictorConfig(**p['config'])
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
@@ -101,12 +107,19 @@ def initialize_manifold(args):
     resealing after training would change the predictor's coordinate system.
     """
     parent = None
+    pretrained = args.training_mode == 'frozen' or args.initialization == 'pretrained'
     if args.a_checkpoint:
         reference, parent = load_a(args.a_checkpoint)
         config = reference.config
         mode = parent['mode']
         if args.mode is not None and args.mode != mode:
             raise ValueError('--mode differs from the reference A data contract')
+        layout=args.latent_layout or (config.representation_kind if pretrained else 'spatial')
+        if pretrained and layout != config.representation_kind:
+            raise ValueError('Pretrained global A weights cannot initialize a spatial encoder; use --initialization fresh')
+        if not pretrained:
+            config=replace(config,representation_kind=layout,latent_channels=args.latent_channels,
+                spatial_downsample=args.spatial_downsample,spatial_hidden_dim=args.spatial_hidden_dim)
     else:
         if args.training_mode == 'frozen' or args.initialization == 'pretrained':
             raise ValueError('Frozen/pretrained mode requires --a-checkpoint')
@@ -114,12 +127,13 @@ def initialize_manifold(args):
         config = ManifoldConfig(state_dim=states.shape[1], grid=field_grid(schema),
             history_steps=args.history_steps, history_stride=args.history_stride,
             manifold_dim=args.manifold_dim, hidden_dim=args.manifold_hidden_dim,
-            context_dim=args.context_dim, horizon_steps=20, step_hours=6)
+            context_dim=args.context_dim, horizon_steps=20, step_hours=6,
+            representation_kind=args.latent_layout or 'spatial',latent_channels=args.latent_channels,
+            spatial_downsample=args.spatial_downsample,spatial_hidden_dim=args.spatial_hidden_dim)
         mode = args.mode or ('enriched' if args.information else 'surface')
     if args.horizon_steps > config.horizon_steps:
         raise ValueError('Horizon exceeds the representation data contract')
     data = data_contract(args.archive, args.information, mode, config, parent)
-    pretrained = args.training_mode == 'frozen' or args.initialization == 'pretrained'
     if pretrained:
         if not bool(reference.core.manifold_ready):
             raise ValueError('Pretrained initialization requires a sealed A checkpoint')
@@ -134,7 +148,12 @@ def initialize_manifold(args):
                 weight=.1 if args.pinn_weight in (None,0.) else args.pinn_weight,
                 warmup_epochs=0, ramp_epochs=1))
         torch.manual_seed(args.seed)
-        model = ClimateManifold(config, data['schema'], data['mean'], data['scale'],
+        if config.representation_kind=='spatial':
+            from ..spatial import SpatialClimateManifold
+            constructor=SpatialClimateManifold
+        else:
+            constructor=ClimateManifold
+        model = constructor(config, data['schema'], data['mean'], data['scale'],
             data['statistics'], data['information_metadata'], pinn_config=pc,
             information_mean=data['information_mean'], information_scale=data['information_scale'])
         normalized = torch.as_tensor((data['states'][:data['train_end']]-data['mean'])/data['scale'])
@@ -188,14 +207,18 @@ def train(args):
         raise ValueError('Joint controls use the same climate_manifold with --regularization none; plain_ae is a frozen legacy control')
     a,p,data=initialize_manifold(args)
     constants=None
-    if args.model=='climode':
+    if args.model=='climode' and args.bridge!='latent':
         from .climode import load_constants
         if not args.constants:raise ValueError('ClimODE requires --constants with real orography and lsm')
         constants=load_constants(args.constants,p['schema'])
+    elif args.model=='climode' and args.constants:
+        raise ValueError('Latent ClimODE uses the shared encoder inputs; --constants is only for raw/decoded grid ClimODE')
     config=PredictorConfig(model=args.model,bridge=args.bridge,anchor=args.anchor,hidden_dim=args.hidden_dim,
         ode_substeps=args.ode_substeps,condition_information=not args.no_information_conditioning,
         climode_attention=not args.no_climode_attention,climode_step_hours=args.climode_step_hours,
-        velocity_iterations=args.velocity_iterations,representation=args.representation,training_mode=args.training_mode)
+        velocity_iterations=args.velocity_iterations,representation=args.representation,training_mode=args.training_mode,
+        latent_layout=a.config.representation_kind,latent_max_speed=args.latent_max_speed,
+        latent_max_acceleration=args.latent_max_acceleration)
     experiment=validate_experiment(config,args.experiment)
     if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
         raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
@@ -265,8 +288,12 @@ def train(args):
                                    if representation_payload else None),
         'lead_hours':leads.cpu().tolist(),'options':vars(args),'best_epoch':best_epoch,'best_selection_state_mse':best,
         'selection_split':'calibration','training_seconds':time.perf_counter()-started,'source_commit':source_commit(),
-        'implementation':'official_climode_custom_data_adaptation' if args.model=='climode' else 'local_'+args.model,
-        'constants_sha256':digest(args.constants) if args.model=='climode' else None,
+        'implementation':('latent_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='latent'
+            else 'official_climode_custom_data_adaptation' if args.model=='climode'
+            else 'spatial_'+args.model if args.bridge=='latent' and a.config.representation_kind=='spatial'
+            else 'local_'+args.model),
+        'constants_sha256':digest(args.constants) if constants is not None else None,
+        'latent_shape':list(a.config.latent_grid) if a.config.representation_kind=='spatial' and config.bridge=='latent' else None,
         'training_contract':{**{key:getattr(args,key) for key in ('epochs','batch_size','learning_rate','tendency_weight','horizon_steps')},
             'reconstruction_weight':args.reconstruction_weight if config.training_mode=='joint' else 0.,
             'train_starts_sha256':hashlib.sha256(json.dumps(loaders[0].dataset.starts).encode()).hexdigest(),
@@ -274,7 +301,7 @@ def train(args):
         'trainable_parameters':sum(x.numel() for x in parameters),'total_parameters':sum(x.numel() for x in model.parameters()),
         'conditioning':{'direct_origin_information':bool(config.condition_information and config.bridge=='raw' and args.model in ('mlp','neural_ode') and p['mode']=='enriched'),
                         'manifold_origin_information':bool(config.bridge!='raw' and p['mode']=='enriched'),
-                        'climode_static_constants':args.model=='climode'},
+                        'climode_static_constants':constants is not None},
         'a_frozen':config.training_mode=='frozen' and config.bridge!='raw',
         'regularization':args.regularization if config.training_mode=='joint' else 'legacy',
         'objective_weights':asdict(weights),
@@ -300,6 +327,10 @@ def parser():
     p.add_argument('--a-checkpoint',help='Optional A data contract; use --initialization pretrained to reuse its weights')
     p.add_argument('--training-mode',choices=['joint','frozen'],default='joint')
     p.add_argument('--initialization',choices=['fresh','pretrained'],default='fresh')
+    p.add_argument('--latent-layout',choices=['spatial','global'],default=None,
+        help='Fresh default: spatial; pretrained/frozen default: reference checkpoint layout')
+    for name,value in dict(latent_channels=32,spatial_downsample=2,spatial_hidden_dim=64).items():
+        p.add_argument('--'+name.replace('_','-'),type=int,default=value)
     p.add_argument('--mode',choices=['surface','enriched'],help='Default: enriched when --information is supplied')
     p.add_argument('--regularization',choices=['full','none'],default='full',
         help='none keeps common forecast/tendency/reconstruction losses for matched joint controls')
@@ -324,6 +355,8 @@ def parser():
     p.add_argument('--learning-rate',type=float,default=1e-3)
     p.add_argument('--tendency-weight',type=float,default=.1)
     p.add_argument('--climode-step-hours',type=float,default=1.)
+    p.add_argument('--latent-max-speed',type=float,default=2.,help='Latent ClimODE velocity bound in latent cells/day; resolution dependent')
+    p.add_argument('--latent-max-acceleration',type=float,default=1.,help='Bound on latent ClimODE raw velocity-coordinate rate per day')
     p.add_argument('--no-information-conditioning',action='store_true',help='Remove direct origin information from raw NN baselines; manifold modes pass information through the encoder')
     p.add_argument('--no-climode-attention',action='store_true')
     p.add_argument('--device',default='cpu')

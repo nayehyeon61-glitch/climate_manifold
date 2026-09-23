@@ -35,7 +35,10 @@ ACC는 두 중심화 anomaly 중 하나가 상수이면 정의되지 않습니�
 `rmse`, `acc`, `crps`와 각각의 `_std`, `_valid_cases`를 변수별
 `aggregate`와 `by_lead`에 저장합니다. aggregate는 해당 변수 안에서 origin·lead를
 평균한 값이며 서로 단위가 다른 변수들을 합쳐 단일 물리 RMSE를 만들지 않습니다.
-결정론적 A drift·MLP·Neural ODE에는 CRPS를 `null`로 둡니다.
+결정론적 A drift·MLP·Neural ODE 및 **latent ClimODE**에는 CRPS를 `null`로 둡니다.
+Latent ClimODE는 공간 잠재장을 예측한 뒤 D로 기상장을 복원하며, Gaussian latent를
+가정하거나 latent 표준편차를 원본 장의 표준편차로 대신 사용하지 않습니다.
+Raw/decoded ClimODE의 Gaussian head와 구분합니다.
 
 ## 비교의 판정 기준
 
@@ -75,7 +78,9 @@ bash scripts/run_climode_benchmark.sh
 A 사전학습은 필요하지 않습니다. Surface-only 실험은 `INFO`를 설정하지 않습니다. Constants는 archive와 정확히 정렬된
 실제 orography/land-sea mask이며 `prepare_climode_constants.py`로 준비합니다.
 ClimODE가 격자를 요구하므로 이 기준선은 raw grid에서 동작합니다.
-주실험의 `encoder → latent model → decoder` 경로는 그대로 유지합니다.
+주실험의 Neural ODE와 latent ClimODE는 모두 **공간 encoder → latent model → decoder**입니다.
+이 잠재 ClimODE는 학습된 transport 동역학을 사용하는 adaptation으로, 원본 raw ClimODE와
+출력 분포 및 predictor 구조가 다릅니다. 잠재 주실험에는 constants가 필요하지 않습니다.
 
 출력은 `reference/`의 Raw ClimODE 결과, `latent/`의 공동 학습 비교이며
 `latent/comparison.climode.csv`는 변수·lead별 점수,
@@ -108,7 +113,7 @@ pure-drift 보고서**도 전달할 수 있습니다. A와 후단 보고서를 �
 `climode-raw-seed<seed>.validation.json`을 찾아 같은 비교표를 추가합니다.
 기존 보조 ClimODE runner는 `CLIMODE_BRIDGES=raw`로 기준선만 실행할 수 있습니다.
 
-Raw ClimODE와 latent Neural ODE의 차이에는 표현뿐 아니라 예측기 구조 차이도
+Raw ClimODE와 latent Neural ODE/latent ClimODE의 차이에는 표현뿐 아니라 예측기 구조 차이도
 포함됩니다. 따라서 논문에서 manifold의 효과를 주장하려면 같은 예측기 계열의
 동일한 E–F–D에서 제약 off/on 대조군을 함께 제시해야 합니다. 아직 실제 ERA5 우열을 입증한 결과는 아닙니다.
 

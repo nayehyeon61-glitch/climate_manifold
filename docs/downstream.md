@@ -9,19 +9,26 @@
 
 | 비교군 | 예측 경로 | 학습 목표 |
 |---|---|---|
-| Forecast only | `history → E → latent MLP/Neural ODE → D` | 미래 state + tendency + 현재 reconstruction |
+| Forecast only | `history → E → 공간 Neural ODE / latent ClimODE → D` | 미래 state + tendency + 현재 reconstruction |
 | **Climate Manifold** | **동일한 E–F–D 구조와 입력** | 같은 공통 목표 + 물리·정보 제약 |
 | Raw — 선택 사항 | `history → MLP/Neural ODE → future fields` | 미래 state + tendency |
 
-기본 MLP와 Neural ODE 각각 두 손실 구성을 실행합니다. **Seed마다 E/F/D 전체를 새로
+기본 Neural ODE와 latent ClimODE 각각 두 손실 구성을 실행합니다. MLP는 선택적으로 실행할 수 있습니다. **Seed마다 E/F/D 전체를 새로
 학습**하고, 같은 seed의 off/on pair는 같은 초기화와 학습 예산을 사용합니다.
 Reconstruction-only AE와 미래 감독을 받은 A를 비교하는 기존 실험보다 추가 제약의 효과를
 직접 검증합니다. `forecast_only`라는 이름에도 공통 reconstruction 보조 손실은 포함됩니다.
 
-`ManifoldBridge`가 정규화·인코딩·디코딩 계약을 연결합니다. 현재 기본 latent는
-**전체 기상장당 64차원 전역 벡터**이며 공간 격자당 64채널이 아닙니다. Joint 학습이 표현
-용량을 자동으로 늘리지는 않습니다. 미래 예측기는 전체 관측 latent history를 조건으로
-재귀적으로 미래 latent를 만들며, decoder가 각 lead를 기상장으로 복원합니다.
+`ManifoldBridge`가 정규화·인코딩·디코딩 계약을 연결합니다. 새 fresh 주실험은
+**공간 CNN E/D와 `[C_z, ceil(H/f), ceil(W/f)]` 잠재장**을 사용합니다. 기본 채널 32,
+축소 배율 2이므로 18×36 입력에서는 32×9×18 = 5,184개 좌표입니다. 동일한 전역
+64차원 벡터를 reshape한 것이 아닙니다. 내부 전달/저장용 flat 배열도 알려진 공간 shape로
+복원하여 연산합니다. 전체 관측 latent history를 조건으로 미래 latent를 전개하고,
+공통 decoder가 각 lead를 물리 기상장으로 복원합니다.
+
+공간 Neural ODE는 CNN vector field를 적분합니다. Latent ClimODE는 학습한 transport와
+velocity 동역학을 잠재 격자에 적용하는 adaptation입니다. E/D와 입력은 두 계열에서
+일치하지만 예측기 자체는 다르므로 동일 parameter 수를 주장하지 않습니다. 각 계열의
+`none/full` 대조군은 같은 구조·초기화·예산을 사용합니다.
 
 주실험에서는 `--anchor none`을 강제하여 원본 격자의 복원 잔차로 bottleneck을 우회하지
 않습니다. 출력이 decoder의 상에 있다는 사실만으로 엄밀한 smooth manifold나 물리적
@@ -30,8 +37,9 @@ Reconstruction-only AE와 미래 감독을 받은 A를 비교하는 기존 실�
 ## 데이터·학습 조건
 
 - `--initialization fresh`가 기본입니다. A 없이 archive에서 구조/정규화/분할 계약을 만듭니다.
-  `--a-checkpoint`를 제공하면 그 계약을 재사용합니다. A 가중치 재사용은
-  `--initialization pretrained`로 명시하며 joint에서는 이후 함께 업데이트합니다.
+  `--a-checkpoint`를 제공한 fresh 실행도 데이터/정규화/분할 계약을 재사용하면서
+  공간 E/D를 새로 만듭니다. A 가중치 재사용은 `--initialization pretrained`로 명시하며
+  joint에서는 이후 함께 업데이트합니다. 전역 A 가중치의 spatial 변환은 지원하지 않습니다.
 - 모든 비교군에서 같은 archive·정보 파일·정규화·시간 분할·horizon을 사용합니다.
   학습은 `train`, 선택은 **`calibration`의 공통 미래 state MSE**, 개발 평가는 `validation`,
   최종 평가는 `test`입니다. 독립 A의 `expert_validation` 선택 경로와 구분합니다.
@@ -68,24 +76,32 @@ PINN용 데이터가 없으면 `PINN=0`으로 실행합니다. Surface-only는 `
 
 | 환경 변수 | 기본값·역할 |
 |---|---|
-| `MODELS / SEEDS` | `mlp neural_ode` / `7 19 43` |
+| `MODELS / SEEDS` | `neural_ode climode` / `7 19 43` |
 | `TRAINING_MODE / INITIALIZATION` | `joint` / `fresh` |
 | `A_CHECKPOINT` | 선택적 데이터·구조 계약; `pretrained`일 때 가중치 재사용 |
 | `EPOCHS / LEARNING_RATE` | 20 / 0.001 |
-| `MANIFOLD_DIM / MANIFOLD_HIDDEN_DIM / HIDDEN_DIM` | 전역 latent 64 / E·D 폭 512 / 예측기 폭 128 |
+| `LATENT_LAYOUT` | fresh에서 `spatial`; pretrained는 checkpoint 표현 상속 |
+| `LATENT_CHANNELS / SPATIAL_DOWNSAMPLE / SPATIAL_HIDDEN_DIM` | 공간 잠재 채널 32 / 공간 축소 배율 2 / E·D 은닉 채널 64 |
+| `HIDDEN_DIM` | 예측기 은닉 폭 128 |
+| `MANIFOLD_DIM / MANIFOLD_HIDDEN_DIM` | `LATENT_LAYOUT=global`일 때만 전역 latent 64 / E·D 폭 512 |
+| `CLIMODE_STEP_HOURS` | latent ClimODE 적분 간격 1h; 출력 간격과 구분 |
+| `LATENT_MAX_SPEED / LATENT_MAX_ACCELERATION` | latent 수송 속도 상한 2 셀/일 / 내부 속도 좌표 변화율 상한 1/일; 해상도에 따라 조정 |
 | `HISTORY_STEPS / HISTORY_STRIDE` | 6 / 4; 6시간 자료에서 입력 간격 24시간 |
 | `HORIZON_STEPS` | 20; 출력 간격 6시간, 총 120시간 |
 | `RECONSTRUCTION_WEIGHT / TENDENCY_WEIGHT` | 공통 loss 0.1 / 0.1 |
 | `PHYSICS_WEIGHT / INFORMATION_WEIGHT / STATIC_WEIGHT` | full에서 0.01 / 0.1 / 0.05 |
 | `DISTRIBUTION_WEIGHT` | 0; 선택적 공간 분포 매칭 |
 | `PINN / PINN_LEVELS / PINN_WEIGHT` | 0 / `500 850` / PINN config 가중치 |
-| `INCLUDE_RAW` | 0; 1이면 raw 기준선 추가 |
+| `INCLUDE_RAW` | 0; 1이면 MLP/Neural ODE raw 기준선 추가; raw ClimODE는 별도 benchmark |
 | `WINDOW_STRIDE / MAX_WINDOWS` | 4 / 0(전체 창) |
 | `ORIGIN_STRIDE / MAX_CASES` | 1 / 0(전체 평가 origin) |
 
-`MODELS=neural_ode`로 한 계열만 실행할 수 있습니다. `MODELS=climode`와
-`ANCHOR=origin`은 주실험에서 거부합니다. A 계약을 제공하면 그 계약의 차원·history 설정을
-사용하므로 scratch 모델용 dimension 옵션으로 기존 계약을 덮어쓰지 않습니다.
+`MODELS=neural_ode` 또는 `MODELS=climode`로 한 계열만 실행할 수 있습니다.
+`ANCHOR=origin`은 주실험에서 거부합니다. 기존 전역 표현은
+`LATENT_LAYOUT=global MODELS='mlp neural_ode'`로 선택합니다. 전역 latent에는 ClimODE를
+연결하지 않습니다. Pretrained 실행은 checkpoint 구조를 상속하며, 전역 checkpoint에
+`LATENT_LAYOUT=spatial`을 지정하면 거부합니다. Fresh + A checkpoint는 기존 데이터/history
+계약을 쓰면서 공간 표현으로 새로 초기화할 수 있습니다.
 Checkpoint에는 학습된 E/F/D와 통계가 포함되므로 원본 A 경로 없이 재평가할 수 있습니다.
 학습 재개를 위한 optimizer/RNG 복구는 지원하지 않습니다.
 
@@ -137,12 +153,22 @@ Climate Manifold full의 RMSE 감소량을 집계합니다. 양수면 추가 제
 시간 변화량의 첫 전이는 관측 origin에서 첫 예측으로 계산하므로 재구성 오차도
 포함합니다. 기존 `scores.per_variable` RMSE는 제곱 오차를 모은 뒤 제곱근을 취하며,
 새 `scores.climode` RMSE는 공식 평가 코드처럼 사례별 RMSE를 평균합니다.
-현재 MLP/Neural ODE는 결정론적이며 Hydra의 ensemble 경로 보정 성능을 평가하지 않습니다.
+현재 MLP/Neural ODE와 latent ClimODE는 결정론적이며 CRPS는 `null`입니다.
+Latent 분포를 비선형 D로 복원한 결과에 Gaussian CRPS를 임의로 적용하지 않습니다.
+이 실험은 Hydra의 ensemble 경로 보정 성능을 평가하지 않습니다.
 
-## 보조 실험: ClimODE
+## ClimODE의 주실험과 보조 기준선
 
-ClimODE는 격자에서 공간 미분을 계산합니다. 64차원 전역 latent를 물리 격자로 reshape해서
-넣지 않으며 `latent + climode`는 거부합니다. 지원 경로는 다음과 같습니다.
+기본 주실험은 **공간 E → latent ClimODE → D**이며 앞의 runner에 포함됩니다.
+`scripts/run_climode_comparison.sh` 역시 기본은 같은 주실험을 ClimODE 한 계열에 실행합니다.
+관측 history로 잠재 상태와 transport 동역학을 구성하고 미래 latent를 rollout합니다.
+잠재 transport 계수는 물리적 U/V가 아니며 원본 ClimODE의 물리 보존식을 그대로 보장하지
+않습니다. 정보·정적 지형·PINN 손실은 미래 latent를 복원한 정보/기상 변수에서 계산합니다.
+실제 grid constants나 원본 ClimODE attention을 사용하지 않으므로 최소 15×15 제한도 없습니다.
+잠재 격자에서도 수치 안정성과 표현 용량을 실제 데이터에서 확인해야 합니다.
+
+아래 두 경로는 `CLIMODE_BRIDGES=raw` 또는 `CLIMODE_BRIDGES='raw decoded'`로 요청하는
+**보조 실험**이며 주실험과 같은 paired-effect 표에 섞지 않습니다.
 
 | 비교군 | 경로와 학습 |
 |---|---|
@@ -150,7 +176,7 @@ ClimODE는 격자에서 공간 미분을 계산합니다. 64차원 전역 latent
 | Decoded ClimODE | `history → E → D → reconstructed grid → ClimODE`; E/D/ClimODE 공동 학습 |
 
 두 번째는 **입력 격자 표현의 공동 학습**이며 `E → latent ClimODE → D` 실험이 아닙니다.
-ClimODE 출력이 decoder image에 머무르도록 제약하지 않습니다. 현재 runner는 decoded에서
+ClimODE 출력이 decoder image에 머무르도록 제약하지 않습니다. 보조 runner는 decoded에서
 forecast/tendency와 observed reconstruction을 사용하며 future latent 경로가 필요한
 information/distribution/PINN 손실을 적용하지 않습니다. Enriched 입력이 있다면 raw 대비
 차이에는 상층 정보 접근 차이도 포함되므로 same E–F–D loss ablation과 구분합니다.
@@ -161,16 +187,16 @@ python scripts/prepare_climode_constants.py --archive "$ARCHIVE" \
   --fields /absolute/path/to/constants.nc --output data/climode_constants.npz
 export CONSTANTS="$PWD/data/climode_constants.npz"
 export RUN=runs/joint_auxiliary_climode_001
-bash scripts/run_climode_comparison.sh
+CLIMODE_BRIDGES='raw decoded' bash scripts/run_climode_comparison.sh
 ```
 
-ClimODE `--constants`에는 archive와 정확히 정렬된 실제 orography와 육해 마스크가 필요합니다.
+보조 raw/decoded ClimODE `--constants`에는 archive와 정확히 정렬된 실제 orography와 육해 마스크가 필요합니다.
 기본 attention에는 최소 15×15 격자가 필요합니다. 작은 합성 격자의 코드 검증에는
 `CLIMODE_ATTENTION=0`으로 끌 수 있으나 공식 attention 구성과 다른 ablation입니다. `CLIMODE_BRIDGES=raw`로 raw 기준선만
 실행할 수 있습니다. 같은 환경에서 `scripts/run_climode_benchmark.sh`는 Raw ClimODE와
 primary joint 비교를 이어서 실행합니다.
 
-공식 [Aalto-QuML/ClimODE](https://github.com/Aalto-QuML/ClimODE) commit
+이 raw/decoded backend는 공식 [Aalto-QuML/ClimODE](https://github.com/Aalto-QuML/ClimODE) commit
 `e729d23e8799ce0e075699e76d60227d848d8d0c`의 residual CNN, attention, transport PDE,
 Gaussian head를 포함합니다. [MIT 라이선스·인용·수정 내역](../THIRD_PARTY_NOTICES.md)을
 보존합니다. 이것은 **custom-data adaptation**이며 논문 benchmark의 재현이 아닙니다.
@@ -187,7 +213,7 @@ Gaussian head를 포함합니다. [MIT 라이선스·인용·수정 내역](../T
 초기 transport velocity의 내부 적합은 detach한 관측/복원장에서 실행하여 그 최적화까지
 미분하지 않습니다. 예측 기상장 경로의 gradient는 E/D로 전달합니다. Transport velocity는
 변수별 보존식 보조 상태이며 U10/V10 자체가 아닙니다.
-Gaussian head의 CRPS/NLL, coverage, spread–skill을 평가하지만 지점·lead별 주변분포이며
+Raw/decoded Gaussian head의 CRPS/NLL, coverage, spread–skill을 평가하지만 지점·lead별 주변분포이며
 coherent trajectory ensemble을 보장하지 않습니다.
 
 ## 기존 frozen 비교의 재현

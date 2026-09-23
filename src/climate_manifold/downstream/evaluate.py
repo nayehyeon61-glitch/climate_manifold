@@ -72,6 +72,10 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                     values['predicted_latent']=prediction['predicted_latent'][0].cpu().numpy()
                     values['origin_latent']=prediction['origin_latent'][0].cpu().numpy()
                     if target_q is not None:values['diagnostic_target_latent']=target_q[0].cpu().numpy()
+                    if p.get('latent_shape'):
+                        shape=tuple(p['latent_shape'])
+                        values['latent_shape']=np.asarray(shape,dtype=np.int64)
+                        values['predicted_latent_spatial']=prediction['predicted_latent'][0].cpu().numpy().reshape(len(leads),*shape)
                 np.savez_compressed(path,**values);saved=True
     if str(device).startswith('cuda'):torch.cuda.synchronize()
     report={'format':'climate_manifold.downstream_evaluation.v1','checkpoint_sha256':digest(checkpoint),
@@ -83,6 +87,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'representation_sha256':(digest(checkpoint) if model.config.training_mode=='joint' and model.config.bridge!='raw'
                 else p.get('representation_sha256',p['a_sha256'] if model.config.bridge!='raw' else None)),
             'representation_config':a['config'],
+            'latent_shape':p.get('latent_shape'),
             'regularization':p.get('regularization','legacy'),
             'objective_weights':p.get('objective_weights',{}),
             'initialization':p.get('initialization','pretrained'),
