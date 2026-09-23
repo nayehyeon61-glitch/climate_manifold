@@ -1,4 +1,4 @@
-"""Six primary representation/predictor variants; optional separate ClimODE smoke."""
+"""Legacy frozen 3-way control; optional separate frozen ClimODE smoke."""
 import argparse
 import json
 from pathlib import Path
@@ -36,7 +36,7 @@ def main(argv=None):
             representation='climate_manifold' if variant=='raw' else variant
             extra=['--ae-checkpoint',str(ae_checkpoint)] if variant=='plain_ae' else []
             prefix=output/(family+'-'+variant)
-            train_main(common+['--output',str(prefix)+'.pt','--experiment','primary',
+            train_main(common+['--training-mode','frozen','--initialization','pretrained','--output',str(prefix)+'.pt','--experiment','primary',
                 '--model',family,'--bridge',bridge,'--representation',representation]+extra+[
                 '--epochs','1','--batch-size','2','--hidden-dim','24','--max-windows','2',
                 '--horizon-steps','20','--window-stride','1'])
@@ -57,7 +57,7 @@ def main(argv=None):
         auxiliary_reports=[]
         for bridge in ('raw','decoded'):
             prefix=auxiliary/('climode-'+bridge)
-            train_main(common+['--output',str(prefix)+'.pt','--experiment','auxiliary',
+            train_main(common+['--training-mode','frozen','--initialization','pretrained','--output',str(prefix)+'.pt','--experiment','auxiliary',
                 '--model','climode','--bridge',bridge,'--constants',str(constants),
                 '--epochs','1','--batch-size','2','--hidden-dim','24','--max-windows','2',
                 '--horizon-steps','20','--window-stride','1','--no-climode-attention',

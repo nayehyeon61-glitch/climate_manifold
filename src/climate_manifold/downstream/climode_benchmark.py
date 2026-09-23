@@ -16,11 +16,16 @@ def _a_hash(report):
 
 def _identity(report):
     cfg = report['config']
-    if report['format'] == 'climate_manifold.dynamics_evaluation.v1':
-        return dict(model='a_drift', bridge='latent', representation='climate_manifold', seed=None)
-    return dict(model=cfg['model'], bridge=cfg['bridge'],
-                representation='raw' if cfg['bridge']=='raw' else cfg.get('representation','climate_manifold'),
-                seed=report['seed'])
+    pure_a = report['format'] == 'climate_manifold.dynamics_evaluation.v1'
+    return dict(model='a_drift' if pure_a else cfg['model'],
+                bridge='latent' if pure_a else cfg['bridge'],
+                representation=('climate_manifold' if pure_a else
+                    'raw' if cfg['bridge']=='raw' else cfg.get('representation','climate_manifold')),
+                seed=None if pure_a else report['seed'],
+                training_mode='a_only' if pure_a else cfg.get('training_mode','frozen'),
+                regularization=report.get('regularization','legacy'),
+                initialization=report.get('initialization','pretrained' if pure_a or cfg['bridge']!='raw' else 'fresh'),
+                representation_sha256=(report['checkpoint_sha256'] if pure_a else report.get('representation_sha256')))
 
 
 def benchmark(reports, references=None):
@@ -32,8 +37,13 @@ def benchmark(reports, references=None):
                       and r['config'].get('bridge')=='raw' and r['config'].get('anchor')=='none']
     all_reports = reports + references
     first = reports[0]
+    # A fixed checkpoint is part of the old frozen protocol, but independently
+    # jointly trained candidates need not share a pretrained A. Final field
+    # comparisons still require exact data, cases, leads and metric protocol.
+    joint = any(r['config'].get('training_mode')=='joint' for r in all_reports)
     for report in all_reports:
-        if _a_hash(report) != _a_hash(first):
+        candidate_a = _a_hash(report)  # Also validates the report format in joint comparisons.
+        if not joint and candidate_a != _a_hash(first):
             raise ValueError('Unfair ClimODE comparison: mismatched a_sha256')
         for key in ('archive_sha256','information_sha256','split','origin_times','lead_hours'):
             if report[key] != first[key]:
@@ -104,8 +114,9 @@ def benchmark(reports, references=None):
             'ranking_allowed':bool(effects) and all(e['ranking_allowed'] for e in effects) and not unmatched,
             'notes':['Primary evidence is per-variable/per-lead physical RMSE and ACC; no mixed-unit scalar rank.',
                      'Positive RMSE/CRPS skill or ACC difference favors candidate; undefined ACC prevents ACC comparison.',
-                     'Downstream forecast seeds are paired; A drift is fixed and compared to each baseline seed, not independent A runs.',
-                     'Cross-family comparisons do not isolate the manifold effect; keep matched raw/AE representation controls.',
+                     'Training seeds are paired; joint candidates relearn encoder/predictor/decoder, while pure A drift is fixed and compared to each baseline seed.',
+                     'Joint candidates may have different A initialization hashes; data, splits, cases, leads and metric protocol must match.',
+                     'Cross-family field comparisons do not isolate the manifold effect; use matched E/F/D forecast-only versus regularized joint controls for that question.',
                      'References use the same data/splits/origins/leads and train climatology, not published paper scores.']}
 
 

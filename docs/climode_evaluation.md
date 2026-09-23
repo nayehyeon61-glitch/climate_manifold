@@ -4,7 +4,7 @@
 Gaussian 확률 출력이 있는 모델에는 CRPS↓를 함께 보고합니다.
 기준 모델은 **같은 데이터로 학습한 Raw ClimODE**이며 논문의 표에 있는 수치를
 우리 결과의 분모로 사용하지 않습니다. Manifold 효과를 분리하기 위한 같은 계열의
-Raw/Climate Manifold/Plain AE 비교도 함께 유지합니다.
+공동 학습 E–F–D의 추가 제약 off/on 비교도 함께 수행합니다.
 
 ## 확인한 일차 출처와 적용 범위
 
@@ -22,7 +22,7 @@ Raw/Climate Manifold/Plain AE 비교도 함께 유지합니다.
 | RMSE | 물리 단위로 복원 → 각 origin·lead의 위도 가중 공간 RMSE → origin 평균/표준편차 | 공식 evaluation loop의 사례별 집계 |
 | ACC | train 격자별 시간 평균을 뺀 anomaly → 각 장의 비가중 공간 평균 제거 → 위도 가중 상관 → 사례 평균/표준편차 | 공간 중심화는 공식 코드와 같음; climatology 자료는 다름 |
 | CRPS | 물리 단위 Gaussian CRPS의 위도 가중 공간 평균 | 공식 함수는 min/max 정규화 단위의 CRPS 배열을 반환; 이 프로젝트는 물리 단위/위도 가중을 명시 |
-| 기준 평균 | A checkpoint에 고정된 train-only mean | 원본 global script의 test-year 평균을 복제하지 않음 |
+| 기준 평균 | 예측 checkpoint의 데이터 계약에 고정된 train-only mean | 원본 global script의 test-year 평균을 복제하지 않음 |
 | 사례 표준편차 | population std (`ddof=0`) | 신뢰구간이나 seed 간 변동이 아님 |
 | 공통 변수 | 현재 surface `msl/t2m/u10/v10` | 원논문 `Z500/T850/T2m/U10/V10` benchmark 재현 아님 |
 
@@ -39,7 +39,7 @@ ACC는 두 중심화 anomaly 중 하나가 상수이면 정의되지 않습니�
 
 ## 비교의 판정 기준
 
-1. Raw ClimODE와 동일한 A 데이터 계약, archive·정보 checksum, split, origin, lead,
+1. Raw ClimODE와 동일한 데이터 계약, archive·정보 checksum, split, origin, lead,
    metric protocol/climatology를 사용해야 합니다. 하나라도 다르면 비교를 거부합니다.
 2. 후단 모델은 같은 forecast seed의 기준선과 연결합니다. A 단독 drift는 하나의
    고정 모델을 각 ClimODE seed와 비교하며 이를 독립적인 A 재학습으로 해석하지 않습니다.
@@ -55,16 +55,15 @@ ACC는 두 중심화 anomaly 중 하나가 상수이면 정의되지 않습니�
 
 평균 오차만으로 dynamics 개선을 판단하지 않고 기존 tendency RMSE, 변화량 진폭 비율,
 finite forecast fraction을 함께 확인합니다. Latent RMSE는 각 표현 내부의 진단입니다.
-A 학습 손실과 checkpoint 선택 기준, 후단 calibration checkpoint 선택은 유지합니다.
+공동 학습은 calibration의 공통 미래 state MSE로 checkpoint를 선택합니다. 독립 A의 선택 규칙은 별도입니다.
 이 변경은 **외부 평가 프로토콜**이며 test 점수로 checkpoint를 선택하지 않습니다.
 
 ## 실행
 
-새 학습부터 Raw ClimODE와 후단 6개 조합을 연결하려면:
+Raw ClimODE 기준선과 공동 학습의 두 손실 구성을 비교하려면:
 
 ```bash
 python -m pip install -e '.[forecast]'
-export A_CHECKPOINT=/absolute/path/to/manifold.pt
 export ARCHIVE=/absolute/path/to/surface.npz
 export INFO=/absolute/path/to/information_pinn_shards
 export CONSTANTS=/absolute/path/to/climode_constants.npz
@@ -73,12 +72,12 @@ export DEVICE=cuda SEEDS='7 19 43' HORIZON_STEPS=20
 bash scripts/run_climode_benchmark.sh
 ```
 
-Surface-only A는 `INFO`를 설정하지 않습니다. Constants는 archive와 정확히 정렬된
+A 사전학습은 필요하지 않습니다. Surface-only 실험은 `INFO`를 설정하지 않습니다. Constants는 archive와 정확히 정렬된
 실제 orography/land-sea mask이며 `prepare_climode_constants.py`로 준비합니다.
 ClimODE가 격자를 요구하므로 이 기준선은 raw grid에서 동작합니다.
 주실험의 `encoder → latent model → decoder` 경로는 그대로 유지합니다.
 
-출력은 `reference/`의 Raw ClimODE 결과, `latent/`의 후단 비교이며
+출력은 `reference/`의 Raw ClimODE 결과, `latent/`의 공동 학습 비교이며
 `latent/comparison.climode.csv`는 변수·lead별 점수,
 `latent/comparison.climode-effects.csv`는 같은 seed의 ClimODE 대비 개선율입니다.
 기존 `comparison.csv`의 normalized pooled RMSE는 보조 요약으로 유지합니다.
@@ -110,12 +109,12 @@ pure-drift 보고서**도 전달할 수 있습니다. A와 후단 보고서를 �
 기존 보조 ClimODE runner는 `CLIMODE_BRIDGES=raw`로 기준선만 실행할 수 있습니다.
 
 Raw ClimODE와 latent Neural ODE의 차이에는 표현뿐 아니라 예측기 구조 차이도
-포함됩니다. 따라서 논문에서 manifold의 효과를 주장하려면 기존 같은 예측기 계열의
-Raw/Plain AE 대조군을 함께 제시해야 합니다. 아직 실제 ERA5 우열을 입증한 결과는 아닙니다.
+포함됩니다. 따라서 논문에서 manifold의 효과를 주장하려면 같은 예측기 계열의
+동일한 E–F–D에서 제약 off/on 대조군을 함께 제시해야 합니다. 아직 실제 ERA5 우열을 입증한 결과는 아닙니다.
 
-## 소프트웨어 검증
+## 이전 평가 모듈의 소프트웨어 검증
 
-전체 테스트 117개가 통과했습니다. 사례별 RMSE와 pooled RMSE의 차이, 위도 가중치,
+공동 학습 도입 전 평가 모듈 통합 검증에서 테스트 117개가 통과했습니다. 사례별 RMSE와 pooled RMSE의 차이, 위도 가중치,
 물리 단위 CRPS, ACC 공간 중심화·상수 anomaly 처리, 기준선 계약·실패 subset 검사를
 확인했습니다. 기존 checkpoint에서 후단 8개 조합과 A drift를 120h × 2 origins로
 재평가하여 동일 조건의 ClimODE 개선율 JSON/CSV 생성까지 검증했습니다.

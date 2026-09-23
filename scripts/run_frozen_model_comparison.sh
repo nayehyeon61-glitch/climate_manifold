@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
-# Joint experiment: match E-F-D capacity and change only representation regularization.
+# Legacy control: pretrain representations, freeze them, then fit predictors.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-if [[ "${TRAINING_MODE:-joint}" == frozen ]]; then
-  exec bash scripts/run_frozen_model_comparison.sh
-fi
-[[ "${TRAINING_MODE:-joint}" == joint ]] || { echo 'TRAINING_MODE must be joint or frozen' >&2; exit 2; }
+: "${A_CHECKPOINT:?Set the trained Climate Manifold checkpoint}"
 : "${ARCHIVE:?Set the original canonical surface archive}"
 : "${RUN:?Set a new comparison experiment directory}"
 [[ ! -e "$RUN" ]] || { echo 'Choose a new RUN' >&2; exit 2; }
@@ -22,41 +19,30 @@ for family in "${families[@]}"; do
     *) echo "Unsupported primary model: $family" >&2; exit 2;;
   esac
 done
-initialization="${INITIALIZATION:-fresh}"
-[[ "$initialization" == fresh || "$initialization" == pretrained ]] || { echo 'INITIALIZATION must be fresh or pretrained' >&2; exit 2; }
-if [[ "$initialization" == pretrained && -z "${A_CHECKPOINT:-}" ]]; then
-  echo 'INITIALIZATION=pretrained requires A_CHECKPOINT' >&2; exit 2
-fi
 info=(); [[ -z "${INFO:-}" ]] || info=(--information "$INFO")
-setup=(--training-mode joint --initialization "$initialization"
-  --manifold-dim "${MANIFOLD_DIM:-64}" --manifold-hidden-dim "${MANIFOLD_HIDDEN_DIM:-512}"
-  --context-dim "${CONTEXT_DIM:-64}" --history-steps "${HISTORY_STEPS:-6}" --history-stride "${HISTORY_STRIDE:-4}")
-[[ -z "${A_CHECKPOINT:-}" ]] || setup+=(--a-checkpoint "$A_CHECKPOINT")
-[[ -z "${MODE:-}" ]] || setup+=(--mode "$MODE")
-if [[ "${PINN:-0}" == 1 ]]; then
-  read -r -a levels <<< "${PINN_LEVELS:-500 850}"
-  setup+=(--pinn --pinn-levels "${levels[@]}")
-fi
-[[ -z "${PINN_WEIGHT:-}" ]] || setup+=(--pinn-weight "$PINN_WEIGHT")
-variants=(forecast_only climate_manifold)
-[[ "${INCLUDE_RAW:-0}" != 1 ]] || variants+=(raw)
 mkdir -p "$RUN"
 reports=()
+ae_checkpoint="${AE_CHECKPOINT:-$RUN/plain-ae.pt}"
+if [[ -z "${AE_CHECKPOINT:-}" ]]; then
+  # Match the fixed A: one fresh AE shared by all forecast families and seeds.
+  "$PYTHON" -m climate_manifold.downstream.plain_ae --a-checkpoint "$A_CHECKPOINT" \
+    --archive "$ARCHIVE" "${info[@]}" --output "$ae_checkpoint" \
+    --epochs "${AE_EPOCHS:-20}" --batch-size "${BATCH_SIZE:-2}" \
+    --learning-rate "${AE_LEARNING_RATE:-0.001}" --window-stride "${WINDOW_STRIDE:-4}" \
+    --max-windows "${MAX_WINDOWS:-0}" --seed "${AE_SEED:-7}" --device "${DEVICE:-cpu}"
+fi
 for seed in "${seeds[@]}"; do
   for family in "${families[@]}"; do
-    for variant in "${variants[@]}"; do
-      bridge=latent; regularization=full
-      [[ "$variant" != forecast_only ]] || regularization=none
-      if [[ "$variant" == raw ]]; then bridge=raw; regularization=none; fi
+    for variant in raw climate_manifold plain_ae; do
+      mode=latent; representation="$variant"; extra=()
+      if [[ "$variant" == raw ]]; then mode=raw; representation=climate_manifold; fi
+      if [[ "$variant" == plain_ae ]]; then extra=(--ae-checkpoint "$ae_checkpoint"); fi
       prefix="$RUN/${family}-${variant}-seed${seed}"
-      "$PYTHON" -m climate_manifold.downstream.train "${setup[@]}" \
-        --archive "$ARCHIVE" "${info[@]}" --experiment primary --model "$family" \
-        --bridge "$bridge" --representation climate_manifold --regularization "$regularization" --anchor none \
+      "$PYTHON" -m climate_manifold.downstream.train --a-checkpoint "$A_CHECKPOINT" \
+        --training-mode frozen --initialization pretrained --archive "$ARCHIVE" "${info[@]}" --experiment primary --model "$family" \
+        --bridge "$mode" --representation "$representation" "${extra[@]}" --anchor none \
         --output "$prefix.pt" --epochs "${EPOCHS:-20}" --batch-size "${BATCH_SIZE:-2}" \
         --learning-rate "${LEARNING_RATE:-0.001}" --tendency-weight "${TENDENCY_WEIGHT:-0.1}" \
-        --reconstruction-weight "${RECONSTRUCTION_WEIGHT:-0.1}" --information-weight "${INFORMATION_WEIGHT:-0.1}" \
-        --distribution-weight "${DISTRIBUTION_WEIGHT:-0}" --static-weight "${STATIC_WEIGHT:-0.05}" \
-        --physics-weight "${PHYSICS_WEIGHT:-0.01}" \
         --hidden-dim "${HIDDEN_DIM:-128}" --horizon-steps "${HORIZON_STEPS:-20}" \
         --window-stride "${WINDOW_STRIDE:-4}" --max-windows "${MAX_WINDOWS:-0}" \
         --seed "$seed" --device "${DEVICE:-cpu}"

@@ -1,4 +1,4 @@
-"""Train a downstream predictor with a frozen Climate Manifold or plain AE."""
+"""Jointly train a manifold and its forecaster; frozen checkpoints remain optional."""
 import argparse
 import hashlib
 from dataclasses import asdict
@@ -10,40 +10,48 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from ..architecture import ManifoldConfig
+from ..archive import load_archive, field_grid
 from ..model import ClimateManifold
 from ..train import load_checkpoint as load_a, data_contract, write_json, source_commit
-from ..physical_information import digest
+from ..physical_information import digest, information_digest
 from ..temporal_supervision import TemporalWindowDataset, TemporalObjective
 from .pipeline import ForecastPipeline, PredictorConfig
 from .protocol import validate_experiment
 
-FORMAT = 'climate_manifold.downstream.v1'
+FORMAT = 'climate_manifold.downstream.v2'
+LEGACY_FORMAT = 'climate_manifold.downstream.v1'
 
 
 class CausalWindows(TemporalWindowDataset):
-    def __init__(self,*args,information=None,**kwargs):
+    def __init__(self,*args,information=None,information_targets=False,**kwargs):
         super().__init__(*args,**kwargs);self.information=information
+        self.information_targets=information_targets
 
     def __getitem__(self,index):
         row=super().__getitem__(index)
         if self.information is not None:
             origin=self.starts[index]+self.config.history_span_steps-1
             row['information']=torch.from_numpy(self.information[origin].copy())
+            if self.information_targets:
+                row['information_targets']=torch.from_numpy(
+                    self.information[origin+1:origin+self.config.horizon_steps+1].copy())
         return row
 
 
-def windows(data,config,split,stride=1,max_windows=0):
+def windows(data,config,split,stride=1,max_windows=0,*,information_targets=False):
     starts=data['split'][split][::stride]
     if max_windows:starts=starts[:max_windows]
-    return CausalWindows(data['states'],data['times'],config,starts,data['mean'],data['scale'],data['schema'],information=data['information'])
+    if not len(starts):raise ValueError('Forecast training/evaluation requires nonempty windows')
+    return CausalWindows(data['states'],data['times'],config,starts,data['mean'],data['scale'],data['schema'],
+        information=data['information'],information_targets=information_targets)
 
 
-def new_a(metadata):
+def new_a(metadata, sealed=True):
     model=ClimateManifold(ManifoldConfig(**metadata['config']),metadata['schema'],metadata['mean'],metadata['scale'],
         metadata['statistics'],metadata['information_metadata'],pinn_config=metadata.get('pinn_config'),
         information_mean=metadata.get('information_mean'),information_scale=metadata.get('information_scale'))
     # Only used to construct a saved pipeline, whose strict state loading follows.
-    model.core.manifold_ready.fill_(True)
+    model.core.manifold_ready.fill_(sealed)
     return model
 
 
@@ -52,15 +60,18 @@ def load_predictor(path,device='cpu'):
     if not manifest.exists() or json.loads(manifest.read_text())['checkpoint_sha256']!=digest(path):
         raise ValueError('Downstream checkpoint manifest/hash mismatch')
     p=torch.load(path,map_location='cpu',weights_only=False)
-    if p.get('format')!=FORMAT or not p.get('a_was_sealed'):
-        raise ValueError('Not a standalone downstream checkpoint with a sealed A')
+    if p.get('format') not in (FORMAT,LEGACY_FORMAT):
+        raise ValueError('Not a standalone forecast checkpoint')
     config=PredictorConfig(**p['config'])
+    if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
+        raise ValueError('Frozen checkpoints require a sealed A')
     representation=None
     if config.representation == 'plain_ae':
         from .plain_ae import new_plain_ae
         representation=new_plain_ae(p['a_metadata'])
         representation.core.manifold_ready.fill_(True)
-    model=ForecastPipeline(new_a(p['a_metadata']),config,p['constants'],p['a_metadata']['schema'],representation)
+    model=ForecastPipeline(new_a(p['a_metadata'],bool(p.get('a_was_sealed'))),config,
+        p['constants'],p['a_metadata']['schema'],representation)
     model.load_state_dict(p['model'],strict=True)
     return model.to(device).eval(),p
 
@@ -83,6 +94,82 @@ def forecast_loss(output,batch,temporal,lead_hours,tendency_weight):
     return {'loss':loss,'state_mse':state_mse,'tendency_mse':tendency,'fit':fit}
 
 
+def initialize_manifold(args):
+    """Build from training data, optionally using an A contract or warm start.
+
+    Fresh joint models use identity latent coordinates throughout optimization;
+    resealing after training would change the predictor's coordinate system.
+    """
+    parent = None
+    if args.a_checkpoint:
+        reference, parent = load_a(args.a_checkpoint)
+        config = reference.config
+        mode = parent['mode']
+        if args.mode is not None and args.mode != mode:
+            raise ValueError('--mode differs from the reference A data contract')
+    else:
+        if args.training_mode == 'frozen' or args.initialization == 'pretrained':
+            raise ValueError('Frozen/pretrained mode requires --a-checkpoint')
+        states, _, schema = load_archive(args.archive)
+        config = ManifoldConfig(state_dim=states.shape[1], grid=field_grid(schema),
+            history_steps=args.history_steps, history_stride=args.history_stride,
+            manifold_dim=args.manifold_dim, hidden_dim=args.manifold_hidden_dim,
+            context_dim=args.context_dim, horizon_steps=20, step_hours=6)
+        mode = args.mode or ('enriched' if args.information else 'surface')
+    if args.horizon_steps > config.horizon_steps:
+        raise ValueError('Horizon exceeds the representation data contract')
+    data = data_contract(args.archive, args.information, mode, config, parent)
+    pretrained = args.training_mode == 'frozen' or args.initialization == 'pretrained'
+    if pretrained:
+        if not bool(reference.core.manifold_ready):
+            raise ValueError('Pretrained initialization requires a sealed A checkpoint')
+        if args.pinn and reference.pinn is None:
+            raise ValueError('This pretrained A has no PINN; use fresh initialization with --pinn')
+        model, metadata = reference, {k:v for k,v in parent.items() if k != 'model'}
+    else:
+        pc = parent.get('pinn_config') if parent else None
+        if args.pinn:
+            from ..hybrid_pinn import HybridPINNConfig
+            pc = asdict(HybridPINNConfig(levels_hpa=tuple(args.pinn_levels),
+                weight=.1 if args.pinn_weight in (None,0.) else args.pinn_weight,
+                warmup_epochs=0, ramp_epochs=1))
+        torch.manual_seed(args.seed)
+        model = ClimateManifold(config, data['schema'], data['mean'], data['scale'],
+            data['statistics'], data['information_metadata'], pinn_config=pc,
+            information_mean=data['information_mean'], information_scale=data['information_scale'])
+        normalized = torch.as_tensor((data['states'][:data['train_end']]-data['mean'])/data['scale'])
+        model.core.physics.fit(normalized)
+        metadata = {k:(v.tolist() if isinstance(v,np.ndarray) else v) for k,v in data.items()
+                    if k not in ('states','times','information')}
+        metadata.update(config=asdict(config), mode=mode,
+            format='climate_manifold.joint_representation_metadata.v1',
+            pinn_config=asdict(model.pinn.config) if model.pinn is not None else None,
+            archive_sha256=digest(args.archive),
+            information_sha256=information_digest(args.information) if args.information else None,
+            information_shards=data['information'].provenance() if hasattr(data['information'],'provenance') else None)
+    return model, metadata, data
+
+
+def objective_weights(args, model):
+    from .joint_objective import JointObjectiveWeights
+    enabled = args.training_mode == 'joint' and args.bridge != 'raw'
+    full = enabled and args.regularization == 'full'
+    latent = args.bridge == 'latent'
+    info = model.info_head is not None
+    if args.pinn_weight and full and (not latent or model.pinn is None):
+        raise ValueError('Positive --pinn-weight requires a joint latent model with enabled PINN')
+    if full and args.distribution_weight and (not latent or not info):
+        raise ValueError('Positive --distribution-weight requires an enriched joint latent model')
+    return JointObjectiveWeights(
+        reconstruction=args.reconstruction_weight if enabled else 0.,
+        physics=args.physics_weight if full else 0.,
+        information=args.information_weight if full and latent and info else 0.,
+        static=args.static_weight if full and latent and info else 0.,
+        distribution=args.distribution_weight if full and latent and info else 0.,
+        pinn=((model.pinn.config.weight if args.pinn_weight is None else args.pinn_weight)
+              if full and latent and model.pinn is not None else 0.))
+
+
 def train(args):
     output=Path(args.output)
     if output.suffix!='.pt':raise ValueError('Output must end in .pt')
@@ -93,9 +180,13 @@ def train(args):
     if not math.isfinite(args.learning_rate) or args.learning_rate<=0 or not math.isfinite(args.tendency_weight) or args.tendency_weight<0:
         raise ValueError('Invalid learning rate/tendency weight')
     torch.manual_seed(args.seed);np.random.seed(args.seed)
-    a,p=load_a(args.a_checkpoint)
-    if not bool(a.core.manifold_ready):raise ValueError('A must be sealed')
-    if args.horizon_steps>a.config.horizon_steps:raise ValueError('Horizon exceeds the A data contract')
+    for name in ('reconstruction_weight','information_weight','static_weight','distribution_weight','physics_weight','pinn_weight'):
+        value=getattr(args,name)
+        if value is not None and (not math.isfinite(value) or value<0):
+            raise ValueError('Objective weights must be finite and nonnegative: '+name)
+    if args.training_mode == 'joint' and args.representation != 'climate_manifold':
+        raise ValueError('Joint controls use the same climate_manifold with --regularization none; plain_ae is a frozen legacy control')
+    a,p,data=initialize_manifold(args)
     constants=None
     if args.model=='climode':
         from .climode import load_constants
@@ -104,7 +195,7 @@ def train(args):
     config=PredictorConfig(model=args.model,bridge=args.bridge,anchor=args.anchor,hidden_dim=args.hidden_dim,
         ode_substeps=args.ode_substeps,condition_information=not args.no_information_conditioning,
         climode_attention=not args.no_climode_attention,climode_step_hours=args.climode_step_hours,
-        velocity_iterations=args.velocity_iterations,representation=args.representation)
+        velocity_iterations=args.velocity_iterations,representation=args.representation,training_mode=args.training_mode)
     experiment=validate_experiment(config,args.experiment)
     if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
         raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
@@ -117,9 +208,10 @@ def train(args):
             raise ValueError('Plain AE was trained against a different reference A/data contract')
     elif args.ae_checkpoint:
         raise ValueError('--ae-checkpoint is only used with --representation plain_ae')
-    data=data_contract(args.archive,args.information,p['mode'],a.config,p)
+    weights=objective_weights(args,a)
     # All variants share train / downstream-selection calibration / untouched validation,test.
-    loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows),batch_size=args.batch_size,
+    target_info=bool(weights.information or weights.static or weights.distribution or weights.pinn)
+    loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info),batch_size=args.batch_size,
         shuffle=(name=='train'),generator=torch.Generator().manual_seed(args.seed)) for name in ('train','calibration')]
     # A and AE construction consume different RNG amounts. Reset so equal-size
     # latent predictors start with identical weights for the same forecast seed.
@@ -139,6 +231,11 @@ def train(args):
                     batch={k:v.to(args.device) for k,v in batch.items()}
                     prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads)
                     losses=forecast_loss(prediction,batch,temporal,leads,args.tendency_weight)
+                    if config.training_mode == 'joint' and config.bridge != 'raw':
+                        from .joint_objective import joint_losses
+                        auxiliary=joint_losses(model,prediction,batch,weights,leads)
+                        losses.update(auxiliary)
+                        losses['loss']=losses['loss']+auxiliary['regularization']
                     if training and optimizer is not None:
                         optimizer.zero_grad(set_to_none=True);losses['loss'].backward()
                         torch.nn.utils.clip_grad_norm_(parameters,1.,error_if_nonfinite=True);optimizer.step()
@@ -152,17 +249,18 @@ def train(args):
         rows.append(row)
         print(json.dumps({'model':args.model,'bridge':args.bridge,'epoch':epoch,'selection_state_mse':score}),flush=True)
     model.load_state_dict(best_state)
-    if model.bridge.manifold is not None:
-        frozen_state=(representation_payload or p)['model']
+    if model.bridge.manifold is not None and config.training_mode == 'frozen':
+        frozen_state=(representation_payload or load_a(args.a_checkpoint)[1])['model']
         for key,value in frozen_state.items():
             if not torch.equal(value.cpu(),model.bridge.manifold.state_dict()[key].cpu()):
                 raise AssertionError('Frozen representation changed: '+key)
     metadata={k:v for k,v in p.items() if k!='model'}
-    payload={'format':FORMAT,'a_was_sealed':True,'a_metadata':metadata,'a_sha256':digest(args.a_checkpoint),
+    payload={'format':FORMAT,'a_was_sealed':bool(a.core.manifold_ready),'a_metadata':metadata,
+        'a_sha256':digest(args.a_checkpoint) if args.a_checkpoint else None,
         'config':asdict(config),'constants':constants,'model':best_state,'horizon_steps':args.horizon_steps,
         'experiment':experiment,
         'representation_sha256':(digest(args.ae_checkpoint) if representation is not None else
-                                 digest(args.a_checkpoint) if config.bridge != 'raw' else None),
+                                 digest(args.a_checkpoint) if config.bridge != 'raw' and args.a_checkpoint and config.training_mode=='frozen' else None),
         'representation_metadata':({k:v for k,v in representation_payload.items() if k not in ('model','a_metadata')}
                                    if representation_payload else None),
         'lead_hours':leads.cpu().tolist(),'options':vars(args),'best_epoch':best_epoch,'best_selection_state_mse':best,
@@ -170,13 +268,24 @@ def train(args):
         'implementation':'official_climode_custom_data_adaptation' if args.model=='climode' else 'local_'+args.model,
         'constants_sha256':digest(args.constants) if args.model=='climode' else None,
         'training_contract':{**{key:getattr(args,key) for key in ('epochs','batch_size','learning_rate','tendency_weight','horizon_steps')},
+            'reconstruction_weight':args.reconstruction_weight if config.training_mode=='joint' else 0.,
             'train_starts_sha256':hashlib.sha256(json.dumps(loaders[0].dataset.starts).encode()).hexdigest(),
             'selection_starts_sha256':hashlib.sha256(json.dumps(loaders[1].dataset.starts).encode()).hexdigest()},
         'trainable_parameters':sum(x.numel() for x in parameters),'total_parameters':sum(x.numel() for x in model.parameters()),
         'conditioning':{'direct_origin_information':bool(config.condition_information and config.bridge=='raw' and args.model in ('mlp','neural_ode') and p['mode']=='enriched'),
                         'manifold_origin_information':bool(config.bridge!='raw' and p['mode']=='enriched'),
                         'climode_static_constants':args.model=='climode'},
-        'a_frozen':True,'resume':'optimizer/RNG resume not implemented'}
+        'a_frozen':config.training_mode=='frozen' and config.bridge!='raw',
+        'regularization':args.regularization if config.training_mode=='joint' else 'legacy',
+        'objective_weights':asdict(weights),
+        'initialization':'pretrained' if config.training_mode=='frozen' else args.initialization,
+        'representation_training':'jointly_trained' if config.training_mode=='joint' and config.bridge!='raw' else 'frozen' if config.bridge!='raw' else 'none',
+        'latent_coordinates':'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal',
+        'objective_semantics':{'forecast':'field MSE or Gaussian NLL plus physical-time tendency',
+            'distribution':'optional deterministic spatial quantiles of dynamic information fields; not ensemble CRPS',
+            'physics':'future-field diagnostic matching, not exact conservation',
+            'pinn':'same forecast trajectory; no independent A drift or auxiliary sampler'},
+        'resume':'optimizer/RNG resume not implemented'}
     output.parent.mkdir(parents=True,exist_ok=True)
     torch.save(payload,output)
     write_json(output.with_suffix('.manifest.json'),{'checkpoint_sha256':digest(output),'format':FORMAT})
@@ -187,7 +296,21 @@ def train(args):
 
 def parser():
     p=argparse.ArgumentParser(description=__doc__)
-    for key in ('a-checkpoint','archive','output'):p.add_argument('--'+key,required=True)
+    for key in ('archive','output'):p.add_argument('--'+key,required=True)
+    p.add_argument('--a-checkpoint',help='Optional A data contract; use --initialization pretrained to reuse its weights')
+    p.add_argument('--training-mode',choices=['joint','frozen'],default='joint')
+    p.add_argument('--initialization',choices=['fresh','pretrained'],default='fresh')
+    p.add_argument('--mode',choices=['surface','enriched'],help='Default: enriched when --information is supplied')
+    p.add_argument('--regularization',choices=['full','none'],default='full',
+        help='none keeps common forecast/tendency/reconstruction losses for matched joint controls')
+    for name,value in dict(manifold_dim=64,manifold_hidden_dim=512,context_dim=64,history_steps=6,history_stride=4).items():
+        p.add_argument('--'+name.replace('_','-'),type=int,default=value)
+    for name,value in dict(reconstruction_weight=.1,information_weight=.1,static_weight=.05,
+                           distribution_weight=0.,physics_weight=.01).items():
+        p.add_argument('--'+name.replace('_','-'),type=float,default=value)
+    p.add_argument('--pinn',action='store_true',help='Initialize Hybrid PINN for joint training with co-located pressure fields')
+    p.add_argument('--pinn-levels',nargs='+',type=int,default=[500,850])
+    p.add_argument('--pinn-weight',type=float,default=None,help='Default: enabled PINN config weight, otherwise zero')
     p.add_argument('--information');p.add_argument('--constants')
     p.add_argument('--model',choices=['mlp','neural_ode','climode','persistence'],default='neural_ode')
     p.add_argument('--experiment',choices=['primary','auxiliary'],default='primary')
@@ -201,7 +324,7 @@ def parser():
     p.add_argument('--learning-rate',type=float,default=1e-3)
     p.add_argument('--tendency-weight',type=float,default=.1)
     p.add_argument('--climode-step-hours',type=float,default=1.)
-    p.add_argument('--no-information-conditioning',action='store_true',help='Remove direct origin information from raw NN baselines; manifold modes always pass information through A only')
+    p.add_argument('--no-information-conditioning',action='store_true',help='Remove direct origin information from raw NN baselines; manifold modes pass information through the encoder')
     p.add_argument('--no-climode-attention',action='store_true')
     p.add_argument('--device',default='cpu')
     return p

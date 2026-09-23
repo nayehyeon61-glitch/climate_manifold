@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Raw ClimODE reference + matched raw/manifold/plain-AE forecast experiments.
+# Raw ClimODE reference + joint E-F-D regularization comparison.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 : "${RUN:?Set a new benchmark directory}"
-: "${A_CHECKPOINT:?Set the trained Climate Manifold checkpoint}"
 : "${ARCHIVE:?Set the original canonical surface archive}"
 : "${CONSTANTS:?Set aligned real orography and land-sea mask NPZ}"
 [[ ! -e "$RUN" ]] || { echo 'Choose a new RUN' >&2; exit 2; }

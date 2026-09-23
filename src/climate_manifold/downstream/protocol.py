@@ -5,6 +5,7 @@ def experiment_contract(config):
     cfg = vars(config) if not isinstance(config, dict) else config
     bridge = cfg['bridge']
     representation = 'raw' if bridge == 'raw' else cfg.get('representation', 'climate_manifold')
+    training_mode = cfg.get('training_mode', 'frozen')
     primary = (cfg['model'] in ('mlp', 'neural_ode', 'persistence')
                and bridge in ('raw', 'latent') and cfg['anchor'] == 'none')
     return {
@@ -14,7 +15,8 @@ def experiment_contract(config):
         'path': ('encoder -> predictor -> decoder' if bridge == 'latent' else
                  'encoder -> decoder -> grid predictor' if bridge == 'decoded' else
                  'observations -> field predictor'),
-        'representation_frozen': bridge != 'raw',
+        'training_mode': training_mode,
+        'representation_frozen': bridge != 'raw' and training_mode == 'frozen',
         'origin_residual_bypass': cfg['anchor'] != 'none',
     }
 

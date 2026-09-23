@@ -19,6 +19,8 @@ class PredictorConfig:
     climode_step_hours: float = 1.
     velocity_iterations: int = 20
     representation: str = 'climate_manifold'
+    # Missing fields in historical checkpoints retain their frozen semantics.
+    training_mode: str = 'frozen'
 
     def __post_init__(self):
         if self.model not in ('mlp','neural_ode','climode','persistence'):
@@ -27,6 +29,10 @@ class PredictorConfig:
             raise ValueError('Invalid bridge/anchor')
         if self.representation not in ('climate_manifold', 'plain_ae'):
             raise ValueError('Unknown representation')
+        if self.training_mode not in ('joint', 'frozen'):
+            raise ValueError('Training mode must be joint or frozen')
+        if self.training_mode == 'joint' and (self.model == 'persistence' or self.anchor != 'none'):
+            raise ValueError('Joint training requires a trainable predictor and anchor=none')
         if self.representation == 'plain_ae' and (self.bridge != 'latent' or self.model not in ('mlp', 'neural_ode')):
             raise ValueError('Plain AE control requires a latent MLP or Neural ODE')
         if self.model in ('climode','persistence') and self.bridge == 'latent':
@@ -49,7 +55,7 @@ class ForecastPipeline(nn.Module):
         elif representation is not None:
             raise ValueError('Unexpected alternative representation')
         selected = representation if config.representation == 'plain_ae' else manifold
-        self.bridge = ManifoldBridge(selected, config.bridge, config.anchor)
+        self.bridge = ManifoldBridge(selected, config.bridge, config.anchor, config.training_mode)
         dimension = self.bridge.dimension
         info_dim = math.prod(manifold.info_metadata['shape']) if manifold.info_metadata else 0
         if config.model in ('mlp','neural_ode'):
@@ -75,8 +81,10 @@ class ForecastPipeline(nn.Module):
         if self.predictor is None:
             predicted = features[:,-1,None].expand(-1,len(lead_hours),-1);std=None
         else:
-            # Latent models can only receive dynamic information through the
-            # frozen encoder, never a parallel raw-information input.
+            # Latent models receive information through their encoder, never a
+            # parallel raw-information input. Decoded ClimODE remains a physical
+            # grid model: gradients reach its initial field through E/D, while
+            # its separate observed-history velocity fit deliberately detaches.
             direct_information = information if self.config.bridge == 'raw' else None
             predicted,std = self.predictor(features,lead_hours,origin_ns,direct_information)
         mean = self.bridge.to_fields(predicted,history[:,-1],features[:,-1])
@@ -84,5 +92,6 @@ class ForecastPipeline(nn.Module):
             raise FloatingPointError('Nonfinite or invalid downstream prediction')
         reconstruction = self.bridge.decode(features[:,-1])
         return {'mean':mean,'std':std,'reconstructed_origin':reconstruction,
+                'history_latent':features if self.config.bridge == 'latent' else None,
                 'predicted_latent':predicted if self.config.bridge == 'latent' else None,
                 'origin_latent':features[:,-1] if self.config.bridge == 'latent' else None}

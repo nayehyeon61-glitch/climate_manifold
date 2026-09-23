@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Auxiliary experiment: reconstructed grid -> ClimODE, separate from latent prediction.
+# Auxiliary experiment: jointly train E-D-ClimODE on grids; raw reference is optional.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-: "${A_CHECKPOINT:?Set the trained Climate Manifold checkpoint}"
 : "${ARCHIVE:?Set the original canonical surface archive}"
 : "${CONSTANTS:?ClimODE needs aligned real orography and land-sea mask NPZ}"
 : "${RUN:?Set a new auxiliary comparison experiment directory}"
@@ -17,12 +16,31 @@ for mode in "${bridges[@]}"; do
   [[ "$mode" == raw || "$mode" == decoded ]] || { echo 'CLIMODE_BRIDGES: raw and/or decoded' >&2; exit 2; }
 done
 info=(); [[ -z "${INFO:-}" ]] || info=(--information "$INFO")
+training_mode="${TRAINING_MODE:-joint}"
+initialization="${INITIALIZATION:-fresh}"
+if [[ "$training_mode" == frozen ]]; then initialization=pretrained; fi
+if [[ "$initialization" == pretrained && -z "${A_CHECKPOINT:-}" ]]; then
+  echo 'Pretrained/frozen experiments require A_CHECKPOINT' >&2; exit 2
+fi
+setup=(--training-mode "$training_mode" --initialization "$initialization"
+  --manifold-dim "${MANIFOLD_DIM:-64}" --manifold-hidden-dim "${MANIFOLD_HIDDEN_DIM:-512}"
+  --context-dim "${CONTEXT_DIM:-64}" --history-steps "${HISTORY_STEPS:-6}" --history-stride "${HISTORY_STRIDE:-4}")
+[[ -z "${A_CHECKPOINT:-}" ]] || setup+=(--a-checkpoint "$A_CHECKPOINT")
+[[ -z "${MODE:-}" ]] || setup+=(--mode "$MODE")
+# Keep metadata/construction matched to a fresh primary PINN experiment. Joint decoded
+# ClimODE has no future latent path, so no future information/PINN loss is applied.
+if [[ "${PINN:-0}" == 1 ]]; then
+  read -r -a levels <<< "${PINN_LEVELS:-500 850}"
+  setup+=(--pinn --pinn-levels "${levels[@]}")
+fi
+[[ "${CLIMODE_ATTENTION:-1}" != 0 ]] || setup+=(--no-climode-attention)
 mkdir -p "$RUN"
 reports=()
 for seed in "${seeds[@]}"; do
   for mode in "${bridges[@]}"; do
     prefix="$RUN/climode-${mode}-seed${seed}"
-    "$PYTHON" -m climate_manifold.downstream.train --a-checkpoint "$A_CHECKPOINT" \
+    "$PYTHON" -m climate_manifold.downstream.train "${setup[@]}" \
+      --regularization none --reconstruction-weight "${RECONSTRUCTION_WEIGHT:-0.1}" \
       --archive "$ARCHIVE" "${info[@]}" --constants "$CONSTANTS" \
       --experiment auxiliary --model climode --bridge "$mode" --representation climate_manifold \
       --output "$prefix.pt" --epochs "${EPOCHS:-20}" --batch-size "${BATCH_SIZE:-2}" \

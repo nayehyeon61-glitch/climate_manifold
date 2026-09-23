@@ -1,6 +1,6 @@
 # Climate Manifold
 
-기후장 표현을 학습하는 **A-step 독립 저장소**입니다. `climate_diffusion`의
+기후장 표현과 예측기를 **함께 학습**하는 저장소입니다. 독립 A-step 학습도 보존합니다. `climate_diffusion`의
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
@@ -12,7 +12,7 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 | Hybrid PINN | 선택적으로 기압면 운동량·열역학·연속·층후 제약 및 learned closure |
 | A 보조 sampler | raw latent에서 flow matching, 상태·전이 분포 및 120시간 경로 손실 |
 | 데이터/평가 | ERA5 변환·shard 다운로드, train-only 정규화, 지연시간별 진단·CRPS·geometry audit |
-| 후단 주실험 | **Frozen encoder → latent MLP/Neural ODE → frozen decoder**; raw·재구성 전용 AE와 비교 |
+| 예측 주실험 | **Encoder → latent MLP/Neural ODE → decoder 공동 학습**; 같은 구조에서 물리·정보 제약 off/on 비교 |
 
 **512는 manifold 차원이 아니라 MLP 은닉층 폭입니다.** 잠재 상태는 격자별 64채널이
 아닌 전체 입력 기후장을 압축한 단일 64차원 벡터입니다. A 보조 sampler는 원래 A의
@@ -39,7 +39,7 @@ tangent/AE audit를 확인합니다.
 빠른 소형 확인에는 `--tiny`를 추가합니다. 출력 디렉터리는 매번 새 경로를 사용합니다.
 합성 필드는 소프트웨어 검증용이며 ERA5 예측력의 근거가 아닙니다.
 
-## 기존 데이터로 A만 학습
+## 독립 A 학습 — 선택적 실험
 
 기존 6시간 `surface.npz` + 같은 이름의 `.schema.json`, 그리고 정합된 정보
 `.npz` + sidecars 또는 compact-shard 디렉터리를 그대로 사용할 수 있습니다.
@@ -58,7 +58,7 @@ bash scripts/run_climate_manifold.sh validation
 bash scripts/run_climate_manifold.sh pure-drift-validation
 ```
 
-이 명령은 **A만** 학습합니다. 기본은 60 epochs, batch 2, members 4, tau steps 4,
+이 명령은 **A만** 학습합니다. 아래 공동 예측 학습의 필수 선행 단계가 아닙니다. 기본은 60 epochs, batch 2, members 4, tau steps 4,
 manifold 64, hidden 512, 6시간 × 20 전이입니다. PINN은 1 epoch closure warm-up 후
 3 epochs에 걸쳐 가중치를 올립니다. A의 6단계 curriculum 간격은 4 epochs이며,
 전체 활성화 후에만 최적 checkpoint를 선택합니다. `PINN=0`이면 PINN 없이 정보·동역학
@@ -164,35 +164,42 @@ x_reconstructed = model.core.manifold.decode(z)
 q = model.encode(x, information)      # sealed train mean/scale로 표준화된 좌표
 ```
 
-## Manifold 공간에서의 예측 실험
+## Manifold와 예측기 공동 학습
 
-학습된 A를 고정한 뒤 **encoder → latent 예측기 → decoder**로 미래 기상장을
-예측합니다. MLP·Neural ODE 각각 raw 입력, Climate Manifold, 같은 차원의 재구성
-전용 Plain AE를 비교합니다. Decoder 가중치는 고정하되 gradient는 예측기로 전달합니다.
+기본 실험은 **encoder → latent 예측기 → decoder 전체를 한 번에 학습**합니다.
+미래 기상장 손실이 세 구성요소 모두로 역전파됩니다. A 사전학습, frozen A,
+Plain AE 사전학습은 필요하지 않습니다. 현재 global latent 64 / hidden 512 구조를
+그대로 사용하며 이번 변경이 공간 격자·메시 encoder를 새로 구현한 것은 아닙니다.
 
 ```bash
-export A_CHECKPOINT=/absolute/path/to/manifold.pt
 export ARCHIVE=/absolute/path/to/surface.npz
 export INFO=/absolute/path/to/information_pinn_shards
-export RUN=runs/latent_comparison_001
-export DEVICE=cuda EPOCHS=20 AE_EPOCHS=20 SEEDS='7 19 43'
+export RUN=runs/joint_comparison_001
+export DEVICE=cuda EPOCHS=20 SEEDS='7 19 43'
+export PINN=1
 bash scripts/run_model_comparison.sh
 ```
 
-기본은 **2개 예측기 × 3개 표현 × 3개 seed**입니다. `MODELS=neural_ode`로 한 계열만
-실행할 수 있습니다. 주실험에는 ClimODE용 상수가 필요하지 않습니다.
-기상장 점수로 비교하고, latent 예측·변화량·미래 재구성 진단을 함께 저장합니다.
-서로 다른 latent 좌표계의 오차를 그대로 비교하여 표현의 우열을 판단하지 않습니다.
+PINN에 필요한 전체 필드가 없으면 `PINN=0`으로 실행합니다. Surface-only는 `INFO`를
+설정하지 않습니다. 기본 **2개 예측기 × 2개 손실 구성 × 3개 seed**를 처음부터 학습합니다.
+각 pair는 같은 encoder·예측기·decoder 초기화, 입력, 차원, 예측/변화량/재구성 손실을
+공유하며 추가 물리·정보 제약만 off/on합니다. `MODELS=neural_ode`로 범위를 줄일 수 있습니다.
+각 seed에서 표현도 다시 학습합니다. `A_CHECKPOINT`는 선택 사항이며, 가중치를
+재사용하려면 `INITIALIZATION=pretrained`를 명시합니다. 그 경우에도 joint에서는
+encoder·decoder가 고정되지 않습니다.
 
-ClimODE는 격자 미분이 필요하므로 복원된 격자를 입력으로 받는 **별도 보조 실험**입니다.
-`scripts/run_climode_comparison.sh`로 실행하며 주실험 결과와 구분합니다.
-[연결 계약·실행 명령·공통 평가 안내](docs/downstream.md)를 참고하세요.
+[공동 학습 구조·손실·단일 실행 명령](docs/joint_training.md)과
+[실험 계약·평가·기존 frozen 대조군](docs/downstream.md)을 참고하세요.
 
-**평가 기준은 ClimODE의 변수·lead별 RMSE/ACC, 확률 출력의 CRPS입니다.**
+ClimODE는 격자 미분이 필요하므로 **E → D → ClimODE** 공동 학습을 별도 보조 실험으로
+지원합니다. 이것은 latent 안에서 ClimODE가 동작하는 구조가 아닙니다.
+`scripts/run_climode_comparison.sh`는 raw ClimODE와 이 경로를 비교합니다.
+
+**평가 기준은 ClimODE 방식의 변수·lead별 RMSE/ACC, 확률 출력의 CRPS입니다.**
 `bash scripts/run_climode_benchmark.sh`는 같은 데이터의 Raw ClimODE 기준선과
-후단 비교를 연결하고 개선율 CSV를 만듭니다. `CONSTANTS`가 필요합니다.
-A 단독 drift도 같은 지표로 평가하며, 기존 checkpoint는 재학습 없이 재평가할 수 있습니다.
-[평가 정의·실행 명령·원논문과의 차이](docs/climode_evaluation.md)를 참고하세요.
+공동 예측 실험을 연결하고 개선율 CSV를 만듭니다. 정렬된 실제 지형·육해 마스크
+`CONSTANTS`가 필요합니다. [평가 정의와 원논문과의 차이](docs/climode_evaluation.md)를 참고하세요.
+기존 checkpoint를 재평가할 수 있지만, 재평가만으로 공동 학습된 모델이 되지는 않습니다.
 
 PINN은 희소 기압면의 근사 물리 제약이며 완전한 primitive-equation solver가
 아닙니다. 실제 장기 안정성·태풍 이동·앙상블 보정 성능은 별도 실험이 필요합니다.
