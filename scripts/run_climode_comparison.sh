@@ -10,12 +10,17 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 PYTHON="${PYTHON:-python}"
 export PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}"
 read -r -a seeds <<< "${SEEDS:-7 19 43}"
+read -r -a bridges <<< "${CLIMODE_BRIDGES:-raw decoded}"
 [[ ${#seeds[@]} -gt 0 ]] || { echo 'SEEDS must be nonempty' >&2; exit 2; }
+[[ ${#bridges[@]} -gt 0 ]] || { echo 'CLIMODE_BRIDGES must be nonempty' >&2; exit 2; }
+for mode in "${bridges[@]}"; do
+  [[ "$mode" == raw || "$mode" == decoded ]] || { echo 'CLIMODE_BRIDGES: raw and/or decoded' >&2; exit 2; }
+done
 info=(); [[ -z "${INFO:-}" ]] || info=(--information "$INFO")
 mkdir -p "$RUN"
 reports=()
 for seed in "${seeds[@]}"; do
-  for mode in raw decoded; do
+  for mode in "${bridges[@]}"; do
     prefix="$RUN/climode-${mode}-seed${seed}"
     "$PYTHON" -m climate_manifold.downstream.train --a-checkpoint "$A_CHECKPOINT" \
       --archive "$ARCHIVE" "${info[@]}" --constants "$CONSTANTS" \

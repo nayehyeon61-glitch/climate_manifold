@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from ..archive import field_grid
 from ..temporal_supervision import area_weights
+from .climode_metrics import ClimODEMetrics
 
 
 def gaussian_crps(mean, std, truth):
@@ -83,6 +84,7 @@ class ForecastMetrics:
         self.count = 0
         self.probabilistic = None
         self.sums = {}
+        self.climode = ClimODEMetrics(schema, self.mean, lead_hours)
 
     def update(self, predicted, truth, origin, std=None, reconstructed_origin=None):
         b, t, _ = predicted.shape
@@ -112,6 +114,7 @@ class ForecastMetrics:
             terms.update(gaussian_crps=gaussian_crps(raw_pred,sigma,raw_true),variance=sigma.square(),
                 gaussian_nll=.5*math.log(2*math.pi)+sigma.log()+.5*(error/sigma).square(),
                 coverage80=(error.abs() <= 1.2815515655446004*sigma).double())
+        self.climode.update(raw_pred, raw_true, terms.get('gaussian_crps'))
         for key, value in terms.items():
             total = (value*self.area).sum((-2,-1)).sum(0)
             self.sums[key] = self.sums.get(key,torch.zeros_like(total))+total
@@ -135,7 +138,7 @@ class ForecastMetrics:
         return float(num/den) if float(den)>1e-15 else None
 
     def result(self):
-        if not self.count:return {'case_count':0,'per_variable':{},'aggregate':None}
+        if not self.count:return {'case_count':0,'per_variable':{},'aggregate':None,'climode':self.climode.result()}
         s = {k:v/self.count for k,v in self.sums.items()}
         rows = {}
         for i,variable in enumerate(self.schema['variables']):
@@ -162,7 +165,7 @@ class ForecastMetrics:
                      'persistence_normalized_rmse':float(s['persistence_normalized_mse'].mean().sqrt())}
         if 'wind_speed_mse' in s:
             aggregate['wind_speed_rmse_mps'] = float(s['wind_speed_mse'].mean().sqrt())
-        return {'case_count':self.count,'aggregate':aggregate,'per_variable':rows,
+        return {'case_count':self.count,'aggregate':aggregate,'per_variable':rows,'climode':self.climode.result(),
                 'probabilistic_scores':'analytic pointwise Gaussian marginals' if self.probabilistic else 'not applicable; deterministic predictor',
                 'acc_reference':'fixed per-grid training temporal mean, not seasonal/day-of-year climatology',
                 'aggregation':'pool area-weighted squared errors over origins/leads before square root; overlapping origins are not independent'}

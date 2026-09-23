@@ -54,4 +54,11 @@ for seed in "${seeds[@]}"; do
     done
   done
 done
-"$PYTHON" -m climate_manifold.downstream.compare --reports "${reports[@]}" --output "$RUN/comparison.json"
+reference=()
+if [[ -n "${CLIMODE_REFERENCE_DIR:-}" ]]; then
+  reference=(--climode-reference-reports)
+  for seed in "${seeds[@]}"; do
+    reference+=("$CLIMODE_REFERENCE_DIR/climode-raw-seed${seed}.validation.json")
+  done
+fi
+"$PYTHON" -m climate_manifold.downstream.compare --reports "${reports[@]}" "${reference[@]}" --output "$RUN/comparison.json"

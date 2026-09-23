@@ -187,6 +187,13 @@ bash scripts/run_model_comparison.sh
 ClimODE는 격자 미분이 필요하므로 복원된 격자를 입력으로 받는 **별도 보조 실험**입니다.
 `scripts/run_climode_comparison.sh`로 실행하며 주실험 결과와 구분합니다.
 [연결 계약·실행 명령·공통 평가 안내](docs/downstream.md)를 참고하세요.
+
+**평가 기준은 ClimODE의 변수·lead별 RMSE/ACC, 확률 출력의 CRPS입니다.**
+`bash scripts/run_climode_benchmark.sh`는 같은 데이터의 Raw ClimODE 기준선과
+후단 비교를 연결하고 개선율 CSV를 만듭니다. `CONSTANTS`가 필요합니다.
+A 단독 drift도 같은 지표로 평가하며, 기존 checkpoint는 재학습 없이 재평가할 수 있습니다.
+[평가 정의·실행 명령·원논문과의 차이](docs/climode_evaluation.md)를 참고하세요.
+
 PINN은 희소 기압면의 근사 물리 제약이며 완전한 primitive-equation solver가
 아닙니다. 실제 장기 안정성·태풍 이동·앙상블 보정 성능은 별도 실험이 필요합니다.
 기존 Hydra checkpoint는 새 모델로 자동 재해석하지 않습니다.

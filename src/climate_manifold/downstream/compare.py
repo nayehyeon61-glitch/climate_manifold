@@ -6,11 +6,13 @@ from pathlib import Path
 import numpy as np
 from ..train import write_json
 from .protocol import experiment_contract,validate_experiment
+from .climode_benchmark import benchmark,write_table
 
 
-def compare(reports,output):
+def compare(reports,output,climode_reference_reports=None):
     output=Path(output)
-    if output.exists() or output.with_suffix('.csv').exists():raise FileExistsError('Choose a new comparison path')
+    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv')) or output.exists():
+        raise FileExistsError('Choose a new comparison path')
     data=[json.loads(Path(path).read_text()) for path in reports]
     if not data:raise ValueError('At least one evaluation report is required')
     contracts=[validate_experiment(row['config'],row.get('experiment',experiment_contract(row['config']))['suite']) for row in data]
@@ -85,7 +87,15 @@ def compare(reports,output):
                  'Latent coordinate errors are within-representation diagnostics, never cross-encoder rankings.',
                  'The AE control changes the representation training objective and budget; it does not isolate PINN alone.',
                  'Enriched A supplies extra dynamic information to decoded ClimODE; use surface A to isolate representation alone.']}
+    references = ([json.loads(Path(path).read_text()) for path in climode_reference_reports]
+                  if climode_reference_reports is not None else None)
+    if references is not None or all('climode' in r['scores'] for r in data):
+        result['climode_benchmark'] = benchmark(data, references)
+    else:
+        result['climode_benchmark'] = {'available':False,'reason':'Re-evaluate checkpoints for ClimODE-style metrics'}
     write_json(output,result)
+    write_table(output.with_suffix('.climode.csv'),result['climode_benchmark'].get('rows',[]))
+    write_table(output.with_suffix('.climode-effects.csv'),result['climode_benchmark'].get('effects',[]))
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
         for row in rows:writer.writerow({**row,'conditioning':json.dumps(row['conditioning'],sort_keys=True)})
@@ -94,6 +104,7 @@ def compare(reports,output):
 
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--reports',nargs='+',required=True);p.add_argument('--output',required=True)
+    p.add_argument('--climode-reference-reports',nargs='+',help='Raw ClimODE reports matched by forecast seed; separate field benchmark')
     r=compare(**vars(p.parse_args(argv)));print(json.dumps(r['seed_summary'],indent=2));return 0
 
 if __name__=='__main__':raise SystemExit(main())

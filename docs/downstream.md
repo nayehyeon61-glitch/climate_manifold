@@ -146,6 +146,11 @@ checkpoint를 저장합니다. 후단 checkpoint에는 고정된 표현의 가�
 
 **모델 간 우열은 같은 물리 단위의 기상장 점수로 비교**합니다.
 
+주요 평가 기준은 이제 **ClimODE 방식의 변수·lead별 RMSE/ACC와 확률 출력의 CRPS**입니다.
+`scores.climode`에 사례별 점수 평균·표준편차를 저장하고 Raw ClimODE 대비 개선율을
+추가합니다. [정확한 집계·공식 코드와의 차이·실행 방법](climode_evaluation.md)을 참고하세요.
+아래 기존 pooled 점수와 dynamics 진단도 보존합니다.
+
 | 질문 | 지표·판독 |
 |---|---|
 | 기상장을 더 잘 예측하는가? | 변수별·6h lead별 면적 가중 RMSE/MAE/bias, 전체 pooled RMSE |
@@ -182,7 +187,8 @@ A와 Plain AE는 **서로 다른 좌표계**를 학습하므로 latent RMSE 값�
 Climate Manifold의 RMSE 감소량을 집계합니다. 양수면 Climate Manifold가 더 정확합니다.
 
 시간 변화량의 첫 전이는 관측 origin에서 첫 예측으로 계산하므로 재구성 오차도
-포함합니다. RMSE는 사례별 RMSE 평균이 아니라 제곱 오차를 모은 뒤 제곱근을 취합니다.
+포함합니다. 기존 `scores.per_variable` RMSE는 제곱 오차를 모은 뒤 제곱근을 취하며,
+새 `scores.climode` RMSE는 공식 평가 코드처럼 사례별 RMSE를 평균합니다.
 현재 MLP/Neural ODE는 결정론적이며 Hydra의 ensemble 경로 보정 성능을 평가하지 않습니다.
 
 ## 보조 실험: ClimODE
