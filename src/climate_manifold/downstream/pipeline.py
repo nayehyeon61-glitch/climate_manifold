@@ -24,6 +24,9 @@ class PredictorConfig:
     latent_layout: str = 'global'
     latent_max_speed: float = 2.
     latent_max_acceleration: float = 1.
+    # Historical raw checkpoints used global MLPs or the original ClimODE
+    # backend. Keep that layout unless a new matched spatial control is chosen.
+    raw_backend: str = 'legacy'
 
     def __post_init__(self):
         if self.model not in ('mlp','neural_ode','climode','persistence'):
@@ -36,6 +39,12 @@ class PredictorConfig:
             raise ValueError('Training mode must be joint or frozen')
         if self.latent_layout not in ('global', 'spatial'):
             raise ValueError('Latent layout must be global or spatial')
+        if self.raw_backend not in ('legacy', 'matched'):
+            raise ValueError('Raw backend must be legacy or matched')
+        if self.raw_backend == 'matched' and self.bridge == 'raw':
+            if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
+                    or self.model not in ('mlp', 'neural_ode', 'climode')):
+                raise ValueError('Matched raw controls require joint spatial MLP, Neural ODE or ClimODE')
         if self.training_mode == 'joint' and (self.model == 'persistence' or self.anchor != 'none'):
             raise ValueError('Joint training requires a trainable predictor and anchor=none')
         if self.representation == 'plain_ae' and (self.bridge != 'latent' or self.model not in ('mlp', 'neural_ode')):
@@ -75,8 +84,25 @@ class ForecastPipeline(nn.Module):
         self.bridge = ManifoldBridge(selected, config.bridge, config.anchor, config.training_mode)
         dimension = self.bridge.dimension
         info_dim = math.prod(manifold.info_metadata['shape']) if manifold.info_metadata else 0
+        matched_raw = config.bridge == 'raw' and config.raw_backend == 'matched'
+        information_channels = 0
+        if matched_raw:
+            if schema is None:
+                raise ValueError('Matched raw spatial controls require the archive schema')
+            from .latent_climode import _pooled_coordinates
+            _, _, periodic_lon = _pooled_coordinates(manifold.config.grid, schema, 1)
+            if config.condition_information and manifold.info_metadata:
+                shape = tuple(manifold.info_metadata['shape'])
+                if len(shape) != 3 or shape[1:] != tuple(manifold.config.grid[1:]):
+                    raise ValueError('Raw origin information must share the source spatial grid')
+                information_channels = shape[0]
         if config.model in ('mlp','neural_ode'):
-            if config.bridge == 'latent' and config.latent_layout == 'spatial':
+            if matched_raw:
+                from .spatial_baselines import SpatialHistoryPredictor
+                self.predictor = SpatialHistoryPredictor(manifold.config.grid,
+                    manifold.config.history_steps, config.hidden_dim, config.model, config.ode_substeps,
+                    periodic_lon=periodic_lon, information_channels=information_channels)
+            elif config.bridge == 'latent' and config.latent_layout == 'spatial':
                 from .spatial_baselines import SpatialHistoryPredictor
                 self.predictor = SpatialHistoryPredictor(selected.config.latent_grid,
                     selected.config.history_steps, config.hidden_dim, config.model, config.ode_substeps,
@@ -86,13 +112,19 @@ class ForecastPipeline(nn.Module):
                     info_dim if config.condition_information and config.bridge=='raw' else 0, config.model, config.ode_substeps)
         elif config.model == 'climode':
             if schema is None:raise ValueError('ClimODE construction requires the archive schema')
-            if config.bridge == 'latent':
+            if config.bridge == 'latent' or matched_raw:
                 from .latent_climode import LatentClimODEPredictor
-                self.predictor = LatentClimODEPredictor(selected.config.latent_grid, schema,
+                # Same transport core as E--ClimODE--D, now acting directly on
+                # normalized physical fields. Cell/day speeds are scaled with
+                # grid resolution; this is still an adapted transport model,
+                # not the original ClimODE backend or its uncertainty head.
+                factor = 1 if matched_raw else selected.config.spatial_downsample
+                speed = config.latent_max_speed * (selected.config.spatial_downsample if matched_raw else 1)
+                self.predictor = LatentClimODEPredictor(selected.config.grid if matched_raw else selected.config.latent_grid, schema,
                     hidden=config.hidden_dim, step_hours=config.climode_step_hours,
                     history_dt_hours=selected.config.history_stride*selected.config.step_hours,
-                    spatial_factor=selected.config.spatial_downsample,
-                    max_speed=config.latent_max_speed,max_acceleration=config.latent_max_acceleration)
+                    spatial_factor=factor, information_channels=information_channels,
+                    max_speed=speed,max_acceleration=config.latent_max_acceleration)
             else:
                 from .climode import ClimODEPredictor, validate_constants
                 if constants is None:raise ValueError('ClimODE requires real aligned orography and land-sea mask (--constants)')
@@ -117,6 +149,8 @@ class ForecastPipeline(nn.Module):
             # grid model: gradients reach its initial field through E/D, while
             # its separate observed-history velocity fit deliberately detaches.
             direct_information = information if self.config.bridge == 'raw' else None
+            if self.config.raw_backend == 'matched' and not self.config.condition_information:
+                direct_information = None
             predicted,std = self.predictor(features,lead_hours,origin_ns,direct_information)
         if self.config.bridge == 'latent' and std is not None:
             raise ValueError('Latent variance cannot be treated as physical-field Gaussian variance through a nonlinear decoder')

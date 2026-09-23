@@ -1,10 +1,14 @@
-"""ClimODE-style coupled transport dynamics on an actual spatial latent grid.
+"""ClimODE-style coupled transport dynamics on an explicit spatial grid.
 
 The equation follows ``Climate_encoder_free_uncertain.pde`` in the MIT-licensed
 Aalto-QuML/ClimODE (commit e729d23e8799ce0e075699e76d60227d848d8d0c):
 ``dz/dt = vx*Dx(z) + vy*Dy(z) + z*(Dx(vx) + Dy(vy))``.  We retain its positive
 divergence convention and variable-specific learned velocity dynamics.  This is
 an adaptation, not the original physical-grid model or its uncertainty head.
+The matched raw control uses this same core on normalized observed fields,
+with factor=1 and optional observed origin-information context. It has no
+manifold encoder or decoder. Conservation in its normalized cell coordinates
+does not establish conservation of physical atmospheric quantities either.
 
 Time is in days, derivatives use latent grid-cell coordinates, and velocities
 are latent transport coefficients in cells/day, not observed atmospheric winds.
@@ -32,6 +36,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .baselines import calendar_features
+from .spatial_baselines import origin_information
 
 
 def spatial_derivative(value, axis, periodic=False):
@@ -120,20 +125,26 @@ def _pooled_coordinates(latent_grid, schema, spatial_factor):
 
 
 class LatentClimODEPredictor(nn.Module):
-    """Jointly trainable latent transport ODE; flattened API, explicit grid.
+    """Trainable spatial transport ODE; flattened API, explicit grid.
 
     ``spatial_factor`` must be the encoder pooling factor. Merely reshaping an
     arbitrary global vector cannot satisfy this representation contract.
+    Matched raw controls use the original grid and spatial_factor=1. Only raw
+    controls should enable information_channels; latent forecasts condition
+    through the external manifold encoder.
     """
     def __init__(self, latent_grid, schema, *, hidden=128, step_hours=1.,
                  history_dt_hours=24., spatial_factor=None, max_speed=2.,
-                 max_acceleration=1.):
+                 max_acceleration=1., information_channels=0):
         super().__init__()
         if (len(latent_grid) != 3 or any(not isinstance(n, int) or isinstance(n, bool) or n < 1
                                        for n in latent_grid) or min(latent_grid[1:]) < 2):
             raise ValueError('Latent ClimODE requires an explicit [C,H,W] grid with H,W>=2')
         if not isinstance(hidden, int) or hidden < 1:
             raise ValueError('Latent ClimODE hidden width must be positive')
+        if (not isinstance(information_channels, int) or isinstance(information_channels, bool)
+                or information_channels < 0):
+            raise ValueError('Information channels must be a nonnegative integer')
         if any(not math.isfinite(value) or value <= 0
                for value in (step_hours, history_dt_hours, max_speed, max_acceleration)):
             raise ValueError('Integration intervals and latent velocity bounds must be finite and positive')
@@ -141,6 +152,8 @@ class LatentClimODEPredictor(nn.Module):
             raise ValueError('Latent ClimODE step_hours must not exceed 6')
         self.grid = tuple(latent_grid)
         self.dimension = math.prod(self.grid)
+        self.information_channels = information_channels
+        self.information_dim = information_channels * math.prod(self.grid[1:])
         self.step_hours = float(step_hours)
         self.history_dt_hours = float(history_dt_hours)
         self.spatial_factor = spatial_factor
@@ -154,7 +167,7 @@ class LatentClimODEPredictor(nn.Module):
         c = self.grid[0]
         # Mean and recency-weighted mean include every observed state. Backward
         # tendency and final state retain chronological/current-state context.
-        self.history_encoder = _spatial_net(4*c+10, hidden, hidden, self.periodic_lon)
+        self.history_encoder = _spatial_net(4*c+10+information_channels, hidden, hidden, self.periodic_lon)
         self.initial_velocity = nn.Conv2d(hidden, 2*c, 1)
         # z, grad_x z, grad_y z, vx, vy, fixed history context, position, clock.
         self.velocity_dynamics = _spatial_net(5*c+hidden+11, hidden, 2*c, self.periodic_lon)
@@ -164,13 +177,16 @@ class LatentClimODEPredictor(nn.Module):
         elapsed = origin_ns.to(torch.float64) + float(elapsed_days)*24*3.6e12
         return calendar_features(elapsed, like)[..., None, None].expand(-1, -1, *self.grid[1:])
 
-    def _initial(self, history, origin_ns):
+    def _initial(self, history, origin_ns, information=None):
         weights = torch.arange(1, history.shape[1]+1, device=history.device, dtype=history.dtype)
         weighted = (history*weights[None, :, None, None, None]).sum(1)/weights.sum()
         tendency = (history[:, -1]-history[:, -2])/(self.history_dt_hours/24)
         pos = self.position.to(history).expand(len(history), -1, -1, -1)
-        features = torch.cat((history[:, -1], history.mean(1), weighted, tendency,
-                              pos, self._calendar(origin_ns, history)), 1)
+        features = [history[:, -1], history.mean(1), weighted, tendency,
+                    pos, self._calendar(origin_ns, history)]
+        if information is not None:
+            features.append(information)
+        features = torch.cat(features, 1)
         context = self.history_encoder(features)
         raw_velocity = self.initial_velocity(context)
         return torch.cat((history[:, -1], raw_velocity), 1), context
@@ -197,7 +213,8 @@ class LatentClimODEPredictor(nn.Module):
                 or lead_hours[0] <= 0 or not (lead_hours[1:] > lead_hours[:-1]).all()):
             raise ValueError('Lead hours must be finite, positive and strictly increasing')
         fields = history.reshape(len(history), history.shape[1], *self.grid)
-        state, context = self._initial(fields, origin_ns)
+        information = origin_information(information, history, self.information_channels, self.grid[1:])
+        state, context = self._initial(fields, origin_ns, information)
         # Bound the sum of directional cell Courant numbers by 0.5. This is a
         # numerical safeguard, not a theorem of long-horizon learned stability.
         max_dt_hours = min(self.step_hours, 24*.5/(2*self.max_speed))

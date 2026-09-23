@@ -1,6 +1,7 @@
 # Manifold와 예측기의 공동 학습
 
-실험의 단위는 **encoder E + 실제 사용할 예측기 F + decoder D**입니다.
+Manifold 실험의 단위는 **encoder E + 실제 사용할 예측기 F + decoder D**입니다.
+직접 예측 대조군은 **data → F → future fields**이며 encoder/decoder 없이 F만 학습합니다.
 A를 먼저 학습하고 고정해야 한다는 조건을 제거했습니다. 기본 `--training-mode joint
 --initialization fresh`에서는 세 구성요소를 새로 초기화하고 같은 미래 예측 목표로 함께 학습합니다.
 
@@ -83,8 +84,26 @@ Surface physics는 train 자료로 정한 scale을 사용합니다. 이는 실�
 
 `--regularization none`은 추가 surface physics·information·static·distribution·PINN을
 끄고 **동일한 future/tendency/reconstruction 목표를 유지**합니다. `full`은 설정된
-가중치를 사용합니다. 따라서 공정한 최소 실험은 같은 E–F–D에서 `none` vs `full`입니다.
+가중치를 사용합니다. Raw 직접 예측은 `--bridge raw --regularization none`으로 실행하고
+forecast/tendency만 학습합니다. Raw에는 재구성 또는 정보/물리/PINN 보조 손실이 없습니다.
+따라서 실험은 각 predictor에서 **Raw / E–F–D none / E–F–D full**의 세 비교군입니다.
 새로운 predictor마다 표현도 그 predictor와 공동 학습합니다.
+
+| 비교군 | 경로 | 비교 목적 |
+|---|---|---|
+| Raw matched | `data → spatial F → future fields` | E/D 없이 직접 예측하는 기준선 |
+| Forecast only | `data → E → spatial F → D` | 학습된 공간 표현을 사용한 예측 |
+| Climate Manifold | 위와 동일한 E/F/D + 물리·정보 제약 | 추가 제약의 효과 |
+
+`--raw-backend matched`는 latent 실험과 같은 공간 vector-field/transport core를 원본 격자에
+직접 적용합니다. Raw에도 같은 origin 상층/지형 정보를 context로 제공하며 미래 자료는 입력하지
+않습니다. 채널 수·격자 크기와 E/D 유무가 다르므로 parameter 수는 같지 않습니다.
+ClimODE Raw matched는 결정론적 adaptation이며 원본 vendor ClimODE의 Gaussian head를
+포함하지 않습니다. `--constants`가 필요 없고, 원본 계열은 별도 legacy auxiliary 경로로 유지합니다.
+Raw transport는 정규화된 각 기상 채널의 격자 합을 보존합니다. Latent transport에서는
+잠재 채널 합이 보존되지만 decoder 출력의 기상 채널 합은 달라질 수 있습니다. 따라서 같은
+수송 core를 사용해도 물리 출력에 걸리는 제약까지 같지는 않으며, 이 비교만으로 원본
+ClimODE보다 우수하다고 결론 내릴 수 없습니다.
 
 ## A 사전학습 없이 단일 모델 실행
 
@@ -112,6 +131,24 @@ python -m climate_manifold.downstream.evaluate \
 동일한 공간 표현의 ClimODE 실험은 위 명령에서 `--model climode`와 별도 output 경로를
 사용합니다. 예측 경로는 **E → latent ClimODE → D**이고 `--climode-step-hours`의 기본값은
 1시간입니다. CLI의 이름은 `climode`지만 이 경로는 원본을 그대로 실행하는 것이 아닌 latent adaptation입니다.
+
+직접 예측 대조군 하나만 실행하려면 다음처럼 E/D를 우회합니다. 기본 runner는 이 대조군을
+두 predictor 모두에 포함합니다.
+
+```bash
+python -m climate_manifold.downstream.train \
+  --archive /absolute/path/to/surface.npz \
+  --information /absolute/path/to/information_pinn_shards \
+  --training-mode joint --initialization fresh --regularization none \
+  --model neural_ode --bridge raw --raw-backend matched \
+  --latent-layout spatial --spatial-downsample 2 --hidden-dim 128 \
+  --history-steps 6 --history-stride 4 --horizon-steps 20 --anchor none \
+  --output runs/raw_neural_ode.pt --epochs 20 --batch-size 2 --device cuda
+```
+
+`--model climode`와 별도 output을 지정하면 E/D 없는 matched ClimODE를 학습합니다.
+같은 seed로 비교할 때에는 [전체 비교 runner](downstream.md)의 공통 설정을 쓰면 됩니다.
+Raw에 지정된 reconstruction/PINN 설정은 실제 보조 손실로 사용되지 않습니다.
 
 PINN가 필요 없으면 `--pinn --pinn-levels 500 850`를 빼고, surface-only 실험이면
 `--information`도 뺍니다. Mode는 information 제공 여부로 결정하며 `--mode surface|enriched`로
@@ -150,4 +187,7 @@ spatial이고, pretrained/frozen 실행은 checkpoint의 표현 종류를 이어
 재현할 수 있습니다. 새 joint 학습의 대조 실험이며 기본 주실험은 아닙니다.
 ClimODE 주실험은 **공간 E → latent ClimODE → D**입니다. 과거의 `E → D → ClimODE`
 연결은 `--experiment auxiliary --bridge decoded`로 남겨둔 입력 복원 보조 실험이며,
-latent forecasting 결과와 구분합니다. Raw/decoded ClimODE에는 실제 constants가 필요합니다.
+latent forecasting 결과와 구분합니다. **Legacy raw/decoded** ClimODE에는 실제 constants가 필요합니다.
+CLI에서 `--raw-backend`를 생략하면 joint spatial은 matched, global/frozen은 legacy로 선택됩니다.
+원본 Gaussian ClimODE를 직접 실행하려면 `--raw-backend legacy --experiment auxiliary`와
+`--constants`를 명시하세요. 기존 checkpoint의 legacy backend는 재평가 시 유지됩니다.

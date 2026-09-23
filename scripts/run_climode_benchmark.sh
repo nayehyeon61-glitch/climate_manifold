@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Raw grid ClimODE reference + spatial E-F-D (Neural ODE / latent ClimODE) comparison.
+# External legacy grid ClimODE reference + primary raw/E-F-D matched comparisons.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 : "${RUN:?Set a new benchmark directory}"

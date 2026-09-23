@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Joint experiment: match E-F-D capacity and change only representation regularization.
+# Joint comparison: direct model, E-F-D without extra constraints, E-F-D with constraints.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 if [[ "${TRAINING_MODE:-joint}" == frozen ]]; then
@@ -39,24 +39,22 @@ elif [[ "$initialization" == fresh ]]; then
 fi
 [[ -z "${A_CHECKPOINT:-}" ]] || setup+=(--a-checkpoint "$A_CHECKPOINT")
 [[ -z "${MODE:-}" ]] || setup+=(--mode "$MODE")
+# Auto defaults to the matching spatial predictor for fresh joint spatial runs.
+[[ -z "${RAW_BACKEND:-}" ]] || setup+=(--raw-backend "$RAW_BACKEND")
 if [[ "${PINN:-0}" == 1 ]]; then
   read -r -a levels <<< "${PINN_LEVELS:-500 850}"
   setup+=(--pinn --pinn-levels "${levels[@]}")
 fi
 [[ -z "${PINN_WEIGHT:-}" ]] || setup+=(--pinn-weight "$PINN_WEIGHT")
-variants=(forecast_only climate_manifold)
-[[ "${INCLUDE_RAW:-0}" != 1 ]] || variants+=(raw)
-if [[ "${INCLUDE_RAW:-0}" == 1 && " ${families[*]} " == *" climode "* ]]; then
-  echo 'Raw ClimODE is skipped here; run run_climode_benchmark.sh with CONSTANTS for that reference.' >&2
-fi
+[[ "${INCLUDE_RAW:-1}" == 0 || "${INCLUDE_RAW:-1}" == 1 ]] || { echo 'INCLUDE_RAW must be 0 or 1' >&2; exit 2; }
+variants=()
+[[ "${INCLUDE_RAW:-1}" != 1 ]] || variants+=(raw)
+variants+=(forecast_only climate_manifold)
 mkdir -p "$RUN"
 reports=()
 for seed in "${seeds[@]}"; do
   for family in "${families[@]}"; do
     for variant in "${variants[@]}"; do
-      # Raw ClimODE has a different grid/data contract and belongs to the external
-      # reference runner, not to this same-representation loss ablation.
-      if [[ "$family" == climode && "$variant" == raw ]]; then continue; fi
       bridge=latent; regularization=full
       [[ "$variant" != forecast_only ]] || regularization=none
       if [[ "$variant" == raw ]]; then bridge=raw; regularization=none; fi

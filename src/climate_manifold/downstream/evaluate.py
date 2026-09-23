@@ -88,6 +88,8 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                 else p.get('representation_sha256',p['a_sha256'] if model.config.bridge!='raw' else None)),
             'representation_config':a['config'],
             'latent_shape':p.get('latent_shape'),
+            'forecast_state_grid':p.get('forecast_state_grid'),
+            'transport_contract':p.get('transport_contract'),
             'regularization':p.get('regularization','legacy'),
             'objective_weights':p.get('objective_weights',{}),
             'initialization':p.get('initialization','pretrained'),

@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import time
+from types import SimpleNamespace
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
@@ -20,6 +21,21 @@ from .protocol import validate_experiment
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
+
+
+class RawFieldContract:
+    """Input metadata for direct forecasting, with no learned representation.
+
+    The bridge only needs geometry, dimensions and input declarations. Keeping
+    this separate avoids constructing or loading unused encoder/decoder weights.
+    """
+    def __init__(self, config, schema, mean, scale, information_metadata, sealed=False):
+        from ..manifold_physics import SurfacePhysics
+        self.config=config
+        self.info_metadata=information_metadata
+        self.info_head=self.pinn=None
+        self.core=SimpleNamespace(manifold_ready=torch.tensor(sealed),
+            physics=SurfacePhysics(schema,mean,scale))
 
 
 class CausalWindows(TemporalWindowDataset):
@@ -46,8 +62,11 @@ def windows(data,config,split,stride=1,max_windows=0,*,information_targets=False
         information=data['information'],information_targets=information_targets)
 
 
-def new_a(metadata, sealed=True):
+def new_a(metadata, sealed=True, raw=False):
     config=ManifoldConfig(**metadata['config'])
+    if raw:
+        return RawFieldContract(config,metadata['schema'],metadata['mean'],metadata['scale'],
+                                metadata['information_metadata'],sealed)
     if config.representation_kind=='spatial':
         from ..spatial import SpatialClimateManifold
         constructor=SpatialClimateManifold
@@ -76,7 +95,7 @@ def load_predictor(path,device='cpu'):
         from .plain_ae import new_plain_ae
         representation=new_plain_ae(p['a_metadata'])
         representation.core.manifold_ready.fill_(True)
-    model=ForecastPipeline(new_a(p['a_metadata'],bool(p.get('a_was_sealed'))),config,
+    model=ForecastPipeline(new_a(p['a_metadata'],bool(p.get('a_was_sealed')),raw=config.bridge=='raw'),config,
         p['constants'],p['a_metadata']['schema'],representation)
     model.load_state_dict(p['model'],strict=True)
     return model.to(device).eval(),p
@@ -140,6 +159,9 @@ def initialize_manifold(args):
         if args.pinn and reference.pinn is None:
             raise ValueError('This pretrained A has no PINN; use fresh initialization with --pinn')
         model, metadata = reference, {k:v for k,v in parent.items() if k != 'model'}
+        if args.bridge=='raw':
+            model=RawFieldContract(config,data['schema'],data['mean'],data['scale'],
+                                   data['information_metadata'],sealed=True)
     else:
         pc = parent.get('pinn_config') if parent else None
         if args.pinn:
@@ -148,16 +170,19 @@ def initialize_manifold(args):
                 weight=.1 if args.pinn_weight in (None,0.) else args.pinn_weight,
                 warmup_epochs=0, ramp_epochs=1))
         torch.manual_seed(args.seed)
-        if config.representation_kind=='spatial':
+        if args.bridge=='raw':
+            model=RawFieldContract(config,data['schema'],data['mean'],data['scale'],data['information_metadata'])
+        elif config.representation_kind=='spatial':
             from ..spatial import SpatialClimateManifold
             constructor=SpatialClimateManifold
         else:
             constructor=ClimateManifold
-        model = constructor(config, data['schema'], data['mean'], data['scale'],
-            data['statistics'], data['information_metadata'], pinn_config=pc,
-            information_mean=data['information_mean'], information_scale=data['information_scale'])
-        normalized = torch.as_tensor((data['states'][:data['train_end']]-data['mean'])/data['scale'])
-        model.core.physics.fit(normalized)
+        if args.bridge!='raw':
+            model = constructor(config, data['schema'], data['mean'], data['scale'],
+                data['statistics'], data['information_metadata'], pinn_config=pc,
+                information_mean=data['information_mean'], information_scale=data['information_scale'])
+            normalized = torch.as_tensor((data['states'][:data['train_end']]-data['mean'])/data['scale'])
+            model.core.physics.fit(normalized)
         metadata = {k:(v.tolist() if isinstance(v,np.ndarray) else v) for k,v in data.items()
                     if k not in ('states','times','information')}
         metadata.update(config=asdict(config), mode=mode,
@@ -206,19 +231,21 @@ def train(args):
     if args.training_mode == 'joint' and args.representation != 'climate_manifold':
         raise ValueError('Joint controls use the same climate_manifold with --regularization none; plain_ae is a frozen legacy control')
     a,p,data=initialize_manifold(args)
+    raw_backend=args.raw_backend or ('matched' if args.training_mode=='joint' and a.config.representation_kind=='spatial' else 'legacy')
     constants=None
-    if args.model=='climode' and args.bridge!='latent':
+    grid_climode=args.model=='climode' and (args.bridge=='decoded' or (args.bridge=='raw' and raw_backend=='legacy'))
+    if grid_climode:
         from .climode import load_constants
         if not args.constants:raise ValueError('ClimODE requires --constants with real orography and lsm')
         constants=load_constants(args.constants,p['schema'])
     elif args.model=='climode' and args.constants:
-        raise ValueError('Latent ClimODE uses the shared encoder inputs; --constants is only for raw/decoded grid ClimODE')
+        raise ValueError('Matched transport ClimODE uses observed information; --constants is only for legacy raw/decoded grid ClimODE')
     config=PredictorConfig(model=args.model,bridge=args.bridge,anchor=args.anchor,hidden_dim=args.hidden_dim,
         ode_substeps=args.ode_substeps,condition_information=not args.no_information_conditioning,
         climode_attention=not args.no_climode_attention,climode_step_hours=args.climode_step_hours,
         velocity_iterations=args.velocity_iterations,representation=args.representation,training_mode=args.training_mode,
         latent_layout=a.config.representation_kind,latent_max_speed=args.latent_max_speed,
-        latent_max_acceleration=args.latent_max_acceleration)
+        latent_max_acceleration=args.latent_max_acceleration,raw_backend=raw_backend)
     experiment=validate_experiment(config,args.experiment)
     if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
         raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
@@ -288,26 +315,41 @@ def train(args):
                                    if representation_payload else None),
         'lead_hours':leads.cpu().tolist(),'options':vars(args),'best_epoch':best_epoch,'best_selection_state_mse':best,
         'selection_split':'calibration','training_seconds':time.perf_counter()-started,'source_commit':source_commit(),
-        'implementation':('latent_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='latent'
+        'implementation':('raw_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='raw' and raw_backend=='matched'
+            else 'raw_spatial_'+args.model if args.bridge=='raw' and raw_backend=='matched'
+            else 'latent_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='latent'
             else 'official_climode_custom_data_adaptation' if args.model=='climode'
             else 'spatial_'+args.model if args.bridge=='latent' and a.config.representation_kind=='spatial'
             else 'local_'+args.model),
         'constants_sha256':digest(args.constants) if constants is not None else None,
         'latent_shape':list(a.config.latent_grid) if a.config.representation_kind=='spatial' and config.bridge=='latent' else None,
+        'forecast_state_grid':list(a.config.grid if config.bridge!='latent' else a.config.latent_grid)
+            if config.bridge!='latent' or a.config.representation_kind=='spatial' else None,
+        'transport_contract':({'velocity_bound_cells_per_day':model.predictor.max_speed,
+            'raw_velocity_rate_bound_per_day':model.predictor.max_acceleration,
+            'reference_spatial_downsample':a.config.spatial_downsample,
+            'speed_scaling':'source_grid_factor' if config.bridge=='raw' else 'latent_grid',
+            'uncertainty':'deterministic'}
+            if args.model=='climode' and (config.bridge=='latent' or raw_backend=='matched' and config.bridge=='raw') else None),
         'training_contract':{**{key:getattr(args,key) for key in ('epochs','batch_size','learning_rate','tendency_weight','horizon_steps')},
+            # Shared requested setting; objective_weights records the effective
+            # zero reconstruction coefficient for direct raw controls.
             'reconstruction_weight':args.reconstruction_weight if config.training_mode=='joint' else 0.,
             'train_starts_sha256':hashlib.sha256(json.dumps(loaders[0].dataset.starts).encode()).hexdigest(),
             'selection_starts_sha256':hashlib.sha256(json.dumps(loaders[1].dataset.starts).encode()).hexdigest()},
         'trainable_parameters':sum(x.numel() for x in parameters),'total_parameters':sum(x.numel() for x in model.parameters()),
-        'conditioning':{'direct_origin_information':bool(config.condition_information and config.bridge=='raw' and args.model in ('mlp','neural_ode') and p['mode']=='enriched'),
+        'conditioning':{'direct_origin_information':bool(config.condition_information and config.bridge=='raw'
+                            and (args.model in ('mlp','neural_ode') or args.model=='climode' and raw_backend=='matched') and p['mode']=='enriched'),
                         'manifold_origin_information':bool(config.bridge!='raw' and p['mode']=='enriched'),
-                        'climode_static_constants':constants is not None},
+                        'climode_static_constants':constants is not None,
+                        'observed_information_available':p['mode']=='enriched'},
         'a_frozen':config.training_mode=='frozen' and config.bridge!='raw',
-        'regularization':args.regularization if config.training_mode=='joint' else 'legacy',
+        'regularization':('none' if config.bridge=='raw' else args.regularization) if config.training_mode=='joint' else 'legacy',
         'objective_weights':asdict(weights),
         'initialization':'pretrained' if config.training_mode=='frozen' else args.initialization,
         'representation_training':'jointly_trained' if config.training_mode=='joint' and config.bridge!='raw' else 'frozen' if config.bridge!='raw' else 'none',
-        'latent_coordinates':'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal',
+        'latent_coordinates':('not_applicable' if config.bridge=='raw' else
+            'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal'),
         'objective_semantics':{'forecast':'field MSE or Gaussian NLL plus physical-time tendency',
             'distribution':'optional deterministic spatial quantiles of dynamic information fields; not ensemble CRPS',
             'physics':'future-field diagnostic matching, not exact conservation',
@@ -329,6 +371,8 @@ def parser():
     p.add_argument('--initialization',choices=['fresh','pretrained'],default='fresh')
     p.add_argument('--latent-layout',choices=['spatial','global'],default=None,
         help='Fresh default: spatial; pretrained/frozen default: reference checkpoint layout')
+    p.add_argument('--raw-backend',choices=['matched','legacy'],default=None,
+        help='Joint spatial default: matched spatial forecast core without E/D; legacy preserves former raw models')
     for name,value in dict(latent_channels=32,spatial_downsample=2,spatial_hidden_dim=64).items():
         p.add_argument('--'+name.replace('_','-'),type=int,default=value)
     p.add_argument('--mode',choices=['surface','enriched'],help='Default: enriched when --information is supplied')
@@ -357,7 +401,7 @@ def parser():
     p.add_argument('--climode-step-hours',type=float,default=1.)
     p.add_argument('--latent-max-speed',type=float,default=2.,help='Latent ClimODE velocity bound in latent cells/day; resolution dependent')
     p.add_argument('--latent-max-acceleration',type=float,default=1.,help='Bound on latent ClimODE raw velocity-coordinate rate per day')
-    p.add_argument('--no-information-conditioning',action='store_true',help='Remove direct origin information from raw NN baselines; manifold modes pass information through the encoder')
+    p.add_argument('--no-information-conditioning',action='store_true',help='Remove direct origin information from raw predictors; manifold modes pass information through the encoder')
     p.add_argument('--no-climode-attention',action='store_true')
     p.add_argument('--device',default='cpu')
     return p

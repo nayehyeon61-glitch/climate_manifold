@@ -12,7 +12,7 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 | Hybrid PINN | 선택적으로 기압면 운동량·열역학·연속·층후 제약 및 learned closure |
 | A 보조 sampler | raw latent에서 flow matching, 상태·전이 분포 및 120시간 경로 손실 |
 | 데이터/평가 | ERA5 변환·shard 다운로드, train-only 정규화, 지연시간별 진단·CRPS·geometry audit |
-| 예측 주실험 | **Encoder → 공간 Neural ODE / latent ClimODE → decoder 공동 학습**; 같은 구조에서 물리·정보 제약 off/on 비교 |
+| 예측 주실험 | Neural ODE·ClimODE 각각 **data → model → forecast** / **E → model → D** / **E → model → D + 물리·정보 제약** 비교 |
 
 공동 학습의 기본 latent는 **32×ceil(H/2)×ceil(W/2)**입니다. 예를 들어 18×36 격자는
 32×9×18 잠재장으로 표현합니다. **전역 64차원 병목은 새 기본 경로에 없습니다.**
@@ -184,9 +184,11 @@ bash scripts/run_model_comparison.sh
 ```
 
 PINN에 필요한 전체 필드가 없으면 `PINN=0`으로 실행합니다. Surface-only는 `INFO`를
-설정하지 않습니다. 기본 **Neural ODE·latent ClimODE × 2개 손실 구성 × 3개 seed**를 처음부터 학습합니다.
-각 pair는 같은 encoder·예측기·decoder 초기화, 입력, 차원, 예측/변화량/재구성 손실을
-공유하며 추가 물리·정보 제약만 off/on합니다. `MODELS=neural_ode`로 범위를 줄일 수 있습니다.
+설정하지 않습니다. 기본 **Neural ODE·ClimODE × 3개 비교군 × 3개 seed = 18회**를 처음부터 학습합니다.
+직접 예측 비교군은 **data → spatial model → future fields**로 E/D 없이 학습합니다.
+같은 공간 예측기 core와 origin 정보 접근을 유지하지만 전체 parameter 수는 다릅니다.
+두 E–F–D 비교군은 같은 encoder·예측기·decoder 초기화, 입력, 차원, 예측/변화량/재구성 손실을
+공유하며 추가 물리·정보 제약만 off/on합니다. `INCLUDE_RAW=0`이면 이 두 비교군만 실행합니다. `MODELS=neural_ode`로 범위를 줄일 수 있습니다.
 각 seed에서 표현도 다시 학습합니다. `A_CHECKPOINT`는 선택 사항이며, 가중치를
 재사용하려면 `INITIALIZATION=pretrained`를 명시합니다. 그 경우에도 joint에서는
 encoder·decoder가 고정되지 않습니다.
@@ -194,15 +196,15 @@ encoder·decoder가 고정되지 않습니다.
 [공동 학습 구조·손실·단일 실행 명령](docs/joint_training.md)과
 [실험 계약·평가·기존 frozen 대조군](docs/downstream.md)을 참고하세요.
 
-`scripts/run_climode_comparison.sh`도 기본은 **E → latent ClimODE → D** 공동 학습이며
-추가 제약 off/on을 비교합니다. 잠재 채널의 transport는 학습한 표현의 동역학이고 실제
+`scripts/run_climode_comparison.sh`도 기본은 **직접 matched ClimODE + E → latent ClimODE → D의 off/on**을 비교합니다.
+직접 비교군은 원본 격자에 같은 transport core를 적용하며 E/D·Gaussian head·constants가 필요하지 않습니다. 잠재 채널의 transport는 학습한 표현의 동역학이고 실제
 풍속의 보존 방정식과 같다고 해석하지 않습니다. 물리/PINN 제약은 복원된 물리 변수에
-적용합니다. 원본 계열의 raw/decoded ClimODE는 명시적으로 선택하는 보조 기준선입니다.
+적용합니다. 원본 계열의 `--raw-backend legacy` raw/decoded ClimODE는 명시적으로 선택하는 보조 기준선입니다.
 
 **평가 기준은 ClimODE 방식의 변수·lead별 RMSE/ACC, 확률 출력의 CRPS입니다.**
-`bash scripts/run_climode_benchmark.sh`는 같은 데이터의 Raw ClimODE 기준선과
-공동 예측 실험을 연결하고 개선율 CSV를 만듭니다. Raw ClimODE 기준선에만 정렬된 실제 지형·육해 마스크
-`CONSTANTS`가 필요하며, 잠재 ClimODE 주실험에는 필요하지 않습니다. [평가 정의와 원논문과의 차이](docs/climode_evaluation.md)를 참고하세요.
+`bash scripts/run_climode_benchmark.sh`는 같은 데이터의 **legacy Gaussian Raw ClimODE** 기준선과
+세 비교군의 주실험을 연결하고 개선율 CSV를 만듭니다. Legacy 기준선에만 정렬된 실제 지형·육해 마스크
+`CONSTANTS`가 필요하며, matched Raw/latent ClimODE 주실험에는 필요하지 않습니다. [평가 정의와 원논문과의 차이](docs/climode_evaluation.md)를 참고하세요.
 기존 checkpoint를 재평가할 수 있지만, 재평가만으로 공동 학습된 모델이 되지는 않습니다.
 
 PINN은 희소 기압면의 근사 물리 제약이며 완전한 primitive-equation solver가

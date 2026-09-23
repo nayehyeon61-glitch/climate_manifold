@@ -25,6 +25,8 @@ def _identity(report):
                 training_mode='a_only' if pure_a else cfg.get('training_mode','frozen'),
                 regularization=report.get('regularization','legacy'),
                 initialization=report.get('initialization','pretrained' if pure_a or cfg['bridge']!='raw' else 'fresh'),
+                raw_backend=(cfg.get('raw_backend','legacy') if not pure_a and cfg['bridge']=='raw' else None),
+                implementation=report.get('implementation'),
                 representation_sha256=(report['checkpoint_sha256'] if pure_a else report.get('representation_sha256')))
 
 
@@ -34,7 +36,8 @@ def benchmark(reports, references=None):
         raise ValueError('At least one candidate report is required')
     if references is None:
         references = [r for r in reports if r['config'].get('model')=='climode'
-                      and r['config'].get('bridge')=='raw' and r['config'].get('anchor')=='none']
+                      and r['config'].get('bridge')=='raw' and r['config'].get('anchor')=='none'
+                      and r['config'].get('raw_backend','legacy')=='legacy']
     all_reports = reports + references
     first = reports[0]
     # A fixed checkpoint is part of the old frozen protocol, but independently
@@ -69,6 +72,8 @@ def benchmark(reports, references=None):
         cfg = ref['config']
         if cfg.get('model')!='climode' or cfg.get('bridge')!='raw' or cfg.get('anchor')!='none':
             raise ValueError('Reference must be raw ClimODE with anchor=none')
+        if cfg.get('raw_backend','legacy')!='legacy':
+            raise ValueError('External ClimODE reference requires raw_backend=legacy; matched transport belongs to direct_comparison')
         if ref['seed'] in ref_by_seed:
             raise ValueError('Duplicate raw ClimODE reference seed')
         ref_by_seed[ref['seed']] = ref
@@ -83,7 +88,7 @@ def benchmark(reports, references=None):
             for lead in value['by_lead']:
                 rows.append(dict(**identity, variable=variable, units=value['units'], **lead,
                                  finite_forecast_fraction=report['finite_forecast_fraction']))
-        if identity['model']=='climode' and identity['bridge']=='raw':
+        if identity['model']=='climode' and identity['bridge']=='raw' and identity['raw_backend']=='legacy':
             continue
         refs = references if identity['model']=='a_drift' else ([ref_by_seed[identity['seed']]]
                if identity['seed'] in ref_by_seed else [])
@@ -109,7 +114,7 @@ def benchmark(reports, references=None):
                         acc_difference=(row['acc']-base['acc'] if allowed and acc_full else None)))
     return {'format':'climate_manifold.climode_benchmark.v1',
             'protocol':first['scores']['climode']['protocol'], 'split':first['split'],
-            'reference':'raw ClimODE custom-data adaptation', 'reference_seeds':list(ref_by_seed),
+            'reference':'original-grid raw ClimODE custom-data adaptation (raw_backend=legacy)', 'reference_seeds':list(ref_by_seed),
             'rows':rows, 'effects':effects, 'unmatched_candidates':unmatched,
             'ranking_allowed':bool(effects) and all(e['ranking_allowed'] for e in effects) and not unmatched,
             'notes':['Primary evidence is per-variable/per-lead physical RMSE and ACC; no mixed-unit scalar rank.',
@@ -117,6 +122,7 @@ def benchmark(reports, references=None):
                      'Training seeds are paired; joint candidates relearn encoder/predictor/decoder, while pure A drift is fixed and compared to each baseline seed.',
                      'Joint candidates may have different A initialization hashes; data, splits, cases, leads and metric protocol must match.',
                      'Cross-family field comparisons do not isolate the manifold effect; use matched E/F/D forecast-only versus regularized joint controls for that question.',
+                     'Matched raw transport is a separate same-family baseline, never an automatic original ClimODE reference.',
                      'References use the same data/splits/origins/leads and train climatology, not published paper scores.']}
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Default: spatial E -> latent ClimODE -> D. Explicit raw/decoded are auxiliary.
+# Default: raw matched ClimODE plus both spatial E-F-D variants. Explicit raw/decoded are legacy auxiliary.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 if [[ "${CLIMODE_BRIDGES:-latent}" == latent ]]; then
@@ -31,7 +31,7 @@ if [[ "$training_mode" == frozen ]]; then initialization=pretrained; fi
 if [[ "$initialization" == pretrained && -z "${A_CHECKPOINT:-}" ]]; then
   echo 'Pretrained/frozen experiments require A_CHECKPOINT' >&2; exit 2
 fi
-setup=(--training-mode "$training_mode" --initialization "$initialization"
+setup=(--training-mode "$training_mode" --initialization "$initialization" --raw-backend legacy
   --manifold-dim "${MANIFOLD_DIM:-64}" --manifold-hidden-dim "${MANIFOLD_HIDDEN_DIM:-512}"
   --latent-channels "${LATENT_CHANNELS:-32}" --spatial-downsample "${SPATIAL_DOWNSAMPLE:-2}"
   --spatial-hidden-dim "${SPATIAL_HIDDEN_DIM:-64}"

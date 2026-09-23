@@ -39,7 +39,7 @@ for seed in "${seeds[@]}"; do
       if [[ "$variant" == plain_ae ]]; then extra=(--ae-checkpoint "$ae_checkpoint"); fi
       prefix="$RUN/${family}-${variant}-seed${seed}"
       "$PYTHON" -m climate_manifold.downstream.train --a-checkpoint "$A_CHECKPOINT" \
-        --training-mode frozen --initialization pretrained --archive "$ARCHIVE" "${info[@]}" --experiment primary --model "$family" \
+        --training-mode frozen --initialization pretrained --raw-backend legacy --archive "$ARCHIVE" "${info[@]}" --experiment primary --model "$family" \
         --bridge "$mode" --representation "$representation" "${extra[@]}" --anchor none \
         --output "$prefix.pt" --epochs "${EPOCHS:-20}" --batch-size "${BATCH_SIZE:-2}" \
         --learning-rate "${LEARNING_RATE:-0.001}" --tendency-weight "${TENDENCY_WEIGHT:-0.1}" \

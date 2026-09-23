@@ -5,18 +5,33 @@
 사전학습은 필요하지 않습니다. Hydra B/C, MoE, filtering은 포함하지 않습니다.
 세부 손실과 단일 실행 예제는 [joint_training.md](joint_training.md)를 참고하세요.
 
-## 주실험: 같은 구조의 손실 ablation
+## 주실험: 직접 예측과 공동 학습의 3-way 비교
 
 | 비교군 | 예측 경로 | 학습 목표 |
 |---|---|---|
-| Forecast only | `history → E → 공간 Neural ODE / latent ClimODE → D` | 미래 state + tendency + 현재 reconstruction |
-| **Climate Manifold** | **동일한 E–F–D 구조와 입력** | 같은 공통 목표 + 물리·정보 제약 |
-| Raw — 선택 사항 | `history → MLP/Neural ODE → future fields` | 미래 state + tendency |
+| Raw | **`data → spatial model → future fields`**, E/D 없음 | 미래 state + tendency |
+| Forecast only | `data → E → 공간 Neural ODE / latent ClimODE → D` | 미래 state + tendency + 현재 reconstruction |
+| **Climate Manifold** | **Forecast only와 동일한 E–F–D 구조와 입력** | 같은 공통 목표 + 물리·정보 제약 |
 
-기본 Neural ODE와 latent ClimODE 각각 두 손실 구성을 실행합니다. MLP는 선택적으로 실행할 수 있습니다. **Seed마다 E/F/D 전체를 새로
-학습**하고, 같은 seed의 off/on pair는 같은 초기화와 학습 예산을 사용합니다.
+기본 Neural ODE와 ClimODE 각각 위 세 비교군을 실행합니다. Raw는 같은 공간 예측기 core를
+원본 기상 격자에 직접 적용하며, 모델에 별도 manifold encoder/decoder가 없습니다.
+모델 자체의 CNN feature/context 처리는 유지합니다. MLP는 선택적으로 실행할 수 있습니다.
+**Seed마다 모델 전체를 새로 학습**하고, 같은 seed의 E–F–D off/on pair는
+같은 초기화와 학습 예산을 사용합니다.
 Reconstruction-only AE와 미래 감독을 받은 A를 비교하는 기존 실험보다 추가 제약의 효과를
-직접 검증합니다. `forecast_only`라는 이름에도 공통 reconstruction 보조 손실은 포함됩니다.
+직접 검증합니다. `forecast_only`라는 이름에도 reconstruction 보조 손실은 포함됩니다.
+Raw에는 복원 경로가 없으므로 reconstruction 및 정보/물리/PINN 보조 손실을 계산하지 않습니다.
+Raw와 latent 모두 동일한 관측 history, 시간 feature, origin의 상층/지형 정보에 접근합니다.
+Raw에서는 origin 정보를 예측기 context에 직접 넣습니다. 미래 정보는 어느 모델에도 입력하지 않습니다.
+
+| 비교 | 해석할 수 있는 효과 |
+|---|---|
+| Climate Manifold vs Raw | 표현·용량·추가 감독을 합친 전체 모델의 예측 개선 |
+| Forecast only vs Raw | E/D 표현·공간 축소·용량 및 reconstruction 감독의 합친 효과 |
+| Climate Manifold vs Forecast only | 같은 E/F/D에서 추가 물리·정보 제약의 효과 |
+
+Raw와 latent의 채널·해상도·parameter 수가 달라 완전한 capacity matching은 아닙니다.
+보고서의 parameter 수와 실행 비용을 함께 제시하고, Raw 대비 차이를 PINN만의 효과로 해석하지 않습니다.
 
 `ManifoldBridge`가 정규화·인코딩·디코딩 계약을 연결합니다. 새 fresh 주실험은
 **공간 CNN E/D와 `[C_z, ceil(H/f), ceil(W/f)]` 잠재장**을 사용합니다. 기본 채널 32,
@@ -43,8 +58,8 @@ velocity 동역학을 잠재 격자에 적용하는 adaptation입니다. E/D와 
 - 모든 비교군에서 같은 archive·정보 파일·정규화·시간 분할·horizon을 사용합니다.
   학습은 `train`, 선택은 **`calibration`의 공통 미래 state MSE**, 개발 평가는 `validation`,
   최종 평가는 `test`입니다. 독립 A의 `expert_validation` 선택 경로와 구분합니다.
-- 과거 history를 인코딩할 때 **origin 시점 정보**를 사용합니다. 미래 상층 정보는
-  해당 loss의 label만 되고 예측 조건에 들어가지 않습니다.
+- 과거 history를 인코딩할 때 **origin 시점 정보**를 사용합니다. Raw도 동일한 origin 정보를
+  예측기 context로 사용합니다. 미래 상층 정보는 해당 loss의 label만 되고 예측 조건에 들어가지 않습니다.
 - `none`과 `full`은 같은 입력/구조를 사용합니다. `none`은 추가 surface physics,
   information, static, distribution, PINN을 끄고 common reconstruction을 유지합니다.
 - Raw와 latent는 입력 차원·구조가 달라 같은 hidden width라도 parameter 수가 다릅니다.
@@ -71,7 +86,7 @@ bash scripts/run_model_comparison.sh
 ```
 
 PINN용 데이터가 없으면 `PINN=0`으로 실행합니다. Surface-only는 `INFO`를 unset합니다.
-기본은 **2 predictor families × 2 loss settings × 3 seeds**입니다.
+기본은 **2 predictor families × 3 비교군 × 3 seeds = 18회 학습**입니다.
 주실험에 ClimODE constants는 필요하지 않습니다. `RUN`은 새 경로여야 합니다.
 
 | 환경 변수 | 기본값·역할 |
@@ -92,7 +107,8 @@ PINN용 데이터가 없으면 `PINN=0`으로 실행합니다. Surface-only는 `
 | `PHYSICS_WEIGHT / INFORMATION_WEIGHT / STATIC_WEIGHT` | full에서 0.01 / 0.1 / 0.05 |
 | `DISTRIBUTION_WEIGHT` | 0; 선택적 공간 분포 매칭 |
 | `PINN / PINN_LEVELS / PINN_WEIGHT` | 0 / `500 850` / PINN config 가중치 |
-| `INCLUDE_RAW` | 0; 1이면 MLP/Neural ODE raw 기준선 추가; raw ClimODE는 별도 benchmark |
+| `INCLUDE_RAW` | 1; Neural ODE·ClimODE의 직접 예측 비교군 포함. 0이면 E–F–D off/on만 실행 |
+| `RAW_BACKEND` | 생략 시 joint spatial은 `matched`, global/frozen은 `legacy`; 원본 vendor ClimODE는 별도 보조 runner 사용 |
 | `WINDOW_STRIDE / MAX_WINDOWS` | 4 / 0(전체 창) |
 | `ORIGIN_STRIDE / MAX_CASES` | 1 / 0(전체 평가 origin) |
 
@@ -146,21 +162,30 @@ Latent 예측 실험에는 별도 `latent_diagnostics`가 추가됩니다. **먼
 그리고 `comparison.json/.csv`입니다. Latent 실험의 NPZ에는 물리 단위 예측·truth와
 `predicted_latent`, `origin_latent`, `diagnostic_target_latent`도 포함됩니다.
 추론 시간에는 미래 재구성 audit를 제외하고, 전체 평가 시간은 별도로 기록합니다.
-`paired_effects / paired_summary`는 같은 모델·seed에서 forecast_only 대비
-Climate Manifold full의 RMSE 감소량을 집계합니다. 양수면 추가 제약을 사용한 모델이 더 정확합니다.
-`INCLUDE_RAW=1`이면 raw 비교도 제공하지만 이는 같은 구조의 손실 ablation과 구분합니다.
+`paired_effects / paired_summary`는 같은 모델·seed에서 full vs forecast_only,
+forecast_only vs Raw, full vs Raw의 RMSE 감소량을 별도 `pair_key`로 집계합니다.
+양수면 해당 candidate의 오차가 작습니다. `direct_comparison`과 `comparison.raw-effects.csv`는
+같은 계열 Raw 대비 변수·lead별 물리 단위 RMSE skill 및 ACC 차이를 저장합니다.
+기본 포함되는 Raw 비교는 같은 구조의 손실 ablation과 구분하여 보고합니다.
 
 시간 변화량의 첫 전이는 관측 origin에서 첫 예측으로 계산하므로 재구성 오차도
 포함합니다. 기존 `scores.per_variable` RMSE는 제곱 오차를 모은 뒤 제곱근을 취하며,
 새 `scores.climode` RMSE는 공식 평가 코드처럼 사례별 RMSE를 평균합니다.
-현재 MLP/Neural ODE와 latent ClimODE는 결정론적이며 CRPS는 `null`입니다.
+현재 MLP/Neural ODE와 matched Raw/latent ClimODE는 결정론적이며 CRPS는 `null`입니다.
 Latent 분포를 비선형 D로 복원한 결과에 Gaussian CRPS를 임의로 적용하지 않습니다.
 이 실험은 Hydra의 ensemble 경로 보정 성능을 평가하지 않습니다.
 
 ## ClimODE의 주실험과 보조 기준선
 
-기본 주실험은 **공간 E → latent ClimODE → D**이며 앞의 runner에 포함됩니다.
-`scripts/run_climode_comparison.sh` 역시 기본은 같은 주실험을 ClimODE 한 계열에 실행합니다.
+기본 주실험은 **직접 matched ClimODE + 공간 E → latent ClimODE → D의 off/on**입니다.
+`scripts/run_climode_comparison.sh` 역시 기본은 같은 세 비교군을 ClimODE 한 계열에 실행합니다.
+직접 비교군은 latent adaptation과 같은 transport core를 원본 기상 격자에서 학습하며
+별도의 E/D와 Gaussian head가 없습니다. `--constants`도 필요하지 않습니다.
+수송 계수는 물리 U/V 자체가 아니며, 정규화된 기상장에 대한 학습 계수입니다.
+동일한 대략적 이동 범위를 위해 Raw의 speed 상한은 `LATENT_MAX_SPEED × SPATIAL_DOWNSAMPLE`
+(raw 셀/일)로 정합니다. Effective bound는 보고서에 남기며 격자 반올림 때문에 기하학적으로 완전히
+같지는 않습니다. Raw 격자의 CFL 조건 때문에 같은 horizon의 적분 횟수는 더 클 수 있습니다.
+
 관측 history로 잠재 상태와 transport 동역학을 구성하고 미래 latent를 rollout합니다.
 잠재 transport 계수는 물리적 U/V가 아니며 원본 ClimODE의 물리 보존식을 그대로 보장하지
 않습니다. 정보·정적 지형·PINN 손실은 미래 latent를 복원한 정보/기상 변수에서 계산합니다.
@@ -172,7 +197,7 @@ Latent 분포를 비선형 D로 복원한 결과에 Gaussian CRPS를 임의로 �
 
 | 비교군 | 경로와 학습 |
 |---|---|
-| Raw ClimODE | `history grid → ClimODE → future fields`; ClimODE 학습 |
+| Legacy Raw ClimODE | `history grid → vendor ClimODE → future fields`; Gaussian head 포함 |
 | Decoded ClimODE | `history → E → D → reconstructed grid → ClimODE`; E/D/ClimODE 공동 학습 |
 
 두 번째는 **입력 격자 표현의 공동 학습**이며 `E → latent ClimODE → D` 실험이 아닙니다.
@@ -190,13 +215,13 @@ export RUN=runs/joint_auxiliary_climode_001
 CLIMODE_BRIDGES='raw decoded' bash scripts/run_climode_comparison.sh
 ```
 
-보조 raw/decoded ClimODE `--constants`에는 archive와 정확히 정렬된 실제 orography와 육해 마스크가 필요합니다.
+보조 runner는 `--raw-backend legacy`를 명시합니다. 보조 raw/decoded ClimODE `--constants`에는 archive와 정확히 정렬된 실제 orography와 육해 마스크가 필요합니다.
 기본 attention에는 최소 15×15 격자가 필요합니다. 작은 합성 격자의 코드 검증에는
 `CLIMODE_ATTENTION=0`으로 끌 수 있으나 공식 attention 구성과 다른 ablation입니다. `CLIMODE_BRIDGES=raw`로 raw 기준선만
-실행할 수 있습니다. 같은 환경에서 `scripts/run_climode_benchmark.sh`는 Raw ClimODE와
+실행할 수 있습니다. 같은 환경에서 `scripts/run_climode_benchmark.sh`는 legacy Raw ClimODE와
 primary joint 비교를 이어서 실행합니다.
 
-이 raw/decoded backend는 공식 [Aalto-QuML/ClimODE](https://github.com/Aalto-QuML/ClimODE) commit
+이 legacy raw/decoded backend는 공식 [Aalto-QuML/ClimODE](https://github.com/Aalto-QuML/ClimODE) commit
 `e729d23e8799ce0e075699e76d60227d848d8d0c`의 residual CNN, attention, transport PDE,
 Gaussian head를 포함합니다. [MIT 라이선스·인용·수정 내역](../THIRD_PARTY_NOTICES.md)을
 보존합니다. 이것은 **custom-data adaptation**이며 논문 benchmark의 재현이 아닙니다.
