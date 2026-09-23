@@ -13,6 +13,7 @@ dependencies = ["numpy>=1.24", "pandas>=2", "torch>=2.2", "xarray>=2023.1", "sci
 [project.optional-dependencies]
 test = ["pytest>=8", "netCDF4>=1.6"]
 era5 = ["cdsapi>=0.7", "netCDF4>=1.6", "h5netcdf>=1.3", "h5py>=3.10"]
+forecast = ["torchdiffeq>=0.2.4"]
 
 [project.scripts]
 train-climate-manifold = "climate_manifold.train:main"
@@ -20,6 +21,12 @@ evaluate-climate-manifold = "climate_manifold.forecast:main"
 audit-climate-manifold = "climate_manifold.audit:main"
 prepare-climate-manifold-data = "climate_manifold.fixed_step_data:main"
 prepare-climate-manifold-information = "climate_manifold.physical_information:main"
+train-manifold-predictor = "climate_manifold.downstream.train:main"
+evaluate-manifold-predictor = "climate_manifold.downstream.evaluate:main"
+compare-manifold-predictors = "climate_manifold.downstream.compare:main"
+
+[tool.setuptools.package-data]
+"climate_manifold._vendor.climode" = ["LICENSE"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

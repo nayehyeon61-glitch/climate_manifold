@@ -147,8 +147,9 @@ x_reconstructed = model.core.manifold.decode(z)
 q = model.encode(x, information)      # sealed train mean/scale로 표준화된 좌표
 ```
 
-이 저장소는 독립 A 학습을 위한 추출본입니다. NN/ClimODE 비교 실험은 아직 포함하지
-않습니다. PINN은 희소 기압면의 근사 물리 제약이며 완전한 primitive-equation solver가
+이 저장소에는 독립 A 학습과 **MLP·Neural ODE·ClimODE 연결 및 비교 실험 코드**가
+포함됩니다. [후단 모델 연결·공통 평가 안내](docs/downstream.md)를 참고하세요.
+PINN은 희소 기압면의 근사 물리 제약이며 완전한 primitive-equation solver가
 아닙니다. 실제 장기 안정성·태풍 이동·앙상블 보정 성능은 별도 실험이 필요합니다.
 기존 Hydra checkpoint는 새 모델로 자동 재해석하지 않습니다.
 
