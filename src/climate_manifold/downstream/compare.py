@@ -3,11 +3,19 @@ import argparse
 import csv
 import json
 import math
+from itertools import combinations
 from pathlib import Path
 import numpy as np
 from ..train import write_json
 from .protocol import experiment_contract,validate_experiment
 from .climode_benchmark import benchmark,write_table
+
+
+CONSTRAINT_GROUPS = {
+    'pinn_statistical': {'pinn', 'statistical'},
+    'pinn_static': {'pinn', 'static'},
+    'statistical_static': {'statistical', 'static'},
+}
 
 
 def _regime(report):
@@ -24,12 +32,72 @@ def _regime(report):
 
 
 def _arm(row):
+    if row.get('constraint_pair'):
+        return row['constraint_pair']
     if row['representation']=='raw':
         return 'raw'
     if (row['representation']=='climate_manifold' and row['training_mode']=='joint'
             and row['regularization']=='none'):
         return 'forecast_only'
     return row['representation']
+
+
+def _validate_constraint_pairs(group):
+    """Separate reconstruction experiments from legacy trajectory constraints."""
+    split = [row for row in group if row.get('constraint_pair') is not None]
+    if not split:
+        return
+    if len(split) != len(group):
+        raise ValueError('Unfair comparison: mixed constraint_path experiments')
+    first = split[0]
+    common_contract = None
+    active_weights = {}
+    pinn_config = None
+    pinn_reports = [row for row in split if row['constraint_pair'] in ('pinn_statistical','pinn_static')]
+    if any(row.get('pinn_config') is not None for row in pinn_reports):
+        pinn_config = pinn_reports[0].get('pinn_config')
+        if pinn_config is None or any(row.get('pinn_config') != pinn_config for row in pinn_reports):
+            raise ValueError('Unfair comparison: mismatched pinn_config')
+    for row in split:
+        pair = row['constraint_pair']
+        if pair not in CONSTRAINT_GROUPS:
+            raise ValueError('Unknown constraint_pair: '+str(pair))
+        if row.get('constraint_path') != 'observed_reconstruction':
+            raise ValueError('Split experiments require constraint_path=observed_reconstruction')
+        if row['config'].get('bridge') != 'latent' or row['config'].get('training_mode') != 'joint':
+            raise ValueError('Split experiments require jointly trained latent forecasts')
+        contract = row.get('constraint_contract')
+        if (not isinstance(contract, dict)
+                or contract.get('version') != 'climate_manifold.reconstruction_constraints.v1'
+                or set(contract.get('groups', [])) != CONSTRAINT_GROUPS[pair]
+                or contract.get('observed_pair') != 'origin-6h,origin'
+                or contract.get('pinn_tendency_supervision') is not False):
+            raise ValueError('Invalid reconstruction constraint_contract')
+        common = {key:value for key,value in contract.items() if key not in ('groups','pair')}
+        if common_contract is not None and common != common_contract:
+            raise ValueError('Unfair comparison: mismatched constraint_contract')
+        common_contract = common
+        if row.get('forecast_parameters') is None or row['forecast_parameters'] != first.get('forecast_parameters'):
+            raise ValueError('Unfair comparison: mismatched forecast_parameters')
+        weights = row.get('split_objective_weights')
+        if not isinstance(weights,dict) or set(weights) != {'reconstruction','pinn','statistical','static'}:
+            raise ValueError('Split experiments require split_objective_weights')
+        for name, weight in weights.items():
+            if isinstance(weight,bool) or not isinstance(weight,(int,float)) or not math.isfinite(weight) or weight < 0:
+                raise ValueError('Invalid split_objective_weights.'+name)
+            active = name=='reconstruction' or name in CONSTRAINT_GROUPS[pair]
+            if active and weight <= 0:
+                raise ValueError('Active constraint needs positive split_objective_weights.'+name)
+            if not active and weight != 0:
+                raise ValueError('Inactive constraint has nonzero split_objective_weights.'+name)
+            if active:
+                if name in active_weights and weight != active_weights[name]:
+                    raise ValueError('Unfair comparison: mismatched shared split_objective_weights.'+name)
+                active_weights[name] = weight
+        same_pair = [r for r in split if r['constraint_pair']==pair]
+        for name in ('total_parameters','trainable_parameters','constraint_parameters','implementation'):
+            if row.get(name) != same_pair[0].get(name):
+                raise ValueError('Cannot pool different '+name+' as constraint_pair seeds')
 
 
 def _validate_family_inputs(group):
@@ -133,9 +201,25 @@ def _direct_effects(pairs):
                      'Positive physical RMSE/CRPS skill or ACC difference favors the E/F/D candidate.']}
 
 
+def _constraint_field_effects(identity, candidate, baseline):
+    """Per-field pair replacements retain physical units and lead times."""
+    if 'climode' not in candidate['scores'] or 'climode' not in baseline['scores']:
+        return []
+    # Reuse the strict metric checks but remove raw-specific vocabulary.
+    result = _direct_effects([(identity,candidate,baseline)])
+    rows = []
+    for item in result['effects']:
+        row = dict(item)
+        row['baseline_rmse'] = row.pop('raw_rmse')
+        row['rmse_skill_vs_baseline'] = row.pop('rmse_skill_vs_raw')
+        row['crps_skill_vs_baseline'] = row.pop('crps_skill_vs_raw')
+        rows.append(row)
+    return rows
+
+
 def compare(reports,output,climode_reference_reports=None):
     output=Path(output)
-    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv')) or output.exists():
+    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv')) or output.exists():
         raise FileExistsError('Choose a new comparison path')
     data=[json.loads(Path(path).read_text()) for path in reports]
     if not data:raise ValueError('At least one evaluation report is required')
@@ -153,6 +237,7 @@ def compare(reports,output,climode_reference_reports=None):
     # remain part of training_contract.
     for family in {row['config']['model'] for row in data}:
         group=[row for row in data if row['config']['model']==family]
+        _validate_constraint_pairs(group)
         _validate_family_inputs(group)
         _validate_transport(group)
         first=group[0]
@@ -176,6 +261,8 @@ def compare(reports,output,climode_reference_reports=None):
                 if row['representation_config']!=latent[0]['representation_config']:
                     raise ValueError('Unfair comparison: mismatched representation_config')
                 for key in ('conditioning','total_parameters','trainable_parameters'):
+                    if row.get('constraint_pair') and key in ('total_parameters','trainable_parameters'):
+                        continue  # PINN closure is auxiliary capacity, reported separately.
                     if row.get(key)!=latent[0].get(key):
                         raise ValueError('Unfair comparison: mismatched '+key)
                 if row.get('regularization') not in ('none','full'):
@@ -190,6 +277,11 @@ def compare(reports,output,climode_reference_reports=None):
             latent_shape=report.get('latent_shape'),implementation=report.get('implementation'),
             raw_backend=cfg.get('raw_backend','legacy') if cfg['bridge']=='raw' else None,
             objective_weights=report.get('objective_weights'),
+            constraint_pair=report.get('constraint_pair'),constraint_path=report.get('constraint_path'),
+            constraint_contract=report.get('constraint_contract'),
+            pinn_config=report.get('pinn_config'),
+            split_objective_weights=report.get('split_objective_weights'),
+            forecast_parameters=report.get('forecast_parameters'),constraint_parameters=report.get('constraint_parameters'),
             normalized_rmse=aggregate.get('normalized_rmse'),wind_speed_rmse_mps=aggregate.get('wind_speed_rmse_mps'),
             finite_forecast_fraction=report['finite_forecast_fraction'],trainable_parameters=report['trainable_parameters'],
             total_parameters=report['total_parameters'],inference_seconds=report['inference_seconds'],
@@ -198,6 +290,8 @@ def compare(reports,output,climode_reference_reports=None):
     groups={}
     for row in rows:
         key='/'.join(row[k] for k in ('model','representation','bridge','anchor','training_mode','regularization','initialization'))
+        if row['constraint_pair']:
+            key += '/'+row['constraint_pair']
         if groups.get(key) and row['objective_weights']!=groups[key][0]['objective_weights']:
             raise ValueError('Cannot pool different objective_weights as seeds within '+key)
         if any(x['seed']==row['seed'] for x in groups.get(key,[])):
@@ -212,11 +306,13 @@ def compare(reports,output,climode_reference_reports=None):
                       'scored_runs':len(scores)} if scores else {'seeds':[x['seed'] for x in group],
                       'mean_normalized_rmse':None,'sample_std_normalized_rmse':None,'scored_runs':0}
     ranking_allowed=same_cases and all(r['finite_forecast_fraction']==1 for r in rows)
-    paired=[];paired_summary={};direct_pairs=[]
+    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[]
     if ranking_allowed and contracts[0]['suite']=='primary':
-        indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization']):r for r in rows}
+        indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization']):r
+                 for r in rows if not r['constraint_pair']}
         source={id(row):report for row,report in zip(rows,data)}
         for row in rows:
+            if row['constraint_pair']:continue
             if row['representation']!='climate_manifold':continue
             mode=row['training_mode']
             if mode=='joint':
@@ -246,6 +342,26 @@ def compare(reports,output,climode_reference_reports=None):
                 paired.append({**identity,
                                'rmse_reduction':error-ours,
                                'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
+        split_index={(r['model'],r['seed'],r['constraint_pair']):r for r in rows if r['constraint_pair']}
+        for family,seed in sorted({(r['model'],r['seed']) for r in rows if r['constraint_pair']}):
+            for baseline_arm,candidate_arm in combinations(CONSTRAINT_GROUPS,2):
+                baseline=split_index.get((family,seed,baseline_arm))
+                candidate=split_index.get((family,seed,candidate_arm))
+                if baseline is None or candidate is None:continue
+                base_groups=CONSTRAINT_GROUPS[baseline_arm];candidate_groups=CONSTRAINT_GROUPS[candidate_arm]
+                identity={'model':family,'seed':seed,'control':baseline_arm,
+                    'candidate_arm':candidate_arm,'training_mode':'joint',
+                    'pair_key':family+'/'+candidate_arm+'/vs_'+baseline_arm,
+                    'interpretation':'replace_one_constraint_group_with_one_fixed',
+                    'fixed_group':next(iter(base_groups & candidate_groups)),
+                    'removed_group':next(iter(base_groups-candidate_groups)),
+                    'added_group':next(iter(candidate_groups-base_groups))}
+                error=baseline['normalized_rmse'];ours=candidate['normalized_rmse']
+                if error is not None and ours is not None:
+                    paired.append({**identity,'rmse_reduction':error-ours,
+                        'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
+                constraint_physical.extend(_constraint_field_effects(
+                    identity,source[id(candidate)],source[id(baseline)]))
         for row in paired:
             key=row['pair_key'] if row['training_mode']=='joint' else row['model']+'/vs_'+row['control']
             paired_summary.setdefault(key,[]).append(row)
@@ -255,6 +371,7 @@ def compare(reports,output,climode_reference_reports=None):
                         for key,group in paired_summary.items()}
     result={'format':'climate_manifold.comparison.v1','rows':rows,'seed_summary':summary,
         'experiment_suite':contracts[0]['suite'],'paired_effects':paired,'paired_summary':paired_summary,
+        'constraint_pair_effects':constraint_physical,
         'direct_comparison':_direct_effects(direct_pairs),
         'same_successful_origins':same_cases,'ranking_allowed':ranking_allowed,
         'notes':['Inspect per-variable and per-lead physical scores in the original reports.',
@@ -263,6 +380,8 @@ def compare(reports,output,climode_reference_reports=None):
                  'Legacy frozen runs share fixed representations when representation hashes match; forecast seeds do not measure representation pretraining variance.',
                  'Positive paired RMSE reduction favors the named candidate_arm; pairs share the training seed.',
                  'Joint forecast_only/full pairs isolate the combined added regularization under matched architecture, inputs, initialization and training budget; they do not isolate PINN alone.',
+                 'Reconstruction constraint pairs replace one group while holding one fixed; they do not identify a single-group causal benefit or prove reduced overfitting.',
+                 'PINN pairs may add auxiliary closure parameters; forecast and constraint parameter counts are reported separately.',
                  'Raw-versus-latent and plain-AE comparisons change representation or supervision and are whole-model comparisons, not causal evidence for physical constraints.',
                  'Latent coordinate errors are within-representation diagnostics, never cross-encoder rankings.',
                  'Enriched A supplies extra dynamic information to decoded ClimODE; use surface A to isolate representation alone.']}
@@ -276,10 +395,12 @@ def compare(reports,output,climode_reference_reports=None):
     write_table(output.with_suffix('.climode.csv'),result['climode_benchmark'].get('rows',[]))
     write_table(output.with_suffix('.climode-effects.csv'),result['climode_benchmark'].get('effects',[]))
     write_table(output.with_suffix('.raw-effects.csv'),result['direct_comparison']['effects'])
+    write_table(output.with_suffix('.constraint-effects.csv'),result['constraint_pair_effects'])
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
-        for row in rows:writer.writerow({**row,'conditioning':json.dumps(row['conditioning'],sort_keys=True),
-                                          'objective_weights':json.dumps(row['objective_weights'],sort_keys=True)})
+        for row in rows:
+            structured = ('conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config')
+            writer.writerow({**row,**{key:json.dumps(row[key],sort_keys=True) for key in structured}})
     return result
 
 

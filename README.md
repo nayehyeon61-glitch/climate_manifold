@@ -4,6 +4,13 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
+**이 브랜치의 새 실험:** 예측 `E → F → D`와 관측 복원 `E → D / D_I`의 제약 경로를
+분리하고 **PINN+Statistical / PINN+Static / Statistical+Static**을 비교합니다.
+기본 동적 자료 복원은 공통으로 한 번 유지하며, 제약 손실은 예측기 F를 직접 통과하지 않습니다.
+[설계·손실 정의·실행 방법](docs/split_manifold_constraints.md)을 먼저 참고하세요.
+전체 실행은 `bash scripts/run_pairwise_manifold_comparison.sh`이며,
+기존 `run_model_comparison.sh`는 이전의 예측 궤적 제약 실험을 재현합니다.
+
 | 구성 | 포함 내용 |
 |---|---|
 | 표현 | 공동 학습 기본: **공간 CNN E/D, 32채널·공간 2배 축소**; 독립 A/legacy: DCT + 전역 64/512 |
@@ -25,7 +32,7 @@ Python 3.10 이상, Linux/macOS 환경을 권장합니다. CUDA 학습은 사용
 PyTorch를 먼저 설치하세요. 아래 명령은 저장소 루트에서 실행합니다.
 
 ```bash
-git clone --branch feature/joint-manifold-forecast https://github.com/nayehyeon61-glitch/climate_manifold.git
+git clone --branch feature/split-manifold-pairwise-constraints https://github.com/nayehyeon61-glitch/climate_manifold.git
 cd climate_manifold
 python -m venv .venv
 source .venv/bin/activate

@@ -204,14 +204,21 @@ class HybridPINN(nn.Module):
                    / self.pressure.to(temp)[None, :, None, None])
         return torch.stack((known_u, known_v, known_t), dim=1)
 
-    def forward(self, decoded_info0, decoded_info1, observed_info0, observed_info1, z0, dt_hours):
+    def forward(self, decoded_info0, decoded_info1, observed_info0, observed_info1, z0, dt_hours,
+                *, include_tendency=True):
         """Return unweighted PINN metrics; the trainer applies config.weight/ramp.
 
         All information arguments are normalized flattened [batch, info_dim].
         Observed endpoints are supervision/masks, never closure conditioning.
         Midpoint decoded fields supply spatial physics. Temporal differences are
         physical-time secants; six-hour pairs are not instantaneous derivatives.
+        Reconstruction-only constraint experiments disable observed tendency
+        supervision: their common reconstruction loss already anchors the two
+        endpoints. This flag leaves temporal derivatives inside PDE residuals
+        intact and keeps the original trajectory objective as the default.
         """
+        if not isinstance(include_tendency, bool):
+            raise ValueError("include_tendency must be a boolean")
         infos = (decoded_info0, decoded_info1, observed_info0, observed_info1)
         if any(x.ndim != 2 or x.shape != decoded_info0.shape or x.shape[-1] != self.info_dim for x in infos):
             raise ValueError("PINN needs matching [batch, information_features] endpoint tensors")
@@ -246,18 +253,20 @@ class HybridPINN(nn.Module):
         thickness_error = state["z"][:, :-1] - state["z"][:, 1:] - expected
         thickness = self._mean_square(thickness_error / self.thickness_scale, mask[:, :-1] & mask[:, 1:])
         closure_loss = sum(self._mean_square(closure_unit[:, index], mask) for index in range(3)) / 3
-        # Supervise every selected dynamic endpoint, including height/omega/sp
-        # even though there is no independent prognostic PDE for these here.
-        rate_scales = {"u": self.momentum_scale, "v": self.momentum_scale,
-                       "t": self.temperature_scale, "z": 1e-2, "w": 1e-5, "q": 1e-7}
-        tendency_terms = []
-        for key, indices in self.indices.items():
-            error = ((pred1[:, indices] - pred0[:, indices]) - (obs1[:, indices] - obs0[:, indices])) / dt
-            tendency_terms.append(self._mean_square(error / rate_scales[key], mask))
-        sp_error = ((pred1[:, self.sp_index] - pred0[:, self.sp_index])
-                    - (obs1[:, self.sp_index] - obs0[:, self.sp_index])) / dt[:, 0]
-        tendency_terms.append(self._mean_square(sp_error / 0.05, mask[:, 0]))
-        tendency = sum(tendency_terms) / len(tendency_terms)
+        tendency = pred0.new_zeros(())
+        if include_tendency:
+            # Supervise every selected dynamic endpoint, including height/omega/sp
+            # even though there is no independent prognostic PDE for these here.
+            rate_scales = {"u": self.momentum_scale, "v": self.momentum_scale,
+                           "t": self.temperature_scale, "z": 1e-2, "w": 1e-5, "q": 1e-7}
+            tendency_terms = []
+            for key, indices in self.indices.items():
+                error = ((pred1[:, indices] - pred0[:, indices]) - (obs1[:, indices] - obs0[:, indices])) / dt
+                tendency_terms.append(self._mean_square(error / rate_scales[key], mask))
+            sp_error = ((pred1[:, self.sp_index] - pred0[:, self.sp_index])
+                        - (obs1[:, self.sp_index] - obs0[:, self.sp_index])) / dt[:, 0]
+            tendency_terms.append(self._mean_square(sp_error / 0.05, mask[:, 0]))
+            tendency = sum(tendency_terms) / len(tendency_terms)
         total = (momentum + thermal + self.config.continuity_weight * continuity
                  + self.config.thickness_weight * thickness + self.config.closure_weight * closure_loss
                  + self.config.tendency_weight * tendency)

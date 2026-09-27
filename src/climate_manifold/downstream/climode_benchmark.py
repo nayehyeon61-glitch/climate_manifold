@@ -24,6 +24,8 @@ def _identity(report):
                 seed=None if pure_a else report['seed'],
                 training_mode='a_only' if pure_a else cfg.get('training_mode','frozen'),
                 regularization=report.get('regularization','legacy'),
+                constraint_pair=report.get('constraint_pair'),
+                constraint_path=report.get('constraint_path','forecast_trajectory'),
                 initialization=report.get('initialization','pretrained' if pure_a or cfg['bridge']!='raw' else 'fresh'),
                 raw_backend=(cfg.get('raw_backend','legacy') if not pure_a and cfg['bridge']=='raw' else None),
                 implementation=report.get('implementation'),

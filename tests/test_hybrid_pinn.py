@@ -207,3 +207,32 @@ def test_affine_information_normalization_preserves_physical_residuals():
     actual = normalized(before, after, before, after, z, 6)
     for key in ("pinn_momentum", "pinn_thermodynamic", "pinn_continuity", "pinn_thickness", "pinn_tendency"):
         assert torch.allclose(actual[key], expected[key], atol=1e-9, rtol=1e-6)
+
+
+def test_physics_only_flag_removes_target_tendency_but_keeps_pde_time_derivative():
+    model, state, _ = setup_pinn()
+    next_state = state.clone()
+    next_state[:, model.indices['t']] += 2.16
+    prediction = next_state.clone().requires_grad_()
+    latent = torch.zeros(2, model.latent_dim, dtype=state.dtype)
+
+    def run(observed_next, enabled):
+        return model(state.flatten(1), prediction.flatten(1), state.flatten(1),
+                     observed_next.flatten(1), latent, 6., include_tendency=enabled)
+
+    matched = run(next_state, False)
+    changed_truth = state.clone().requires_grad_()
+    changed = run(changed_truth, False)
+    assert matched['pinn_tendency'] == changed['pinn_tendency'] == 0
+    torch.testing.assert_close(matched['pinn_total'], changed['pinn_total'])
+    assert changed['pinn_thermodynamic'].item() == pytest.approx(1., rel=1e-6)
+    legacy = run(state, True)
+    assert legacy['pinn_tendency'] > 0
+    torch.testing.assert_close(legacy['pinn_total'], changed['pinn_total']
+                               + model.config.tendency_weight * legacy['pinn_tendency'])
+    changed['pinn_total'].backward()
+    assert prediction.grad is not None and prediction.grad.abs().sum() > 0
+    assert model.closure_head[-1].bias.grad.abs().sum() > 0
+    assert changed_truth.grad is None
+    with pytest.raises(ValueError, match='include_tendency'):
+        run(state, 1)

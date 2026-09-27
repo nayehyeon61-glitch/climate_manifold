@@ -1,5 +1,9 @@
 # Manifold와 예측기의 공동 학습
 
+새로운 **관측 복원 제약 경로 + 두 그룹씩 조합** 실험은
+[split_manifold_constraints.md](split_manifold_constraints.md)를 참조하세요.
+아래 내용은 `--constraint-pair`를 지정하지 않은 기존 예측 궤적 제약 경로입니다.
+
 Manifold 실험의 단위는 **encoder E + 실제 사용할 예측기 F + decoder D**입니다.
 직접 예측 대조군은 **data → F → future fields**이며 encoder/decoder 없이 F만 학습합니다.
 A를 먼저 학습하고 고정해야 한다는 조건을 제거했습니다. 기본 `--training-mode joint

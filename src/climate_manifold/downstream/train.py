@@ -21,6 +21,7 @@ from .protocol import validate_experiment
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
+CONSTRAINT_PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static')
 
 
 class RawFieldContract:
@@ -39,9 +40,16 @@ class RawFieldContract:
 
 
 class CausalWindows(TemporalWindowDataset):
-    def __init__(self,*args,information=None,information_targets=False,**kwargs):
+    def __init__(self,*args,information=None,information_targets=False,
+                 reconstruction_constraints=False,**kwargs):
         super().__init__(*args,**kwargs);self.information=information
         self.information_targets=information_targets
+        self.reconstruction_constraints=reconstruction_constraints
+        if reconstruction_constraints:
+            if information_targets:
+                raise ValueError('Observed reconstruction constraints do not load future information targets')
+            if information is None or self.config.history_span_steps < 2:
+                raise ValueError('Observed reconstruction constraints require information and history_span_steps >= 2')
 
     def __getitem__(self,index):
         row=super().__getitem__(index)
@@ -51,15 +59,26 @@ class CausalWindows(TemporalWindowDataset):
             if self.information_targets:
                 row['information_targets']=torch.from_numpy(
                     self.information[origin+1:origin+self.config.horizon_steps+1].copy())
+            if self.reconstruction_constraints:
+                # Dense adjacent observations remain inside the observed span,
+                # even when the predictor subsamples history every 24 hours.
+                raw=self.states[origin-1:origin+1]
+                row['constraint_states']=torch.as_tensor((raw-self.mean)/self.scale,dtype=torch.float32)
+                row['constraint_information']=torch.as_tensor(
+                    self.information[origin-1:origin+1].copy(),dtype=torch.float32)
+                row['constraint_dt_hours']=torch.as_tensor(
+                    np.diff(self.times[origin-1:origin+1])/np.timedelta64(1,'h'),dtype=torch.float32)
         return row
 
 
-def windows(data,config,split,stride=1,max_windows=0,*,information_targets=False):
+def windows(data,config,split,stride=1,max_windows=0,*,information_targets=False,
+            reconstruction_constraints=False):
     starts=data['split'][split][::stride]
     if max_windows:starts=starts[:max_windows]
     if not len(starts):raise ValueError('Forecast training/evaluation requires nonempty windows')
     return CausalWindows(data['states'],data['times'],config,starts,data['mean'],data['scale'],data['schema'],
-        information=data['information'],information_targets=information_targets)
+        information=data['information'],information_targets=information_targets,
+        reconstruction_constraints=reconstruction_constraints)
 
 
 def new_a(metadata, sealed=True, raw=False):
@@ -119,12 +138,51 @@ def forecast_loss(output,batch,temporal,lead_hours,tendency_weight):
     return {'loss':loss,'state_mse':state_mse,'tendency_mse':tendency,'fit':fit}
 
 
+def prepare_constraint_pair(args):
+    """Validate the opt-in split objective before any representation is built."""
+    pair=getattr(args,'constraint_pair',None)
+    if pair is None:
+        return
+    if pair not in CONSTRAINT_PAIRS:
+        raise ValueError('Unknown --constraint-pair')
+    if (args.training_mode!='joint' or args.bridge!='latent'
+            or args.representation!='climate_manifold' or args.anchor!='none'
+            or args.regularization!='full'):
+        raise ValueError('--constraint-pair requires joint latent climate_manifold, anchor=none and regularization=full')
+    if args.mode=='surface' or not args.information:
+        raise ValueError('--constraint-pair requires enriched --information inputs')
+    # These names describe the older forecast-trajectory objective. New names
+    # avoid silently retaining duplicate information/diagnostic supervision.
+    for name,default in (('information_weight',.1),('distribution_weight',0.),('physics_weight',.01)):
+        if getattr(args,name)!=default:
+            raise ValueError('--constraint-pair does not use --'+name.replace('_','-')+
+                             '; leave its legacy default and use the selected pair weights')
+    groups=pair.split('_')
+    active={'reconstruction':args.reconstruction_weight}
+    if 'pinn' in groups:
+        args.pinn=True
+        if args.pinn_weight is None:
+            args.pinn_weight=.1
+        active['pinn']=args.pinn_weight
+    elif args.pinn or (args.pinn_weight is not None and args.pinn_weight!=0):
+        raise ValueError('statistical_static excludes --pinn and positive --pinn-weight')
+    if 'static' in groups:
+        active['static']=args.static_weight
+    if 'statistical' in groups:
+        active['statistical']=args.statistical_weight
+    for name,value in active.items():
+        if not math.isfinite(value) or value<=0:
+            raise ValueError('Selected constraint pair requires positive finite '+name+' weight')
+
+
 def initialize_manifold(args):
     """Build from training data, optionally using an A contract or warm start.
 
     Fresh joint models use identity latent coordinates throughout optimization;
     resealing after training would change the predictor's coordinate system.
     """
+    prepare_constraint_pair(args)
+    pair=getattr(args,'constraint_pair',None)
     parent = None
     pretrained = args.training_mode == 'frozen' or args.initialization == 'pretrained'
     if args.a_checkpoint:
@@ -152,18 +210,26 @@ def initialize_manifold(args):
         mode = args.mode or ('enriched' if args.information else 'surface')
     if args.horizon_steps > config.horizon_steps:
         raise ValueError('Horizon exceeds the representation data contract')
+    if pair and config.history_span_steps < 2:
+        raise ValueError('--constraint-pair requires history_span_steps >= 2 for an observed adjacent pair')
+    if pair and mode!='enriched':
+        raise ValueError('--constraint-pair requires an enriched representation data contract')
     data = data_contract(args.archive, args.information, mode, config, parent)
     if pretrained:
         if not bool(reference.core.manifold_ready):
             raise ValueError('Pretrained initialization requires a sealed A checkpoint')
         if args.pinn and reference.pinn is None:
             raise ValueError('This pretrained A has no PINN; use fresh initialization with --pinn')
+        if pair=='statistical_static' and reference.pinn is not None:
+            raise ValueError('statistical_static cannot inherit a pretrained PINN; use --initialization fresh')
         model, metadata = reference, {k:v for k,v in parent.items() if k != 'model'}
         if args.bridge=='raw':
             model=RawFieldContract(config,data['schema'],data['mean'],data['scale'],
                                    data['information_metadata'],sealed=True)
     else:
         pc = parent.get('pinn_config') if parent else None
+        if pair=='statistical_static':
+            pc=None
         if args.pinn:
             from ..hybrid_pinn import HybridPINNConfig
             pc = asdict(HybridPINNConfig(levels_hpa=tuple(args.pinn_levels),
@@ -196,6 +262,18 @@ def initialize_manifold(args):
 
 def objective_weights(args, model):
     from .joint_objective import JointObjectiveWeights
+    pair=getattr(args,'constraint_pair',None)
+    if pair is not None:
+        prepare_constraint_pair(args)
+        if model.info_head is None:
+            raise ValueError('Selected constraint pair requires an information decoder')
+        groups=pair.split('_')
+        if 'pinn' in groups and model.pinn is None:
+            raise ValueError('Selected constraint pair requires an initialized PINN')
+        return JointObjectiveWeights(reconstruction=args.reconstruction_weight,physics=0.,information=0.,
+            static=args.static_weight if 'static' in groups else 0.,
+            distribution=args.statistical_weight if 'statistical' in groups else 0.,
+            pinn=args.pinn_weight if 'pinn' in groups else 0.)
     enabled = args.training_mode == 'joint' and args.bridge != 'raw'
     full = enabled and args.regularization == 'full'
     latent = args.bridge == 'latent'
@@ -224,7 +302,7 @@ def train(args):
     if not math.isfinite(args.learning_rate) or args.learning_rate<=0 or not math.isfinite(args.tendency_weight) or args.tendency_weight<0:
         raise ValueError('Invalid learning rate/tendency weight')
     torch.manual_seed(args.seed);np.random.seed(args.seed)
-    for name in ('reconstruction_weight','information_weight','static_weight','distribution_weight','physics_weight','pinn_weight'):
+    for name in ('reconstruction_weight','information_weight','static_weight','distribution_weight','physics_weight','pinn_weight','statistical_weight'):
         value=getattr(args,name)
         if value is not None and (not math.isfinite(value) or value<0):
             raise ValueError('Objective weights must be finite and nonnegative: '+name)
@@ -260,8 +338,10 @@ def train(args):
         raise ValueError('--ae-checkpoint is only used with --representation plain_ae')
     weights=objective_weights(args,a)
     # All variants share train / downstream-selection calibration / untouched validation,test.
-    target_info=bool(weights.information or weights.static or weights.distribution or weights.pinn)
-    loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info),batch_size=args.batch_size,
+    split_constraints=args.constraint_pair is not None
+    target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
+    loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info,
+        reconstruction_constraints=split_constraints),batch_size=args.batch_size,
         shuffle=(name=='train'),generator=torch.Generator().manual_seed(args.seed)) for name in ('train','calibration')]
     # A and AE construction consume different RNG amounts. Reset so equal-size
     # latent predictors start with identical weights for the same forecast seed.
@@ -282,8 +362,12 @@ def train(args):
                     prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads)
                     losses=forecast_loss(prediction,batch,temporal,leads,args.tendency_weight)
                     if config.training_mode == 'joint' and config.bridge != 'raw':
-                        from .joint_objective import joint_losses
-                        auxiliary=joint_losses(model,prediction,batch,weights,leads)
+                        if split_constraints:
+                            from .reconstruction_objective import reconstruction_constraint_losses
+                            auxiliary=reconstruction_constraint_losses(model,batch,weights,args.constraint_pair)
+                        else:
+                            from .joint_objective import joint_losses
+                            auxiliary=joint_losses(model,prediction,batch,weights,leads)
                         losses.update(auxiliary)
                         losses['loss']=losses['loss']+auxiliary['regularization']
                     if training and optimizer is not None:
@@ -305,6 +389,18 @@ def train(args):
             if not torch.equal(value.cpu(),model.bridge.manifold.state_dict()[key].cpu()):
                 raise AssertionError('Frozen representation changed: '+key)
     metadata={k:v for k,v in p.items() if k!='model'}
+    constraint_path=('observed_reconstruction' if split_constraints else
+                     'forecast_trajectory' if config.training_mode=='joint' and config.bridge=='latent' else None)
+    constraint_contract=({'version':'climate_manifold.reconstruction_constraints.v1',
+        'pair':args.constraint_pair,'groups':args.constraint_pair.split('_'),
+        'observed_pair':'origin-6h,origin','reconstruction':'common surface and dynamic-information pointwise reconstruction',
+        'pinn_tendency_supervision':False} if split_constraints else None)
+    auxiliary_modules=() if model.bridge.manifold is None else (
+        model.bridge.manifold.info_head,model.bridge.manifold.pinn)
+    auxiliary_ids={id(parameter) for module in auxiliary_modules if module is not None
+                   for parameter in module.parameters()}
+    forecast_parameters=sum(parameter.numel() for parameter in parameters if id(parameter) not in auxiliary_ids)
+    constraint_parameters=sum(parameter.numel() for parameter in parameters if id(parameter) in auxiliary_ids)
     payload={'format':FORMAT,'a_was_sealed':bool(a.core.manifold_ready),'a_metadata':metadata,
         'a_sha256':digest(args.a_checkpoint) if args.a_checkpoint else None,
         'config':asdict(config),'constants':constants,'model':best_state,'horizon_steps':args.horizon_steps,
@@ -335,9 +431,11 @@ def train(args):
             # Shared requested setting; objective_weights records the effective
             # zero reconstruction coefficient for direct raw controls.
             'reconstruction_weight':args.reconstruction_weight if config.training_mode=='joint' else 0.,
+            **({'constraint_path':constraint_path} if split_constraints else {}),
             'train_starts_sha256':hashlib.sha256(json.dumps(loaders[0].dataset.starts).encode()).hexdigest(),
             'selection_starts_sha256':hashlib.sha256(json.dumps(loaders[1].dataset.starts).encode()).hexdigest()},
         'trainable_parameters':sum(x.numel() for x in parameters),'total_parameters':sum(x.numel() for x in model.parameters()),
+        'forecast_parameters':forecast_parameters,'constraint_parameters':constraint_parameters,
         'conditioning':{'direct_origin_information':bool(config.condition_information and config.bridge=='raw'
                             and (args.model in ('mlp','neural_ode') or args.model=='climode' and raw_backend=='matched') and p['mode']=='enriched'),
                         'manifold_origin_information':bool(config.bridge!='raw' and p['mode']=='enriched'),
@@ -346,14 +444,23 @@ def train(args):
         'a_frozen':config.training_mode=='frozen' and config.bridge!='raw',
         'regularization':('none' if config.bridge=='raw' else args.regularization) if config.training_mode=='joint' else 'legacy',
         'objective_weights':asdict(weights),
+        'constraint_pair':args.constraint_pair,'constraint_path':constraint_path,'constraint_contract':constraint_contract,
+        'split_objective_weights':({'reconstruction':weights.reconstruction,'pinn':weights.pinn,
+            'statistical':weights.distribution,'static':weights.static} if split_constraints else None),
         'initialization':'pretrained' if config.training_mode=='frozen' else args.initialization,
         'representation_training':'jointly_trained' if config.training_mode=='joint' and config.bridge!='raw' else 'frozen' if config.bridge!='raw' else 'none',
         'latent_coordinates':('not_applicable' if config.bridge=='raw' else
             'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal'),
-        'objective_semantics':{'forecast':'field MSE or Gaussian NLL plus physical-time tendency',
+        'objective_semantics':({'forecast':'E -> predictor -> D; future field MSE or Gaussian NLL plus physical-time tendency',
+            'reconstruction':'shared E -> D on co-located observed origin-6h,origin; predictor bypassed',
+            'statistical':'selected surface and dynamic-information spatial marginal quantiles on observed reconstructions; not ensemble CRPS',
+            'static':'selected area-weighted static information L2 on observed reconstructions',
+            'pinn':'selected observed reconstruction pair residuals and closure penalty; no tendency supervision or forecast-path PINN',
+            'information':'legacy pointwise dynamic-information and surface-physics losses disabled'} if split_constraints else
+            {'forecast':'field MSE or Gaussian NLL plus physical-time tendency',
             'distribution':'optional deterministic spatial quantiles of dynamic information fields; not ensemble CRPS',
             'physics':'future-field diagnostic matching, not exact conservation',
-            'pinn':'same forecast trajectory; no independent A drift or auxiliary sampler'},
+            'pinn':'same forecast trajectory; no independent A drift or auxiliary sampler'}),
         'resume':'optimizer/RNG resume not implemented'}
     output.parent.mkdir(parents=True,exist_ok=True)
     torch.save(payload,output)
@@ -378,6 +485,10 @@ def parser():
     p.add_argument('--mode',choices=['surface','enriched'],help='Default: enriched when --information is supplied')
     p.add_argument('--regularization',choices=['full','none'],default='full',
         help='none keeps common forecast/tendency/reconstruction losses for matched joint controls')
+    p.add_argument('--constraint-pair',choices=CONSTRAINT_PAIRS,default=None,
+        help='Opt-in paired constraints on an observed E -> D path, separate from forecasting')
+    p.add_argument('--statistical-weight',type=float,default=.1,
+        help='Spatial marginal quantile weight for split constraint pairs; legacy route uses --distribution-weight')
     for name,value in dict(manifold_dim=64,manifold_hidden_dim=512,context_dim=64,history_steps=6,history_stride=4).items():
         p.add_argument('--'+name.replace('_','-'),type=int,default=value)
     for name,value in dict(reconstruction_weight=.1,information_weight=.1,static_weight=.05,
