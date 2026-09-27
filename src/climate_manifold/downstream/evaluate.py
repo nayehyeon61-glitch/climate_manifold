@@ -90,6 +90,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'latent_shape':p.get('latent_shape'),
             'forecast_state_grid':p.get('forecast_state_grid'),
             'transport_contract':p.get('transport_contract'),
+            'predictor_provenance':p.get('predictor_provenance'),
             'regularization':p.get('regularization','legacy'),
             'objective_weights':p.get('objective_weights',{}),
             'constraint_pair':p.get('constraint_pair'),

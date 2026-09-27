@@ -1,6 +1,13 @@
 """Explicit separation of latent forecasting and decoded-grid auxiliary studies."""
 
 
+def _sequence_supported(cfg):
+    return (cfg.get('training_mode') == 'joint' and cfg.get('latent_layout') == 'spatial'
+            and cfg.get('anchor') == 'none' and cfg.get('representation','climate_manifold') == 'climate_manifold'
+            and (cfg['bridge'] == 'latent'
+                 or cfg['bridge'] == 'raw' and cfg.get('raw_backend') == 'matched'))
+
+
 def experiment_contract(config):
     cfg = vars(config) if not isinstance(config, dict) else config
     bridge = cfg['bridge']
@@ -11,7 +18,8 @@ def experiment_contract(config):
                      and latent_layout == 'spatial' and training_mode == 'joint')
     matched_raw = (bridge == 'raw' and cfg.get('raw_backend', 'legacy') == 'matched'
                    and latent_layout == 'spatial' and training_mode == 'joint')
-    primary = ((cfg['model'] in ('mlp', 'neural_ode', 'persistence') or latent_climode or matched_raw)
+    sequence = cfg['model'] in ('convlstm', 'simvp') and _sequence_supported(cfg)
+    primary = ((cfg['model'] in ('mlp', 'neural_ode', 'persistence') or latent_climode or matched_raw or sequence)
                and bridge in ('raw', 'latent') and cfg['anchor'] == 'none')
     return {
         'suite': 'primary' if primary else 'auxiliary',
@@ -36,10 +44,13 @@ def experiment_contract(config):
 def validate_experiment(config, requested):
     if requested not in ('primary', 'auxiliary'):
         raise ValueError('Experiment must be primary or auxiliary')
+    cfg = vars(config) if not isinstance(config, dict) else config
+    if cfg['model'] in ('convlstm', 'simvp') and not _sequence_supported(cfg):
+        raise ValueError('ConvLSTM/SimVP require joint spatial latent or matched raw forecasting, anchor=none')
     contract = experiment_contract(config)
     if requested == 'primary' and contract['suite'] != 'primary':
         raise ValueError('Primary experiments require raw or encoder -> latent model -> decoder, '
-                         'anchor=none and MLP/Neural ODE or joint spatial latent/matched-raw ClimODE '
+                         'anchor=none and MLP/Neural ODE or joint spatial latent/matched-raw ClimODE/ConvLSTM/SimVP '
                          '(raw persistence is allowed). Use --experiment auxiliary for legacy raw '
                          'or decoded ClimODE, decoded grids or residual anchoring.')
     return {**contract, 'suite': requested}

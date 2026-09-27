@@ -8,7 +8,7 @@ import sys
 import pytest
 
 
-def run_runner(tmp_path, **settings):
+def run_runner(tmp_path, script_name='run_pairwise_manifold_comparison.sh', **settings):
     stub = tmp_path / 'record-python'
     stub.write_text('#!' + sys.executable + '\nimport json,os,sys\n'
         'with open(os.environ["CALLS"], "a") as f: '
@@ -19,7 +19,7 @@ def run_runner(tmp_path, **settings):
         ARCHIVE='surface archive.npz', INFO='physical information',
         RUN=str(tmp_path / 'run'))
     env.update(settings)
-    script = Path(__file__).resolve().parents[1] / 'scripts/run_pairwise_manifold_comparison.sh'
+    script = Path(__file__).resolve().parents[1] / 'scripts' / script_name
     result = subprocess.run(['bash', str(script)], env=env, text=True, capture_output=True)
     commands = [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
     return result, commands
@@ -105,3 +105,53 @@ def test_invalid_raw_switch_fails_before_training(tmp_path, value):
     result, commands = run_runner(tmp_path, INCLUDE_RAW=value)
     assert result.returncode != 0 and not commands
     assert 'INCLUDE_RAW must be 0 or 1' in result.stderr
+
+
+def test_five_predictors_with_one_pair_and_raw_have_ten_fits(tmp_path):
+    families = 'mlp neural_ode climode convlstm simvp'
+    result, commands = run_runner(tmp_path, MODELS=families, PAIRS='pinn_statistical', SEEDS='7')
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 10
+    assert {(option(row, '--model'), option(row, '--bridge')) for row in training} == {
+        (family, bridge) for family in families.split() for bridge in ('raw', 'latent')}
+    assert all(option(row, '--batch-size') == '16' for row in training)
+
+
+def test_sequence_predictors_alone_with_one_pair_have_four_fits(tmp_path):
+    result, commands = run_runner(tmp_path, MODELS='convlstm simvp', PAIRS='pinn_statistical', SEEDS='7')
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 4
+    for row in training:
+        assert option(row, '--training-mode') == 'joint'
+        assert option(row, '--latent-layout') == 'spatial'
+        assert option(row, '--history-steps') == '6'
+        assert option(row, '--history-stride') == '4'
+        assert option(row, '--horizon-steps') == '20'
+        if option(row, '--bridge') == 'raw':
+            assert option(row, '--raw-backend') == 'matched'
+
+
+def test_primary_runner_accepts_sequence_predictors_as_spatial_joint(tmp_path):
+    result, commands = run_runner(tmp_path, script_name='run_model_comparison.sh',
+        MODELS='convlstm simvp', SEEDS='7', BATCH_SIZE='16')
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 6
+    for row in training:
+        assert option(row, '--training-mode') == 'joint'
+        assert option(row, '--latent-layout') == 'spatial'
+        assert option(row, '--batch-size') == '16'
+
+
+@pytest.mark.parametrize('settings,message', [
+    ({'TRAINING_MODE': 'frozen'}, 'TRAINING_MODE=joint'),
+    ({'LATENT_LAYOUT': 'global'}, 'LATENT_LAYOUT=spatial'),
+    ({'RAW_BACKEND': 'legacy'}, 'RAW_BACKEND=matched'),
+])
+def test_primary_sequence_predictors_reject_unsupported_routes_before_training(tmp_path, settings, message):
+    result, commands = run_runner(tmp_path, script_name='run_model_comparison.sh',
+        MODELS='convlstm simvp', SEEDS='7', **settings)
+    assert result.returncode != 0 and not commands
+    assert message in result.stderr

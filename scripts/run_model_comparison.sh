@@ -2,6 +2,18 @@
 # Joint comparison: direct model, E-F-D without extra constraints, E-F-D with constraints.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+read -r -a families <<< "${MODELS:-neural_ode climode}"
+spatial_sequence=0
+for family in "${families[@]}"; do
+  case "$family" in
+    convlstm|simvp)
+      spatial_sequence=1
+      [[ "${TRAINING_MODE:-joint}" == joint ]] || { echo "$family requires TRAINING_MODE=joint" >&2; exit 2; }
+      [[ "${LATENT_LAYOUT:-spatial}" == spatial ]] || { echo "$family requires LATENT_LAYOUT=spatial" >&2; exit 2; }
+      [[ "${RAW_BACKEND:-matched}" == matched ]] || { echo "$family requires RAW_BACKEND=matched" >&2; exit 2; }
+      ;;
+  esac
+done
 if [[ "${TRAINING_MODE:-joint}" == frozen ]]; then
   exec bash scripts/run_frozen_model_comparison.sh
 fi
@@ -12,12 +24,11 @@ fi
 [[ "${ANCHOR:-none}" == none ]] || { echo 'Primary experiments require ANCHOR=none (pure decoder output)' >&2; exit 2; }
 PYTHON="${PYTHON:-python}"
 export PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}"
-read -r -a families <<< "${MODELS:-neural_ode climode}"
 read -r -a seeds <<< "${SEEDS:-7 19 43}"
 [[ ${#families[@]} -gt 0 && ${#seeds[@]} -gt 0 ]] || { echo 'MODELS and SEEDS must be nonempty' >&2; exit 2; }
 for family in "${families[@]}"; do
   case "$family" in
-    mlp|neural_ode|climode) ;;
+    mlp|neural_ode|climode|convlstm|simvp) ;;
     *) echo "Unsupported primary model: $family" >&2; exit 2;;
   esac
 done
@@ -34,7 +45,7 @@ setup=(--training-mode joint --initialization "$initialization"
   --context-dim "${CONTEXT_DIM:-64}" --history-steps "${HISTORY_STEPS:-6}" --history-stride "${HISTORY_STRIDE:-4}")
 if [[ -n "${LATENT_LAYOUT:-}" ]]; then
   setup+=(--latent-layout "$LATENT_LAYOUT")
-elif [[ "$initialization" == fresh ]]; then
+elif [[ "$initialization" == fresh || "$spatial_sequence" == 1 ]]; then
   setup+=(--latent-layout spatial)
 fi
 [[ -z "${A_CHECKPOINT:-}" ]] || setup+=(--a-checkpoint "$A_CHECKPOINT")

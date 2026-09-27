@@ -309,6 +309,7 @@ def compare(reports,output,climode_reference_reports=None):
             **_regime(report), representation_sha256=report.get('representation_sha256'),
             latent_layout=cfg.get('latent_layout','global') if cfg['bridge']=='latent' else None,
             latent_shape=report.get('latent_shape'),implementation=report.get('implementation'),
+            predictor_provenance=report.get('predictor_provenance'),
             raw_backend=cfg.get('raw_backend','legacy') if cfg['bridge']=='raw' else None,
             objective_weights=report.get('objective_weights'),
             constraint_pair=report.get('constraint_pair'),constraint_path=report.get('constraint_path'),

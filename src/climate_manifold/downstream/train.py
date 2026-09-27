@@ -16,12 +16,35 @@ from ..model import ClimateManifold
 from ..train import load_checkpoint as load_a, data_contract, write_json, source_commit
 from ..physical_information import digest, information_digest
 from ..temporal_supervision import TemporalWindowDataset, TemporalObjective
-from .pipeline import ForecastPipeline, PredictorConfig
+from .pipeline import ForecastPipeline, PredictorConfig, SEQUENCE_IMPLEMENTATIONS
 from .protocol import validate_experiment
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
 CONSTRAINT_PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static')
+
+
+def sequence_predictor_provenance(model):
+    """Record the local forecast adaptations separately from original benchmarks."""
+    family = model.config.model
+    if family not in SEQUENCE_IMPLEMENTATIONS:
+        return None
+    predictor = model.predictor
+    return {
+        'family': family,
+        'implementation': SEQUENCE_IMPLEMENTATIONS[family],
+        'upstream_source': getattr(predictor, 'upstream_source', None),
+        'upstream_commit': getattr(predictor, 'upstream_commit', None),
+        'implementation_variant': getattr(predictor, 'implementation_variant', None),
+        'history_steps': model.a_config.history_steps,
+        'history_dt_hours': model.a_config.history_stride*model.a_config.step_hours,
+        'output_time_unit': 'hours',
+        'uncertainty': 'deterministic',
+        'adaptation': ('spatial recurrent gates with physical-time-conditioned future evolution'
+                       if family == 'convlstm' else
+                       'spatial encoder/gSTA translator/decoder with lead-conditioned temporal mixing'),
+        'reference_equivalence': 'local climate forecasting adaptation, not original paper benchmark reproduction',
+    }
 
 
 class RawFieldContract:
@@ -411,12 +434,14 @@ def train(args):
                                    if representation_payload else None),
         'lead_hours':leads.cpu().tolist(),'options':vars(args),'best_epoch':best_epoch,'best_selection_state_mse':best,
         'selection_split':'calibration','training_seconds':time.perf_counter()-started,'source_commit':source_commit(),
-        'implementation':('raw_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='raw' and raw_backend=='matched'
+        'implementation':(SEQUENCE_IMPLEMENTATIONS[args.model] if args.model in SEQUENCE_IMPLEMENTATIONS
+            else 'raw_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='raw' and raw_backend=='matched'
             else 'raw_spatial_'+args.model if args.bridge=='raw' and raw_backend=='matched'
             else 'latent_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='latent'
             else 'official_climode_custom_data_adaptation' if args.model=='climode'
             else 'spatial_'+args.model if args.bridge=='latent' and a.config.representation_kind=='spatial'
             else 'local_'+args.model),
+        'predictor_provenance':sequence_predictor_provenance(model),
         'constants_sha256':digest(args.constants) if constants is not None else None,
         'latent_shape':list(a.config.latent_grid) if a.config.representation_kind=='spatial' and config.bridge=='latent' else None,
         'forecast_state_grid':list(a.config.grid if config.bridge!='latent' else a.config.latent_grid)
@@ -437,7 +462,7 @@ def train(args):
         'trainable_parameters':sum(x.numel() for x in parameters),'total_parameters':sum(x.numel() for x in model.parameters()),
         'forecast_parameters':forecast_parameters,'constraint_parameters':constraint_parameters,
         'conditioning':{'direct_origin_information':bool(config.condition_information and config.bridge=='raw'
-                            and (args.model in ('mlp','neural_ode') or args.model=='climode' and raw_backend=='matched') and p['mode']=='enriched'),
+                            and (args.model in ('mlp','neural_ode','convlstm','simvp') or args.model=='climode' and raw_backend=='matched') and p['mode']=='enriched'),
                         'manifold_origin_information':bool(config.bridge!='raw' and p['mode']=='enriched'),
                         'climode_static_constants':constants is not None,
                         'observed_information_available':p['mode']=='enriched'},
@@ -498,7 +523,7 @@ def parser():
     p.add_argument('--pinn-levels',nargs='+',type=int,default=[500,850])
     p.add_argument('--pinn-weight',type=float,default=None,help='Default: enabled PINN config weight, otherwise zero')
     p.add_argument('--information');p.add_argument('--constants')
-    p.add_argument('--model',choices=['mlp','neural_ode','climode','persistence'],default='neural_ode')
+    p.add_argument('--model',choices=['mlp','neural_ode','climode','convlstm','simvp','persistence'],default='neural_ode')
     p.add_argument('--experiment',choices=['primary','auxiliary'],default='primary')
     p.add_argument('--representation',choices=['climate_manifold','plain_ae'],default='climate_manifold')
     p.add_argument('--ae-checkpoint')

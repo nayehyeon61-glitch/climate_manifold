@@ -12,6 +12,9 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 직접 예측 비교군을 포함해 기본 **2개 예측기 × 4개 실험군 = seed당 8회**를 실행합니다.
 기본 batch는 **16**, seed는 `7 19 43`입니다. `SEEDS=7`이면 총 8회,
 `PAIRS=pinn_statistical SEEDS=7`이면 직접 예측 비교군을 포함해 총 4회입니다.
+선택 예측기는 `mlp neural_ode climode convlstm simvp`이며, 기본 2종은 그대로 유지합니다.
+5종 모두에서 PINN+Statistical과 Raw를 비교하면 seed당 **10회**입니다.
+ConvLSTM·SimVP-gSTA는 시간 조건을 반영한 joint spatial adaptation입니다.
 기존 `run_model_comparison.sh`는 이전의 예측 궤적 제약 실험을 재현합니다.
 
 | 구성 | 포함 내용 |

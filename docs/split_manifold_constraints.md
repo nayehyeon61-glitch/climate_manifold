@@ -8,7 +8,7 @@
 flowchart TD
     H["관측 history + origin 정보"] --> E["공유 encoder E"]
     O["관측 t−6h, t + 각 시점의 정보"] --> E
-    E -->|"예측 경로"| F["Neural ODE / ClimODE F"]
+    E -->|"예측 경로"| F["선택한 공간 예측기 F"]
     F --> D["공유 기상장 decoder D"]
     E -->|"관측 복원 경로"| D
     E --> I["정보 decoder D_I"]
@@ -18,7 +18,7 @@ flowchart TD
 ```
 
 `D`는 동일한 가중치로 관측 복원과 미래 기상장 출력을 담당합니다. `D_I`는 상층 변수와
-지형 정보를 복원하는 보조 decoder입니다. 새로운 예측기나 별도의 encoder를 추가하지 않습니다.
+지형 정보를 복원하는 보조 decoder입니다. 제약 경로를 위해 예측기나 encoder를 별도로 복제하지 않습니다.
 PINN closure도 관측 복원 latent에서만 계산합니다. 이 학습의 추론 경로는 그대로
 `관측 history → E → F → D → 미래 기상장`입니다.
 
@@ -113,7 +113,68 @@ bash scripts/run_pairwise_manifold_comparison.sh
 각 실행은 공통 calibration 미래 MSE로 checkpoint를 선택하고 같은 물리장 평가를 사용합니다.
 PINN+Statistical만 먼저 실행하려면 `PAIRS=pinn_statistical`로 바꿉니다. 이때는
 2개 예측기 × (Raw + PINN·Statistical) × 1개 seed로 총 4회입니다.
-`MODELS=mlp`도 지원하지만 기본 예측기 2종에는 포함하지 않습니다.
+`MODELS=mlp`, `MODELS=convlstm`, `MODELS=simvp`도 지원하지만 기본 예측기 2종에는 포함하지 않습니다.
+
+## 다섯 예측기의 PINN+Statistical + Raw 비교
+
+`mlp`, `neural_ode`, `climode`, `convlstm`, `simvp` 모두 동일한 자료 계약에서
+`data → F → future fields`와 `E → F → D`를 비교할 수 있습니다. ConvLSTM과 SimVP-gSTA는
+관측/예측 시간 정보를 조건으로 받는 공간 예측기이며, **joint spatial + matched Raw**만
+지원합니다. 원본 논문 checkpoint 대신 이 프로젝트의 자료·출력 간격에 맞춘 adaptation을
+새로 학습합니다. [예측기 설명](downstream.md#선택-가능한-예측기)과
+[출처·수정 내역](../THIRD_PARTY_NOTICES.md)을 참고하세요.
+
+기존 Python 학습 환경을 활성화하고 저장소 루트에서 실행합니다. ARCHIVE와 INFO의 두 경로를
+실제 자료 경로로 변경하세요. INFO에는 PINN용 변수와 실제 지표기압 `sp`가 필요합니다.
+
+```bash
+(
+set -euo pipefail
+
+git fetch origin
+git switch feature/split-manifold-pairwise-constraints
+git pull --ff-only origin feature/split-manifold-pairwise-constraints
+python -m pip install -e '.[forecast]'
+
+export ARCHIVE="/absolute/path/to/surface.npz"
+export INFO="/absolute/path/to/pinn_information_shards"
+export RUN="runs/pinn_statistical_five_models_$(date +%Y%m%d_%H%M%S)"
+
+export MODELS="mlp neural_ode climode convlstm simvp"
+export PAIRS="pinn_statistical" INCLUDE_RAW=1 SEEDS=7
+export TRAINING_MODE=joint INITIALIZATION=fresh LATENT_LAYOUT=spatial ANCHOR=none
+unset A_CHECKPOINT CLIMODE_REFERENCE_DIR
+
+export LATENT_CHANNELS=32 SPATIAL_DOWNSAMPLE=2 SPATIAL_HIDDEN_DIM=64 HIDDEN_DIM=128
+export HISTORY_STEPS=6 HISTORY_STRIDE=4 HORIZON_STEPS=20
+export PINN_LEVELS="500 850" PINN_WEIGHT=0.1 STATISTICAL_WEIGHT=0.1 STATIC_WEIGHT=0
+export RECONSTRUCTION_WEIGHT=0.1 TENDENCY_WEIGHT=0.1
+export PYTHON=python DEVICE=cuda EPOCHS=20 BATCH_SIZE=16 LEARNING_RATE=0.001
+export WINDOW_STRIDE=4 MAX_WINDOWS=0 MAX_CASES=0 ORIGIN_STRIDE=1
+
+mkdir -p logs
+bash scripts/run_pairwise_manifold_comparison.sh \
+  2>&1 | tee "logs/${RUN##*/}.log"
+)
+```
+
+과거 6개 관측(24시간 간격)에서 미래 20개 장(6시간 간격, 120시간)을 예측합니다.
+Raw와 E→F→D는 같은 history와 origin 정보에 접근하고, 미래 정답을 입력으로 받지 않습니다.
+모델별 latent 표현의 학습과 예측기 학습은 함께 진행합니다. Raw는 manifold 보조 손실을
+사용하지 않습니다. 모델별 용량과 연산량은 다르므로 parameter 수·실행 비용도 함께 보고합니다.
+
+| 선택 | seed당 학습 횟수 |
+|---|---|
+| 5개 모델 + PINN·Statistical + Raw | 10회 |
+| `MODELS="convlstm simvp"` + PINN·Statistical + Raw | 4회 |
+| 5개 모델 + 세 제약 조합 + Raw | 20회 |
+
+세 조합을 모두 실행하려면 `PAIRS="pinn_statistical pinn_static statistical_static"`로 바꾸고
+`STATIC_WEIGHT=0.05`를 설정합니다. `SEEDS="7 19 43"`이면 표의 횟수의 3배입니다.
+Raw는 항상 모델·seed별 한 번만 학습합니다. 각 모델의 checkpoint·validation 점수와
+`comparison.json`, Raw 대비 `comparison.raw-effects.csv`를 새 RUN 폴더에서 확인할 수 있습니다.
+
+## 단일 조합과 기존 경로
 
 단일 조합은 다음과 같이 실행합니다.
 
@@ -153,13 +214,20 @@ Statistical+Static은 Static을 공유하면서 다른 제약을 교체하는 �
 
 ## 구현 검증
 
-전체 테스트 326개를 통과했습니다. 제약만 역전파했을 때 예측기 F의 gradient가 없는지,
+전체 테스트 410개를 통과했습니다. 제약만 역전파했을 때 예측기 F의 gradient가 없는지,
 미래 information을 바꾸어도 관측 제약이 변하지 않는지, 세 조합의 활성 항과 checkpoint
 재로딩이 올바른지를 확인했습니다. 추가로 합성 자료에서 Neural ODE·ClimODE × (Raw + 세 조합)을
 batch 16으로 각각 1 epoch 학습하고 120시간 예측·평가·집계를 완료했습니다. 8개 실험 모두
 동일한 평가 origin에서 유한한 출력을 생성했으며, Raw 대비 6개 비교와 제약 조합 간
 6개 비교를 별도로 기록했습니다. 이는 소프트웨어 동작 검증이며,
 실제 기상 예측력이나 과적합 감소의 근거는 아닙니다.
+
+ConvLSTM·SimVP 추가 후에도 각 모델의 Raw/PINN+Statistical 경로를 batch 16,
+history 6장×24시간, horizon 20장×6시간으로 각각 1 epoch 학습했습니다.
+4개 실행 모두 checkpoint 재로딩·평가·비교를 완료했고, 동일한 두 평가 origin에서
+120시간까지 유한한 출력을 생성했습니다. 이 검사는 작은 4×8 합성 격자와
+hidden width 8/latent channels 2의 CPU 실행입니다. 실제 ERA5 예측력과
+기본 width 128 설정의 GPU 메모리 적합성은 별도 실험이 필요합니다.
 
 ## 코드 위치
 

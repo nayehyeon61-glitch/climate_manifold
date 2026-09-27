@@ -7,6 +7,12 @@ from .bridge import ManifoldBridge
 from .baselines import HistoryPredictor
 
 
+SEQUENCE_IMPLEMENTATIONS = {
+    'convlstm': 'convlstm_time_conditioned_adaptation_v1',
+    'simvp': 'simvp_gsta_lead_conditioned_adaptation_v1',
+}
+
+
 @dataclass(frozen=True)
 class PredictorConfig:
     model: str = 'neural_ode'
@@ -29,7 +35,7 @@ class PredictorConfig:
     raw_backend: str = 'legacy'
 
     def __post_init__(self):
-        if self.model not in ('mlp','neural_ode','climode','persistence'):
+        if self.model not in ('mlp','neural_ode','climode','persistence',*SEQUENCE_IMPLEMENTATIONS):
             raise ValueError('Unknown downstream model')
         if self.bridge not in ManifoldBridge.MODES or self.anchor not in ('none','origin'):
             raise ValueError('Invalid bridge/anchor')
@@ -41,10 +47,15 @@ class PredictorConfig:
             raise ValueError('Latent layout must be global or spatial')
         if self.raw_backend not in ('legacy', 'matched'):
             raise ValueError('Raw backend must be legacy or matched')
+        if self.model in SEQUENCE_IMPLEMENTATIONS:
+            if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
+                    or self.bridge not in ('raw', 'latent')
+                    or self.bridge == 'raw' and self.raw_backend != 'matched'):
+                raise ValueError('ConvLSTM/SimVP require joint spatial latent or matched raw forecasting')
         if self.raw_backend == 'matched' and self.bridge == 'raw':
             if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
-                    or self.model not in ('mlp', 'neural_ode', 'climode')):
-                raise ValueError('Matched raw controls require joint spatial MLP, Neural ODE or ClimODE')
+                    or self.model not in ('mlp', 'neural_ode', 'climode', *SEQUENCE_IMPLEMENTATIONS)):
+                raise ValueError('Matched raw controls require a supported joint spatial predictor')
         if self.training_mode == 'joint' and (self.model == 'persistence' or self.anchor != 'none'):
             raise ValueError('Joint training requires a trainable predictor and anchor=none')
         if self.representation == 'plain_ae' and (self.bridge != 'latent' or self.model not in ('mlp', 'neural_ode')):
@@ -110,6 +121,19 @@ class ForecastPipeline(nn.Module):
             else:
                 self.predictor = HistoryPredictor(dimension,manifold.config.history_steps,config.hidden_dim,
                     info_dim if config.condition_information and config.bridge=='raw' else 0, config.model, config.ode_substeps)
+        elif config.model in SEQUENCE_IMPLEMENTATIONS:
+            if config.model == 'convlstm':
+                from .convlstm import ConvLSTMPredictor
+                constructor = ConvLSTMPredictor
+            else:
+                from .simvp import SimVPPredictor
+                constructor = SimVPPredictor
+            self.predictor = constructor(
+                selected.config.grid if matched_raw else selected.config.latent_grid,
+                selected.config.history_steps, hidden=config.hidden_dim,
+                history_dt_hours=selected.config.history_stride*selected.config.step_hours,
+                periodic_lon=periodic_lon if matched_raw else selected.core.physics.periodic_lon,
+                information_channels=information_channels)
         elif config.model == 'climode':
             if schema is None:raise ValueError('ClimODE construction requires the archive schema')
             if config.bridge == 'latent' or matched_raw:

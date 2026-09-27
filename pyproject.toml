@@ -30,6 +30,7 @@ train-plain-manifold-ae = "climate_manifold.downstream.plain_ae:main"
 
 [tool.setuptools.package-data]
 "climate_manifold._vendor.climode" = ["LICENSE"]
+"climate_manifold._vendor.openstl" = ["LICENSE", "NOTICE.md"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

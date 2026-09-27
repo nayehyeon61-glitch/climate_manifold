@@ -30,3 +30,25 @@ Please cite the original work when reporting ClimODE experiments:
   url={https://openreview.net/forum?id=xuY33XhEGR}
 }
 ```
+
+## OpenSTL SimVP-gSTA — Apache-2.0
+
+Source: https://github.com/chengtan9907/OpenSTL
+
+Pinned commit: `eecf8a3078f0a178dbc7b28723da20f94ce36985`.
+
+`src/climate_manifold/_vendor/openstl/gsta.py` is a modified, torch-only subset
+of OpenSTL's spatial encoder/decoder, gSTA translator, and VAN-derived MixMlp.
+The full Apache-2.0 license and detailed source/change provenance are included
+in that directory as `LICENSE` and `NOTICE.md`, including in installed packages.
+
+`downstream/simvp.py` adds explicit observation spacing, calendar and origin-only
+information conditioning, and a direct lead-query output adapter. It does not
+use OpenSTL's equal-length recursive block forecast. Group normalization,
+geographic padding, and reduced configurable widths also differ from the
+original benchmark. Report this variant as **adapted SimVP-gSTA**, identifier
+`openstl_gsta_direct_lead_v1`, not the unchanged paper model. No pretrained
+weights are bundled. Cite Gao et al., *SimVP* (CVPR 2022), Tan et al., *SimVP:
+Towards Simple yet Powerful Spatiotemporal Predictive Learning*
+(arXiv:2211.12509), and Tan et al., *OpenSTL* (NeurIPS 2023 Datasets and
+Benchmarks).

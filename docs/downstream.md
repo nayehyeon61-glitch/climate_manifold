@@ -4,6 +4,9 @@
 미래 기상장 손실이 decoder·예측기·encoder까지 전달됩니다. A checkpoint나 Plain AE의
 사전학습은 필요하지 않습니다. Hydra B/C, MoE, filtering은 포함하지 않습니다.
 세부 손실과 단일 실행 예제는 [joint_training.md](joint_training.md)를 참고하세요.
+이 브랜치의 **관측 복원 PINN·Statistical/Static 쌍별 실험과 Raw 비교군**은
+[split_manifold_constraints.md](split_manifold_constraints.md)의 runner를 사용합니다.
+아래 3-way 실험은 `--constraint-pair`를 지정하지 않은 기존 경로입니다.
 
 ## 주실험: 직접 예측과 공동 학습의 3-way 비교
 
@@ -15,7 +18,7 @@
 
 기본 Neural ODE와 ClimODE 각각 위 세 비교군을 실행합니다. Raw는 같은 공간 예측기 core를
 원본 기상 격자에 직접 적용하며, 모델에 별도 manifold encoder/decoder가 없습니다.
-모델 자체의 CNN feature/context 처리는 유지합니다. MLP는 선택적으로 실행할 수 있습니다.
+모델 자체의 CNN feature/context 처리는 유지합니다. MLP·ConvLSTM·SimVP도 선택적으로 실행할 수 있습니다.
 **Seed마다 모델 전체를 새로 학습**하고, 같은 seed의 E–F–D off/on pair는
 같은 초기화와 학습 예산을 사용합니다.
 Reconstruction-only AE와 미래 감독을 받은 A를 비교하는 기존 실험보다 추가 제약의 효과를
@@ -48,6 +51,41 @@ velocity 동역학을 잠재 격자에 적용하는 adaptation입니다. E/D와 
 주실험에서는 `--anchor none`을 강제하여 원본 격자의 복원 잔차로 bottleneck을 우회하지
 않습니다. 출력이 decoder의 상에 있다는 사실만으로 엄밀한 smooth manifold나 물리적
 타당성이 보장되지는 않습니다. 미래 데이터는 loss/사후 진단의 목표이며 forward 입력이 아닙니다.
+
+## 선택 가능한 예측기
+
+| `MODELS` 값 | 예측기 | Raw / manifold 연결 |
+|---|---|---|
+| `mlp` | 공간 표현에 적용하는 NN 예측기 | 원본 격자 / 공간 latent |
+| `neural_ode` | CNN vector field를 적분하는 Neural ODE | 원본 격자 / 공간 latent |
+| `climode` | 학습한 transport와 velocity 동역학의 ClimODE adaptation | matched Raw / latent ClimODE |
+| `convlstm` | 시간 정보를 조건으로 받는 convolutional LSTM | matched Raw / 공간 E→ConvLSTM→D |
+| `simvp` | 시간 정보를 조건으로 받는 SimVP-gSTA adaptation | matched Raw / 공간 E→SimVP→D |
+
+기본 `MODELS="neural_ode climode"`는 유지합니다. ConvLSTM과 SimVP는 **joint + spatial**
+경로를 지원하며 Raw 비교군은 `--raw-backend matched`를 사용합니다. Frozen, global latent,
+legacy Raw/decoded 경로로 실행하지 않습니다. 두 새 예측기는 PyTorch로 구현되며 별도 패키지가
+필요하지 않습니다. 기존 설치 명령 `python -m pip install -e '.[forecast]'`를 그대로 사용합니다.
+
+두 예측기 모두 관측 history, 실제 시간 정보, origin 상층/지형 정보를 조건으로 받습니다.
+기본 입력은 24시간 간격 6장, 출력은 6시간 간격 20장(120시간)입니다. Raw와 manifold 실험은
+동일한 관측 자료·시간 조건을 사용합니다. Raw에서도 모델 내부의 convolutional feature 처리는
+유지되지만, 별도의 Climate Manifold E/D와 정보 decoder는 사용하지 않습니다.
+
+ConvLSTM과 SimVP-gSTA는 이 자료·시간·출력 계약에 맞춘 **adaptation**입니다. 원논문 checkpoint를
+불러오거나 원논문의 벤치마크 성능을 재현하는 명령이 아닙니다. 출처와 라이선스·수정 범위는
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)를 참고하세요. 이 구현의 예측은 결정론적이며,
+별도의 앙상블/확률 head를 추가한 것은 아닙니다.
+
+PINN+Statistical에서 새 예측기와 Raw를 먼저 비교하려면 다음과 같이 선택합니다.
+
+```bash
+export MODELS="convlstm simvp" PAIRS=pinn_statistical INCLUDE_RAW=1 SEEDS=7 BATCH_SIZE=16
+bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+ARCHIVE/INFO/RUN은 먼저 설정해야 합니다. 위 선택은 총 4회이며, 데이터 경로부터 포함한
+[전체 실행 명령](split_manifold_constraints.md#다섯-예측기의-pinnstatistical--raw-비교)은 별도 문서에 있습니다.
 
 ## 데이터·학습 조건
 
@@ -171,7 +209,7 @@ forecast_only vs Raw, full vs Raw의 RMSE 감소량을 별도 `pair_key`로 집�
 시간 변화량의 첫 전이는 관측 origin에서 첫 예측으로 계산하므로 재구성 오차도
 포함합니다. 기존 `scores.per_variable` RMSE는 제곱 오차를 모은 뒤 제곱근을 취하며,
 새 `scores.climode` RMSE는 공식 평가 코드처럼 사례별 RMSE를 평균합니다.
-현재 MLP/Neural ODE와 matched Raw/latent ClimODE는 결정론적이며 CRPS는 `null`입니다.
+현재 MLP/Neural ODE/ConvLSTM/SimVP와 matched Raw/latent ClimODE는 결정론적이며 CRPS는 `null`입니다.
 Latent 분포를 비선형 D로 복원한 결과에 Gaussian CRPS를 임의로 적용하지 않습니다.
 이 실험은 Hydra의 ensemble 경로 보정 성능을 평가하지 않습니다.
 

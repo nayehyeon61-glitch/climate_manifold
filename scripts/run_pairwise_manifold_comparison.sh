@@ -25,7 +25,7 @@ read -r -a levels <<< "${PINN_LEVELS:-500 850}"
 }
 for family in "${families[@]}"; do
   case "$family" in
-    neural_ode|climode|mlp) ;;
+    neural_ode|climode|mlp|convlstm|simvp) ;;
     *) echo "Unsupported pairwise model: $family" >&2; exit 2;;
   esac
 done
