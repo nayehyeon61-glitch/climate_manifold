@@ -43,12 +43,28 @@ def _arm(row):
 
 
 def _validate_constraint_pairs(group):
-    """Separate reconstruction experiments from legacy trajectory constraints."""
+    """Allow reconstruction pairs with direct raw controls, never legacy latent losses."""
     split = [row for row in group if row.get('constraint_pair') is not None]
     if not split:
         return
-    if len(split) != len(group):
-        raise ValueError('Unfair comparison: mixed constraint_path experiments')
+    for row in group:
+        if row.get('constraint_pair') is not None:
+            continue
+        cfg = row['config']
+        if (cfg.get('bridge') != 'raw' or cfg.get('raw_backend') != 'matched'
+                or cfg.get('training_mode') != 'joint' or cfg.get('anchor') != 'none'
+                or row.get('initialization') != 'fresh' or row.get('regularization') != 'none'):
+            raise ValueError('Unfair comparison: mixed constraint_path experiments require fresh joint matched raw controls')
+        if (row.get('constraint_path') is not None or row.get('constraint_contract') is not None
+                or row.get('split_objective_weights') is not None):
+            raise ValueError('Raw controls must not declare a constraint_path or constraint objective')
+        weights = row.get('objective_weights')
+        if (not isinstance(weights, dict) or not weights
+                or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                       or not math.isfinite(value) or value != 0 for value in weights.values())):
+            raise ValueError('Raw controls require zero effective objective_weights')
+        if row.get('constraint_parameters', 0) != 0:
+            raise ValueError('Raw controls must have zero constraint_parameters')
     first = split[0]
     common_contract = None
     active_weights = {}
@@ -98,6 +114,19 @@ def _validate_constraint_pairs(group):
         for name in ('total_parameters','trainable_parameters','constraint_parameters','implementation'):
             if row.get(name) != same_pair[0].get(name):
                 raise ValueError('Cannot pool different '+name+' as constraint_pair seeds')
+
+
+def _comparison_training_contract(row, raw_and_split):
+    """Only the validated auxiliary-route label may differ in direct raw comparisons."""
+    contract = row.get('training_contract')
+    if not raw_and_split:
+        return contract
+    if not isinstance(contract, dict):
+        raise ValueError('Raw/reconstruction comparison requires training_contract')
+    expected = 'observed_reconstruction' if row.get('constraint_pair') else None
+    if contract.get('constraint_path') != expected:
+        raise ValueError('Unfair comparison: invalid training_contract.constraint_path')
+    return {key:value for key,value in contract.items() if key != 'constraint_path'}
 
 
 def _validate_family_inputs(group):
@@ -241,10 +270,15 @@ def compare(reports,output,climode_reference_reports=None):
         _validate_family_inputs(group)
         _validate_transport(group)
         first=group[0]
+        raw_and_split=(any(row.get('constraint_pair') for row in group)
+                       and any(row['config']['bridge']=='raw' for row in group))
+        training_contract=_comparison_training_contract(first,raw_and_split)
         if len({_regime(row)['training_mode'] for row in group}) != 1:
             raise ValueError('Unfair comparison: mixed frozen and joint training_mode within '+family)
         for row in group[1:]:
-            for key in ('training_contract','constants_sha256'):
+            if _comparison_training_contract(row,raw_and_split)!=training_contract:
+                raise ValueError('Unfair comparison: mismatched training_contract')
+            for key in ('constants_sha256',):
                 if row.get(key)!=first.get(key):raise ValueError('Unfair comparison: mismatched '+key)
             if _regime(row)['training_mode']=='joint' and _regime(row)['initialization']!=_regime(first)['initialization']:
                 raise ValueError('Unfair comparison: mismatched initialization')
@@ -312,10 +346,11 @@ def compare(reports,output,climode_reference_reports=None):
                  for r in rows if not r['constraint_pair']}
         source={id(row):report for row,report in zip(rows,data)}
         for row in rows:
-            if row['constraint_pair']:continue
             if row['representation']!='climate_manifold':continue
             mode=row['training_mode']
-            if mode=='joint':
+            if row['constraint_pair']:
+                controls=[('raw','raw','none')]
+            elif mode=='joint':
                 # Full and forecast-only models share E/F/D architecture and both
                 # learn their representation from future prediction supervision.
                 controls=[('forecast_only','climate_manifold','none')] if row['regularization']=='full' else []
@@ -327,6 +362,7 @@ def compare(reports,output,climode_reference_reports=None):
                 if baseline is None:continue
                 identity={'model':row['model'],'seed':row['seed'],'control':control,
                           'candidate_arm':row['candidate_arm'],'training_mode':mode,
+                          'constraint_pair':row['constraint_pair'],'constraint_path':row['constraint_path'],
                           'pair_key':row['model']+'/'+row['candidate_arm']+'/vs_'+control,
                           'interpretation':('combined_physical_information_regularization'
                               if control=='forecast_only' else 'representation_and_capacity'

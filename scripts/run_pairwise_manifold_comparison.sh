@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Shared E/D: forecasting through E-F-D; observed constraints through E-D.
+# Include one data-to-forecast raw control per model/seed, shared across pairs.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 : "${ARCHIVE:?Set the canonical surface archive}"
@@ -11,6 +12,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [[ "${ANCHOR:-none}" == none ]] || { echo 'Pairwise experiments require ANCHOR=none' >&2; exit 2; }
 [[ "${LATENT_LAYOUT:-spatial}" == spatial ]] || { echo 'Pairwise runner requires LATENT_LAYOUT=spatial' >&2; exit 2; }
 [[ -z "${A_CHECKPOINT:-}" ]] || { echo 'Pairwise runner initializes fresh E/F/D; unset A_CHECKPOINT' >&2; exit 2; }
+INCLUDE_RAW="${INCLUDE_RAW:-1}"
+[[ "$INCLUDE_RAW" == 0 || "$INCLUDE_RAW" == 1 ]] || { echo 'INCLUDE_RAW must be 0 or 1' >&2; exit 2; }
 PYTHON="${PYTHON:-python}"
 export PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}"
 read -r -a families <<< "${MODELS:-neural_ode climode}"
@@ -32,20 +35,22 @@ for pair in "${pairs[@]}"; do
     *) echo "Unsupported constraint pair: $pair" >&2; exit 2;;
   esac
 done
+arms=("${pairs[@]}")
+if [[ "$INCLUDE_RAW" == 1 ]]; then arms+=(raw); fi
 # Duplicate identities must fail before starting any expensive training.
 declare -A identities=()
 for seed in "${seeds[@]}"; do
   [[ "$seed" =~ ^[0-9]+$ ]] || { echo 'SEEDS must be nonnegative integers' >&2; exit 2; }
   for family in "${families[@]}"; do
-    for pair in "${pairs[@]}"; do
-      identity="$family-$pair-seed$seed"
+    for arm in "${arms[@]}"; do
+      identity="$family-$arm-seed$seed"
       [[ ! -v "identities[$identity]" ]] || { echo "Duplicate experiment: $identity" >&2; exit 2; }
       identities[$identity]=1
     done
   done
 done
 setup=(--training-mode joint --initialization fresh --latent-layout spatial
-  --mode enriched --bridge latent --representation climate_manifold --regularization full
+  --mode enriched --representation climate_manifold
   --experiment primary --anchor none
   --manifold-dim "${MANIFOLD_DIM:-64}" --manifold-hidden-dim "${MANIFOLD_HIDDEN_DIM:-512}"
   --latent-channels "${LATENT_CHANNELS:-32}" --spatial-downsample "${SPATIAL_DOWNSAMPLE:-2}"
@@ -55,18 +60,22 @@ mkdir -p "$RUN"
 reports=()
 for seed in "${seeds[@]}"; do
   for family in "${families[@]}"; do
-    for pair in "${pairs[@]}"; do
-      prefix="$RUN/${family}-${pair}-seed${seed}"
-      pinn=()
-      if [[ "$pair" == pinn_* ]]; then
-        pinn=(--pinn --pinn-levels "${levels[@]}" --pinn-weight "${PINN_WEIGHT:-0.1}")
+    for arm in "${arms[@]}"; do
+      prefix="$RUN/${family}-${arm}-seed${seed}"
+      if [[ "$arm" == raw ]]; then
+        route=(--bridge raw --raw-backend matched --regularization none)
+      else
+        route=(--bridge latent --regularization full --constraint-pair "$arm"
+          --statistical-weight "${STATISTICAL_WEIGHT:-0.1}" --static-weight "${STATIC_WEIGHT:-0.05}")
+        if [[ "$arm" == pinn_* ]]; then
+          route+=(--pinn --pinn-levels "${levels[@]}" --pinn-weight "${PINN_WEIGHT:-0.1}")
+        fi
       fi
       "$PYTHON" -m climate_manifold.downstream.train "${setup[@]}" \
-        --archive "$ARCHIVE" --information "$INFO" --model "$family" --constraint-pair "$pair" "${pinn[@]}" \
-        --output "$prefix.pt" --epochs "${EPOCHS:-20}" --batch-size "${BATCH_SIZE:-2}" \
+        --archive "$ARCHIVE" --information "$INFO" --model "$family" "${route[@]}" \
+        --output "$prefix.pt" --epochs "${EPOCHS:-20}" --batch-size "${BATCH_SIZE:-16}" \
         --learning-rate "${LEARNING_RATE:-0.001}" --tendency-weight "${TENDENCY_WEIGHT:-0.1}" \
         --reconstruction-weight "${RECONSTRUCTION_WEIGHT:-0.1}" \
-        --statistical-weight "${STATISTICAL_WEIGHT:-0.1}" --static-weight "${STATIC_WEIGHT:-0.05}" \
         --climode-step-hours "${CLIMODE_STEP_HOURS:-1}" \
         --latent-max-speed "${LATENT_MAX_SPEED:-2}" --latent-max-acceleration "${LATENT_MAX_ACCELERATION:-1}" \
         --hidden-dim "${HIDDEN_DIM:-128}" --horizon-steps "${HORIZON_STEPS:-20}" \

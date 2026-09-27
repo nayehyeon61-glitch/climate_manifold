@@ -9,6 +9,9 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 기본 동적 자료 복원은 공통으로 한 번 유지하며, 제약 손실은 예측기 F를 직접 통과하지 않습니다.
 [설계·손실 정의·실행 방법](docs/split_manifold_constraints.md)을 먼저 참고하세요.
 전체 실행은 `bash scripts/run_pairwise_manifold_comparison.sh`이며,
+직접 예측 비교군을 포함해 기본 **2개 예측기 × 4개 실험군 = seed당 8회**를 실행합니다.
+기본 batch는 **16**, seed는 `7 19 43`입니다. `SEEDS=7`이면 총 8회,
+`PAIRS=pinn_statistical SEEDS=7`이면 직접 예측 비교군을 포함해 총 4회입니다.
 기존 `run_model_comparison.sh`는 이전의 예측 궤적 제약 실험을 재현합니다.
 
 | 구성 | 포함 내용 |

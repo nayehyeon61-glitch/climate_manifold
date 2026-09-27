@@ -79,6 +79,22 @@ MSE, 미래 분포·static·PINN은 이 경로에서 추가로 부과하지 않�
 
 ## 전체 세 조합 실행
 
+직접 예측 비교군 `data → F → future fields`도 함께 학습합니다. 이 비교군은
+E/D 없이 원본 격자에서 같은 계열의 예측기를 사용하며, 같은 origin 상층/지형 정보를
+입력으로 받습니다. 예측·변화량 손실만 사용하고 복원·PINN·Statistical·Static 손실은
+사용하지 않습니다. Raw ClimODE는 같은 transport core를 원본 격자에 적용한 matched
+adaptation이며, 별도의 vendor Gaussian ClimODE 실행이 아닙니다.
+
+| 실험군 | Neural ODE | ClimODE |
+|---|---|---|
+| Raw 직접 예측 | 1회 | 1회 |
+| E→F→D + PINN·Statistical | 1회 | 1회 |
+| E→F→D + PINN·Static | 1회 | 1회 |
+| E→F→D + Statistical·Static | 1회 | 1회 |
+
+따라서 seed당 8회이며, Raw 비교군은 제약 조합마다 반복하지 않고 예측기·seed별로
+한 번만 학습합니다. `INCLUDE_RAW=0`이면 직접 예측 비교군을 제외합니다.
+
 저장소 루트에서 다음을 실행합니다. INFO에는 같은 기압면의 U/V/T/Z/omega와 실제 지표기압
 sp가 필요하며, 두 PINN 조합에서는 모듈이 자동으로 활성화됩니다. Statistical+Static은
 PINN 모듈 없이 실행합니다.
@@ -87,14 +103,17 @@ PINN 모듈 없이 실행합니다.
 export ARCHIVE=/absolute/path/to/surface.npz
 export INFO=/absolute/path/to/information_pinn
 export RUN=runs/split_pairs_001
-export DEVICE=cuda MODELS="neural_ode climode" SEEDS="7 19 43"
-export EPOCHS=20 BATCH_SIZE=2
+export DEVICE=cuda MODELS="neural_ode climode" SEEDS=7
+export INCLUDE_RAW=1 PAIRS="pinn_statistical pinn_static statistical_static"
+export EPOCHS=20 BATCH_SIZE=16
 bash scripts/run_pairwise_manifold_comparison.sh
 ```
 
-기본 구성은 2개 예측기 × 3개 제약 조합 × 3개 seed의 18회 학습입니다. 각 실행은 공통
-calibration 미래 MSE로 checkpoint를 선택하고 같은 물리장 평가를 사용합니다.
-처음 확인할 때는 `MODELS=neural_ode SEEDS=7`로 3회 학습만 수행할 수 있습니다.
+위 명령은 총 8회 학습합니다. `SEEDS`를 생략하면 기본 3개 seed(7, 19, 43)로 총 24회입니다.
+각 실행은 공통 calibration 미래 MSE로 checkpoint를 선택하고 같은 물리장 평가를 사용합니다.
+PINN+Statistical만 먼저 실행하려면 `PAIRS=pinn_statistical`로 바꿉니다. 이때는
+2개 예측기 × (Raw + PINN·Statistical) × 1개 seed로 총 4회입니다.
+`MODELS=mlp`도 지원하지만 기본 예측기 2종에는 포함하지 않습니다.
 
 단일 조합은 다음과 같이 실행합니다.
 
@@ -105,7 +124,7 @@ python -m climate_manifold.downstream.train \
   --bridge latent --model neural_ode --latent-layout spatial \
   --constraint-pair pinn_statistical \
   --reconstruction-weight 0.1 --statistical-weight 0.1 --pinn-weight 0.1 \
-  --epochs 20 --batch-size 2 --device cuda \
+  --epochs 20 --batch-size 16 --device cuda \
   --output runs/split_single/model.pt
 ```
 
@@ -122,6 +141,9 @@ Statistical+Static은 Static을 공유하면서 다른 제약을 교체하는 �
 
 보고서는 조합별로 seed를 집계하며 서로 다른 조합을 한 모델의 반복 실행처럼 합치지
 않습니다. 변수·lead별 물리 단위 RMSE/ACC, 장기 rollout의 유한성, 계산 비용을 평가합니다.
+각 제약 조합과 같은 예측기·seed의 Raw 비교는 `comparison.raw-effects.csv`에,
+제약 조합 간 비교는 `comparison.constraint-effects.csv`에 기록합니다. Raw와 E→F→D는
+표현·용량·추가 감독이 함께 달라지므로 이는 전체 모델 비교이며 제약만의 효과는 아닙니다.
 학습/검증 오차의 차이와 여러 seed의 결과를 확인해야 과적합 변화에 대해 판단할 수 있습니다.
 경로 분리나 손실 항 개수 감소 자체는 일반화 개선을 보장하지 않습니다.
 
@@ -131,11 +153,12 @@ Statistical+Static은 Static을 공유하면서 다른 제약을 교체하는 �
 
 ## 구현 검증
 
-전체 테스트 296개를 통과했습니다. 제약만 역전파했을 때 예측기 F의 gradient가 없는지,
+전체 테스트 326개를 통과했습니다. 제약만 역전파했을 때 예측기 F의 gradient가 없는지,
 미래 information을 바꾸어도 관측 제약이 변하지 않는지, 세 조합의 활성 항과 checkpoint
-재로딩이 올바른지를 확인했습니다. 추가로 합성 자료에서 Neural ODE·ClimODE × 세 조합을
-각각 1 epoch 학습하고 120시간 예측·평가·조합별 집계를 완료했습니다. 6개 실험 모두
-동일한 평가 origin에서 유한한 출력을 생성했습니다. 이는 소프트웨어 동작 검증이며,
+재로딩이 올바른지를 확인했습니다. 추가로 합성 자료에서 Neural ODE·ClimODE × (Raw + 세 조합)을
+batch 16으로 각각 1 epoch 학습하고 120시간 예측·평가·집계를 완료했습니다. 8개 실험 모두
+동일한 평가 origin에서 유한한 출력을 생성했으며, Raw 대비 6개 비교와 제약 조합 간
+6개 비교를 별도로 기록했습니다. 이는 소프트웨어 동작 검증이며,
 실제 기상 예측력이나 과적합 감소의 근거는 아닙니다.
 
 ## 코드 위치

@@ -122,7 +122,7 @@ def _runner(tmp_path, **settings):
     calls=tmp_path/'calls.jsonl'
     env={key:value for key,value in os.environ.items() if key not in (
         'MODELS','SEEDS','PAIRS','A_CHECKPOINT','TRAINING_MODE','INITIALIZATION',
-        'LATENT_LAYOUT','ANCHOR','CLIMODE_REFERENCE_DIR')}
+        'LATENT_LAYOUT','ANCHOR','CLIMODE_REFERENCE_DIR','INCLUDE_RAW','BATCH_SIZE')}
     env.update(PYTHON=str(stub),CALLS=str(calls),ARCHIVE='surface archive.npz',
                INFO='physical information',RUN=str(tmp_path/'run'),**settings)
     script=Path(__file__).resolve().parents[1]/'scripts/run_pairwise_manifold_comparison.sh'
@@ -132,7 +132,7 @@ def _runner(tmp_path, **settings):
 
 
 def test_runner_dispatches_18_distinct_fits_and_keeps_legacy_losses_out(tmp_path):
-    outcome,commands=_runner(tmp_path)
+    outcome,commands=_runner(tmp_path,INCLUDE_RAW='0')
     assert outcome.returncode==0,outcome.stderr
     train=[row for row in commands if row[1]=='climate_manifold.downstream.train']
     evaluate=[row for row in commands if row[1]=='climate_manifold.downstream.evaluate']
