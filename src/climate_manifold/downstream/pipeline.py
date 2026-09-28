@@ -79,7 +79,8 @@ class PredictorConfig:
 
 class ForecastPipeline(nn.Module):
     def __init__(self, manifold, config, constants=None, schema=None, representation=None,
-                 *, separate_reconstruction_decoder=False):
+                 *, separate_reconstruction_decoder=False, conditional_flow_config=None,
+                 constraint_decoder_mode='separate_surface_and_information'):
         super().__init__()
         if not isinstance(separate_reconstruction_decoder, bool):
             raise ValueError('separate_reconstruction_decoder must be a boolean')
@@ -87,6 +88,15 @@ class ForecastPipeline(nn.Module):
                 config.training_mode != 'joint' or config.bridge != 'latent'
                 or config.anchor != 'none' or config.representation != 'climate_manifold'):
             raise ValueError('Separate reconstruction decoder requires a joint unanchored latent climate manifold')
+        if conditional_flow_config is not None:
+            if (config.training_mode != 'joint' or config.bridge != 'latent'
+                    or config.anchor != 'none' or config.representation != 'climate_manifold'):
+                raise ValueError('Conditional flow requires a joint unanchored latent climate manifold')
+            if constraint_decoder_mode not in ('information_only', 'separate_surface_and_information'):
+                raise ValueError('Conditional flow requires independent auxiliary decoders')
+            if (constraint_decoder_mode == 'separate_surface_and_information'
+                    and not separate_reconstruction_decoder):
+                raise ValueError('Conditional flow requires a dedicated reconstruction_decoder')
         self.config, self.a_config = config, manifold.config
         if config.representation == 'plain_ae':
             if representation is None:
@@ -171,6 +181,14 @@ class ForecastPipeline(nn.Module):
         from .observed_decoder import ObservedFieldDecoder
         self.reconstruction_decoder = (
             ObservedFieldDecoder(selected) if separate_reconstruction_decoder else None)
+        # This independent auxiliary vector field sees only the observed pair.
+        # Construct it last so enabling CFM preserves the forecast initialization
+        # and omit its parameters entirely in existing/off checkpoints.
+        self.conditional_flow = None
+        if conditional_flow_config is not None:
+            from .conditional_flow import ObservedConditionalFlow
+            self.conditional_flow = ObservedConditionalFlow(
+                selected, conditional_flow_config, constraint_decoder_mode)
         self.train(self.training)
 
     def forward(self, history, information, origin_ns, lead_hours, *, reconstruct_origin=True):

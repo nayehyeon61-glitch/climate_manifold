@@ -11,9 +11,11 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 예측 decoder D는 미래 예측 손실로, 정보 decoder D_I는 정보 복원과 선택한 제약으로 학습됩니다.
 D_rec는 D를 복사해 초기화하지만 파라미터를 공유하지 않습니다. 공유 encoder E는 함께 학습합니다.
 `information_only`로 장복원을 끌 수 있고, `surface_and_information`으로 이전의 D 공유 경로를 다시 켤 수 있습니다.
-기존 관측 복원 제약은 예측기 F를 직접 통과하지 않습니다. 선택적 **분포 flow 손실**을 켜면
-F가 예측한 미래 latent를 D_rec/D_I로 복원하여 관측된 미래 분포 변화와 비교합니다.
-기존 W2/KL 복원 손실은 유지하며, 추론은 계속 E→F→D입니다.
+기존 관측 복원 제약은 예측기 F를 직접 통과하지 않습니다. 선택적 **관측 조건부 Flow Matching**은
+관측 쌍의 E 출력과 현재 복원 분포를 조건으로, 관측 분포+noise에서 실제 미래 분포로 가는
+보조 벡터장을 학습합니다. 이 손실은 E·보조 decoder·Flow head에만 직접 전달됩니다.
+기존 **예측 분위수 변화율 손실**도 별도 옵션으로 유지하며 두 Flow 방식은 한 실험에서 함께 켜지 않습니다.
+기존 W2/KL 복원 손실을 유지하고, 기상장 예측은 계속 E→F→D입니다.
 [설계·손실 정의·실행 방법](docs/split_manifold_constraints.md)을 먼저 참고하세요.
 전체 실행은 `bash scripts/run_pairwise_manifold_comparison.sh`이며,
 직접 예측 비교군을 포함해 기본 **2개 예측기 × 4개 실험군 = seed당 8회**를 실행합니다.
@@ -254,3 +256,24 @@ bash scripts/run_pairwise_manifold_comparison.sh
 
 이 명령은 **5개 예측기 × (Raw + W2 + W2·flow + KL + KL·flow) = 25회** 학습합니다.
 flow weight는 기존 Statistical weight와 별개이며, 0.1은 비교를 시작하기 위한 예시입니다.
+
+관측 복원 경로에서 **조건부 stochastic 분포 생성**을 학습하려면 새 옵션
+`CONDITIONAL_FLOW_WEIGHT`를 사용합니다. 기본값 0이며, 위의 예측 변화율 손실과는 다른 경로입니다.
+실제 현재 분포에 Gaussian noise를 더한 출발점과 실제 미래 분포 사이의 Flow Matching을 학습하고,
+조건은 관측 쌍과 보조 decoder의 현재 복원에서만 구성합니다. F의 예측 latent는 사용하지 않습니다.
+
+```bash
+# 기존 ARCHIVE/INFO 환경에서, 새 RUN 경로 사용.
+RUN=runs/pinn_observed_conditional_flow \
+MODELS="mlp neural_ode climode convlstm simvp" \
+PAIRS=pinn_statistical SEEDS=7 BATCH_SIZE=16 \
+STATISTICAL_LOSSES="w2 kl_entropy" STATISTICAL_FLOW_WEIGHTS=0 \
+CONDITIONAL_FLOW_WEIGHTS="0 0.1" \
+bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+이 비교는 **5개 예측기 × (Raw + W2 + W2·CFM + KL + KL·CFM) = 25회**입니다.
+추가 head는 기상장 예측기에 포함되지 않는 보조 학습 파라미터입니다. 미래 상층 정보 감독도
+추가되므로 예측력 차이를 Flow 수식만의 효과로 해석하지 않습니다. CFM head의 샘플은
+정규화된 공간 주변분포의 분위수 시나리오이며 기상장 앙상블·태풍 위치·보정 성능을 보장하지 않습니다.
+[손실 정의·sampling 명령·비교의 범위](docs/split_manifold_constraints.md#관측-쌍-조건부-flow-matching)를 참고하세요.

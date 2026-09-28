@@ -84,15 +84,76 @@ if [[ -n "${STATISTICAL_FLOW_QUANTILES:-}" ]]; then
     echo 'STATISTICAL_FLOW_QUANTILES must be a positive integer between 1 and 512' >&2; exit 2
   fi
 fi
+read -r -a conditional_weights <<< "${CONDITIONAL_FLOW_WEIGHTS:-${CONDITIONAL_FLOW_WEIGHT:-0}}"
+[[ ${#conditional_weights[@]} -gt 0 ]] || { echo 'CONDITIONAL_FLOW_WEIGHTS must be nonempty' >&2; exit 2; }
+declare -A conditional_seen=()
+conditional_enabled=0
+for index in "${!conditional_weights[@]}"; do
+  weight="${conditional_weights[$index]}"
+  [[ "$weight" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] || {
+    echo 'Conditional flow weights must be finite nonnegative decimal numbers' >&2; exit 2;
+  }
+  weight=$(LC_ALL=C awk -v value="$weight" 'BEGIN { printf "%.12g", value + 0 }')
+  [[ "$weight" =~ ^[0-9]+([.][0-9]+)?([eE][-+]?[0-9]+)?$ ]] || {
+    echo 'Conditional flow weights must be finite nonnegative decimal numbers' >&2; exit 2;
+  }
+  [[ ! -v "conditional_seen[$weight]" ]] || { echo "Duplicate conditional flow weight: $weight" >&2; exit 2; }
+  conditional_seen[$weight]=1
+  conditional_weights[$index]="$weight"
+  if [[ "$weight" != 0 ]]; then conditional_enabled=1; fi
+done
+if [[ "$conditional_enabled" == 1 ]]; then
+  [[ "$flow_enabled" == 0 ]] || {
+    echo 'Conditional flow and statistical flow cannot both have positive weights in one run' >&2; exit 2;
+  }
+  [[ " ${pairs[*]} " == *statistical* ]] || {
+    echo 'Conditional flow requires a pair containing statistical' >&2; exit 2;
+  }
+  [[ "$CONSTRAINT_DECODER" != surface_and_information ]] || {
+    echo 'Conditional flow requires an independent or information-only constraint decoder' >&2; exit 2;
+  }
+fi
+for setting in CONDITIONAL_FLOW_QUANTILES CONDITIONAL_FLOW_HIDDEN_DIM CONDITIONAL_FLOW_NOISE_SCALE; do
+  if [[ -n "${!setting:-}" && "$conditional_enabled" == 0 ]]; then
+    echo "$setting requires a positive conditional flow weight" >&2; exit 2
+  fi
+done
+if [[ "$conditional_enabled" == 1 ]]; then
+  conditional_quantiles="${CONDITIONAL_FLOW_QUANTILES:-32}"
+  conditional_hidden="${CONDITIONAL_FLOW_HIDDEN_DIM:-128}"
+  conditional_noise="${CONDITIONAL_FLOW_NOISE_SCALE:-0.2}"
+  if ! [[ "$conditional_quantiles" =~ ^[0-9]+$ ]] ||
+      ! LC_ALL=C awk -v count="$conditional_quantiles" 'BEGIN { exit !(count >= 1 && count <= 512) }'; then
+    echo 'CONDITIONAL_FLOW_QUANTILES must be a positive integer between 1 and 512' >&2; exit 2
+  fi
+  if ! [[ "$conditional_hidden" =~ ^[0-9]+$ ]] ||
+      ! LC_ALL=C awk -v count="$conditional_hidden" 'BEGIN { exit !(count >= 1 && count <= 4096) }'; then
+    echo 'CONDITIONAL_FLOW_HIDDEN_DIM must be a positive integer between 1 and 4096' >&2; exit 2
+  fi
+  [[ "$conditional_noise" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][-+]?[0-9]+)?$ ]] || {
+    echo 'CONDITIONAL_FLOW_NOISE_SCALE must be finite and positive' >&2; exit 2;
+  }
+  conditional_noise=$(LC_ALL=C awk -v value="$conditional_noise" 'BEGIN { printf "%.12g", value + 0 }')
+  if ! [[ "$conditional_noise" =~ ^[0-9]+([.][0-9]+)?([eE][-+]?[0-9]+)?$ ]] ||
+      ! LC_ALL=C awk -v value="$conditional_noise" 'BEGIN { exit !(value > 0) }'; then
+    echo 'CONDITIONAL_FLOW_NOISE_SCALE must be finite and positive' >&2; exit 2
+  fi
+fi
 arms=()
 for pair in "${pairs[@]}"; do
   if [[ "$pair" == *statistical* ]]; then
     for loss in "${statistical_losses[@]}"; do
       base_arm="$pair"
       if [[ "$loss" != w2 ]]; then base_arm+=":kl_entropy"; fi
-      for weight in "${flow_weights[@]}"; do
-        if [[ "$weight" == 0 ]]; then arms+=("$base_arm"); else arms+=("$base_arm:flow=$weight"); fi
-      done
+      if [[ "$conditional_enabled" == 1 ]]; then
+        for weight in "${conditional_weights[@]}"; do
+          if [[ "$weight" == 0 ]]; then arms+=("$base_arm"); else arms+=("$base_arm:cfm=$weight"); fi
+        done
+      else
+        for weight in "${flow_weights[@]}"; do
+          if [[ "$weight" == 0 ]]; then arms+=("$base_arm"); else arms+=("$base_arm:flow=$weight"); fi
+        done
+      fi
     done
   else
     arms+=("$pair")
@@ -124,7 +185,8 @@ for seed in "${seeds[@]}"; do
   for family in "${families[@]}"; do
     for arm in "${arms[@]}"; do
       arm_label="${arm//:/-}"
-      prefix="$RUN/${family}-${arm_label//flow=/flow}-seed${seed}"
+      arm_label="${arm_label//flow=/flow}"
+      prefix="$RUN/${family}-${arm_label//cfm=/cfm}-seed${seed}"
       pair="${arm%%:*}"
       if [[ "$arm" == raw ]]; then
         route=(--bridge raw --raw-backend matched --regularization none)
@@ -143,6 +205,12 @@ for seed in "${seeds[@]}"; do
           if [[ "$arm" == *:flow=* ]]; then
             route+=(--statistical-flow-weight "${arm##*:flow=}"
               --statistical-flow-quantiles "${STATISTICAL_FLOW_QUANTILES:-32}")
+          fi
+          if [[ "$arm" == *:cfm=* ]]; then
+            route+=(--conditional-flow-weight "${arm##*:cfm=}"
+              --conditional-flow-quantiles "$conditional_quantiles"
+              --conditional-flow-hidden-dim "$conditional_hidden"
+              --conditional-flow-noise-scale "$conditional_noise")
           fi
         fi
         if [[ "$pair" == pinn_* ]]; then

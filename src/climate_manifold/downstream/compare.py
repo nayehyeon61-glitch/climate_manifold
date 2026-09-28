@@ -9,6 +9,7 @@ import numpy as np
 from ..train import write_json
 from .statistical_objective import statistical_config_from_payload
 from .statistical_flow import statistical_flow_config_from_payload
+from .conditional_flow import conditional_flow_config_from_payload
 from .protocol import experiment_contract,validate_experiment
 from .climode_benchmark import benchmark,write_table
 from .constraint_protocol import constraint_decoder_from_payload, normalize_constraint_contract
@@ -38,7 +39,9 @@ def _arm(row):
     if row.get('constraint_pair'):
         name=row['constraint_pair'] + (':kl_entropy' if row.get('statistical_loss') == 'kl_entropy' else '')
         flow=row.get('statistical_flow_config')
-        return name + (':flow='+format(flow['weight'],'.12g') if flow else '')
+        conditional=row.get('conditional_flow_config')
+        return (name + (':flow='+format(flow['weight'],'.12g') if flow else '')
+                + (':cfm='+format(conditional['weight'],'.12g') if conditional else ''))
     if row['representation']=='raw':
         return 'raw'
     if (row['representation']=='climate_manifold' and row['training_mode']=='joint'
@@ -73,6 +76,7 @@ def _validate_constraint_pairs(group):
             raise ValueError('Raw controls must have zero constraint_parameters')
     statistical_configs = {}
     common_flow = None
+    common_conditional = None
     for row in group:
         config = statistical_config_from_payload(row)
         if config is not None:
@@ -86,6 +90,12 @@ def _validate_constraint_pairs(group):
             if common_flow is not None and specification != common_flow:
                 raise ValueError('Unfair comparison: mismatched statistical_flow_config')
             common_flow = specification
+        conditional = conditional_flow_config_from_payload(row)
+        if conditional is not None:
+            specification = {k:v for k,v in conditional.items() if k != 'weight'}
+            if common_conditional is not None and specification != common_conditional:
+                raise ValueError('Unfair comparison: mismatched conditional_flow_config')
+            common_conditional = specification
     first = split[0]
     common_contract = None
     active_weights = {}
@@ -132,7 +142,10 @@ def _validate_constraint_pairs(group):
                 if name in active_weights and weight != active_weights[name]:
                     raise ValueError('Unfair comparison: mismatched shared split_objective_weights.'+name)
                 active_weights[name] = weight
-        same_pair = [r for r in split if r['constraint_pair']==pair]
+        # Enabling an observed CFM head adds auxiliary parameters. Only compare
+        # repeated seeds with the same head presence as capacity-identical.
+        same_pair = [r for r in split if r['constraint_pair']==pair
+                     and bool(r.get('conditional_flow_config'))==bool(row.get('conditional_flow_config'))]
         for name in ('total_parameters','trainable_parameters','constraint_parameters','implementation'):
             if row.get(name) != same_pair[0].get(name):
                 raise ValueError('Cannot pool different '+name+' as constraint_pair seeds')
@@ -270,7 +283,7 @@ def _constraint_field_effects(identity, candidate, baseline):
 
 def compare(reports,output,climode_reference_reports=None):
     output=Path(output)
-    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv')) or output.exists():
+    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv')) or output.exists():
         raise FileExistsError('Choose a new comparison path')
     data=[json.loads(Path(path).read_text()) for path in reports]
     if not data:raise ValueError('At least one evaluation report is required')
@@ -342,6 +355,7 @@ def compare(reports,output,climode_reference_reports=None):
             statistical_loss=statistical_config['kind'] if statistical_config else None,
             statistical_loss_config=statistical_config,
             statistical_flow_config=statistical_flow_config_from_payload(report),
+            conditional_flow_config=conditional_flow_config_from_payload(report),
             split_objective_weights=report.get('split_objective_weights'),
             forecast_parameters=report.get('forecast_parameters'),constraint_parameters=report.get('constraint_parameters'),
             normalized_rmse=aggregate.get('normalized_rmse'),wind_speed_rmse_mps=aggregate.get('wind_speed_rmse_mps'),
@@ -354,6 +368,8 @@ def compare(reports,output,climode_reference_reports=None):
         key='/'.join(row[k] for k in ('model','representation','bridge','anchor','training_mode','regularization','initialization'))
         if row['constraint_pair']:
             key += '/'+row['candidate_arm']
+        if groups.get(key) and row['conditional_flow_config']!=groups[key][0]['conditional_flow_config']:
+            raise ValueError('Cannot pool different conditional_flow_config as seeds within '+key)
         if groups.get(key) and row['statistical_flow_config']!=groups[key][0]['statistical_flow_config']:
             raise ValueError('Cannot pool different statistical_flow_config as seeds within '+key)
         if groups.get(key) and row['objective_weights']!=groups[key][0]['objective_weights']:
@@ -370,7 +386,7 @@ def compare(reports,output,climode_reference_reports=None):
                       'scored_runs':len(scores)} if scores else {'seeds':[x['seed'] for x in group],
                       'mean_normalized_rmse':None,'sample_std_normalized_rmse':None,'scored_runs':0}
     ranking_allowed=same_cases and all(r['finite_forecast_fraction']==1 for r in rows)
-    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[]
+    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[]
     if ranking_allowed and contracts[0]['suite']=='primary':
         indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization']):r
                  for r in rows if not r['constraint_pair']}
@@ -413,12 +429,20 @@ def compare(reports,output,climode_reference_reports=None):
                 (r for r in rows if r['model']==family and r['seed']==seed and r['constraint_pair']),
                 key=lambda r:(list(CONSTRAINT_GROUPS).index(r['constraint_pair']),
                               r['statistical_loss']=='kl_entropy',
-                              (r['statistical_flow_config'] or {}).get('weight',0.)))
+                              (r['statistical_flow_config'] or {}).get('weight',0.),
+                              (r['conditional_flow_config'] or {}).get('weight',0.)))
             for baseline,candidate in combinations(variants,2):
                 baseline_arm,candidate_arm=baseline['candidate_arm'],candidate['candidate_arm']
                 same_pair=baseline['constraint_pair']==candidate['constraint_pair']
                 base_kind,new_kind=baseline['statistical_loss'],candidate['statistical_loss']
                 base_flow,new_flow=baseline['statistical_flow_config'],candidate['statistical_flow_config']
+                base_cond,new_cond=baseline['conditional_flow_config'],candidate['conditional_flow_config']
+                if base_cond!=new_cond and base_flow!=new_flow:
+                    continue  # These are two distinct auxiliary flow mechanisms.
+                if base_kind and new_kind and base_kind!=new_kind and base_cond!=new_cond:
+                    continue
+                if not same_pair and base_kind and new_kind and base_cond!=new_cond:
+                    continue
                 if base_kind and new_kind and base_kind!=new_kind and base_flow!=new_flow:
                     continue  # Do not change reconstruction metric and temporal loss together.
                 if not same_pair and base_kind and new_kind and base_flow!=new_flow:
@@ -428,8 +452,16 @@ def compare(reports,output,climode_reference_reports=None):
                 identity={'model':family,'seed':seed,'control':baseline_arm,
                     'candidate_arm':candidate_arm,'training_mode':'joint',
                     'pair_key':family+'/'+candidate_arm+'/vs_'+baseline_arm}
-                flow_effect = same_pair and base_kind==new_kind
-                if flow_effect:
+                conditional_effect = same_pair and base_kind==new_kind and base_cond!=new_cond
+                flow_effect = same_pair and base_kind==new_kind and not conditional_effect
+                if conditional_effect:
+                    identity.update(interpretation='change_observed_conditional_flow',
+                        constraint_pair=candidate['constraint_pair'],statistical_loss=new_kind,
+                        baseline_conditional_flow_weight=(base_cond or {}).get('weight',0.),
+                        candidate_conditional_flow_weight=(new_cond or {}).get('weight',0.),
+                        baseline_parameters=baseline['total_parameters'],
+                        candidate_parameters=candidate['total_parameters'])
+                elif flow_effect:
                     identity.update(interpretation='change_statistical_flow_weight',
                         constraint_pair=candidate['constraint_pair'],statistical_loss=new_kind,
                         baseline_flow_weight=(base_flow or {}).get('weight',0.),
@@ -438,7 +470,8 @@ def compare(reports,output,climode_reference_reports=None):
                     identity.update(interpretation='replace_statistical_loss',
                         constraint_pair=candidate['constraint_pair'],
                         baseline_statistical_loss=base_kind,candidate_statistical_loss=new_kind,
-                        statistical_flow_weight=(new_flow or {}).get('weight',0.))
+                        statistical_flow_weight=(new_flow or {}).get('weight',0.),
+                        conditional_flow_weight=(new_cond or {}).get('weight',0.))
                 else:
                     base_groups=CONSTRAINT_GROUPS[baseline['constraint_pair']]
                     candidate_groups=CONSTRAINT_GROUPS[candidate['constraint_pair']]
@@ -450,7 +483,7 @@ def compare(reports,output,climode_reference_reports=None):
                 if error is not None and ours is not None:
                     paired.append({**identity,'rmse_reduction':error-ours,
                         'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
-                destination=flow_physical if flow_effect else statistical_physical if same_pair else constraint_physical
+                destination=conditional_physical if conditional_effect else flow_physical if flow_effect else statistical_physical if same_pair else constraint_physical
                 destination.extend(_constraint_field_effects(
                     identity,source[id(candidate)],source[id(baseline)]))
         for row in paired:
@@ -465,6 +498,7 @@ def compare(reports,output,climode_reference_reports=None):
         'constraint_pair_effects':constraint_physical,
         'statistical_loss_effects':statistical_physical,
         'statistical_flow_effects':flow_physical,
+        'conditional_flow_effects':conditional_physical,
         'direct_comparison':_direct_effects(direct_pairs),
         'same_successful_origins':same_cases,'ranking_allowed':ranking_allowed,
         'notes':['Inspect per-variable and per-lead physical scores in the original reports.',
@@ -475,6 +509,7 @@ def compare(reports,output,climode_reference_reports=None):
                  'Joint forecast_only/full pairs isolate the combined added regularization under matched architecture, inputs, initialization and training budget; they do not isolate PINN alone.',
                  'Reconstruction constraint pairs replace one group while holding one fixed; they do not identify a single-group causal benefit or prove reduced overfitting.',
                  'Flow ablations hold the base W2/KL objective fixed; flow also supplies future dynamic-information supervision through auxiliary decoders, so its effects include that added supervision.',
+                 'Observed conditional-flow ablations add a separate auxiliary network and future-information supervision; their effects include capacity and supervision changes, not direct gradient to the forecast predictor.',
                  'PINN pairs may add auxiliary closure parameters; forecast and constraint parameter counts are reported separately.',
                  'Raw-versus-latent and plain-AE comparisons change representation or supervision and are whole-model comparisons, not causal evidence for physical constraints.',
                  'Latent coordinate errors are within-representation diagnostics, never cross-encoder rankings.',
@@ -492,10 +527,11 @@ def compare(reports,output,climode_reference_reports=None):
     write_table(output.with_suffix('.constraint-effects.csv'),result['constraint_pair_effects'])
     write_table(output.with_suffix('.statistical-effects.csv'),result['statistical_loss_effects'])
     write_table(output.with_suffix('.flow-effects.csv'),result['statistical_flow_effects'])
+    write_table(output.with_suffix('.conditional-flow-effects.csv'),result['conditional_flow_effects'])
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
         for row in rows:
-            structured = ('conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config')
+            structured = ('conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
             writer.writerow({**row,**{key:json.dumps(row[key],sort_keys=True) for key in structured}})
     return result
 

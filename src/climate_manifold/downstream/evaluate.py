@@ -13,6 +13,7 @@ from .protocol import experiment_contract
 from .constraint_protocol import constraint_decoder_from_payload
 from .statistical_objective import statistical_config_from_payload
 from .statistical_flow import statistical_flow_config_from_payload
+from .conditional_flow import conditional_flow_config_from_payload
 
 
 def evaluate(checkpoint,archive,output,*,information=None,split='validation',max_cases=0,
@@ -104,6 +105,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'statistical_loss':statistical_config['kind'] if statistical_config else None,
             'statistical_loss_config':statistical_config,
             'statistical_flow_config':statistical_flow_config_from_payload(p),
+            'conditional_flow_config':conditional_flow_config_from_payload(p),
             'split_objective_weights':p.get('split_objective_weights'),
             'forecast_parameters':p.get('forecast_parameters'),
             'constraint_parameters':p.get('constraint_parameters'),

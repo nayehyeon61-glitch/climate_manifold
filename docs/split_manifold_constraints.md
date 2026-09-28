@@ -4,7 +4,10 @@
 예측은 `E → F → D`, 표현 제약은 **관측 기상장의 `E → D_rec`와 관측 정보의 `E → D_I`**에서
 계산합니다. D_rec는 예측 decoder D와 독립된 장복원 decoder입니다. 기존 관측 제약 계산은
 예측기 `F`와 예측 decoder `D`를 호출하지 않습니다. 기본값이 꺼진 선택적
-[분포 flow 손실](#선택적-현재미래-분포-flow-손실)은 별도로 F의 미래 latent에서 계산합니다.
+[예측 분포 flow 손실](#선택적-현재미래-분포-flow-손실)은 별도로 F의 미래 latent에서 계산합니다.
+새 [관측 조건부 Flow Matching](#관측-쌍-조건부-flow-matching)은 관측 쌍과 현재 보조 복원에서
+조건을 만들고 실제 미래 분포로 향하는 별도 벡터장을 학습합니다. 두 옵션 모두 기본값은 꺼짐이며,
+한 실험에서 두 가지 Flow 항을 동시에 활성화하지 않습니다.
 
 ```mermaid
 flowchart TD
@@ -86,7 +89,8 @@ L = L_{\rm forecast}+\lambda_\Delta L_{\rm future\ tendency}
 기본 외부 가중치는 reconstruction 0.1, statistical 0.1, static 0.05, PINN 0.1입니다.
 미래 tendency는 기존 예측 손실의 설정을 사용합니다. 기본값에서는 예측장 surface physics,
 미래 information MSE, 미래 분포·static·PINN을 추가로 부과하지 않습니다.
-선택적 분포 flow를 활성화하면 아래에 정의한 미래 분포 변화율 손실만 별도로 추가합니다.
+선택적 Flow를 활성화하면 아래에 정의한 예측 분포 변화율 손실 또는 관측 조건부
+Flow Matching 손실을 별도로 추가합니다. 두 방식의 직접 gradient 경로는 다릅니다.
 
 ## 자료와 gradient 계약
 
@@ -307,6 +311,8 @@ hidden width 8/latent channels 2의 CPU 실행입니다. 실제 ERA5 예측력�
 | E→D_rec / E→D_I 제약 계산·decoder 모드·쌍별 활성화 | `src/climate_manifold/downstream/reconstruction_objective.py` |
 | 독립 장복원 decoder D_rec | `src/climate_manifold/downstream/observed_decoder.py` |
 | 선택적 미래 분위수 변화율 감독 | `src/climate_manifold/downstream/statistical_flow.py` |
+| 관측 조건부 Flow Matching·관측만 사용하는 sampler | `src/climate_manifold/downstream/conditional_flow.py` |
+| 조건부 분위수 시나리오 NPZ·설정 JSON 출력 | `src/climate_manifold/downstream/sample_conditional_flow.py` |
 | 물리 잔차와 선택적 tendency 감독 | `src/climate_manifold/hybrid_pinn.py` |
 | 예측 E→F→D 및 별도 장복원 decoder D_rec 구성 | `src/climate_manifold/downstream/pipeline.py` |
 | 전체 쌍별 실행 | `scripts/run_pairwise_manifold_comparison.sh` |
@@ -516,3 +522,136 @@ flow를 켠 뒤 보조 손실만 감소했는지, 최종 기상장의 RMSE/ACC�
 W2/KL 각각의 Neural ODE·ClimODE 합성자료 학습, flow 단독 gradient 경로,
 checkpoint 재로딩·평가와 미래 정답의 추론 입력 누출 방지를 확인했습니다.
 실제 ERA5 자료의 예측력 향상은 아직 검증하지 않았습니다.
+
+## 관측 쌍 조건부 Flow Matching
+
+`--conditional-flow-weight`를 양수로 지정하면 **관측 origin−6h, origin 쌍**에서 출발하는
+conditional flow matching(CFM)을 보조 학습합니다. 기존 예측기 F가 만든 미래 latent를
+사용하지 않습니다. 관측 복원의 W2/KL·PINN·Static과 주 예측 손실은 그대로 유지합니다.
+CFM은 `pinn_statistical` 또는 `statistical_static`의 joint latent 실험에서 사용할 수 있습니다.
+decoder는 `separate_surface_and_information` 또는 `information_only`여야 합니다.
+예측 D를 공유하는 `surface_and_information`은 CFM에서 지원하지 않습니다.
+
+| 구분 | `STATISTICAL_FLOW_WEIGHT` | `CONDITIONAL_FLOW_WEIGHT` |
+|---|---|---|
+| 출발 경로 | F의 예측 미래 latent → 보조 decoder | 관측 쌍 → E와 보조 decoder → 조건부 head |
+| 미래 감독 | 예측·실제 분위수의 물리 시간 변화율 | 관측 분포+noise → 실제 미래 분포의 벡터장 |
+| 새 네트워크 | 없음 | 보조 CFM head |
+| 단독 역전파 | E·F·활성 보조 decoder | E·활성 보조 decoder·CFM head |
+| 기본값 | 0 | 0 |
+
+두 weight를 동시에 양수로 주면 오류를 냅니다. 같은 sweep에 양수인 두 Flow 종류를 넣는 것도
+금지하여 실험 효과가 섞이는 것을 방지합니다. 기존 예측 Flow 옵션·파일명은 보존합니다.
+
+### 손실과 관측 조건
+
+면적 가중 정규화 주변분포의 분위수를 `Q_t`, 미래 lead `h`의 실제 분위수를 `Q_(t+h)`라 합니다.
+CFM 조건 `c_t`는 관측 쌍의 encoder 표현과 **보조 decoder가 복원한 현재 분포**를 사용합니다.
+관측 분포의 실제 분위수를 공통 기준점으로 쓰고 noise를 더합니다. 실제 미래값은 flow 학습의
+도착점과 정답 벡터장을 만드는 데만 사용하며 관측 조건에는 들어가지 않습니다.
+
+\[
+s_0(h)=Q_t+\sigma\epsilon_h,\qquad s_1(h)=Q_{t+h},\qquad
+\epsilon\sim\mathcal N(0,I),\quad \tau\sim U(0,1),
+\]
+\[
+s_\tau=(1-\tau)s_0+\tau s_1,\qquad
+L_{\rm CFM}=\mathbb E_{\epsilon,\tau}
+\left[\|v_\theta(s_\tau,\tau\mid c_t,h)-(s_1-s_0)\|^2\right].
+\]
+
+`τ`는 0–1 사이의 생성 Flow 시간이며, 물리 lead `h`는 **일(days)**로 별도 입력합니다.
+CFM target은 `s1-s0`이며 물리 lead로 나눈 속도가 아닙니다. 기본 32개 중간 분위수를 사용합니다.
+샘플 하나의 전체 lead 구간에 같은 `τ`를 적용하고, 초기 Gaussian 성분은 lead·변수·분위수마다
+독립적으로 뽑습니다. head는 lead별 공유 MLP와 kernel 3의 시간축 residual convolution으로
+전체 미래 분포 시퀀스의 벡터장을 함께 계산합니다. 시간축 결합은 표현 능력이며 물리적 일관성 보장은 아닙니다.
+CFM은 활성 surface와 dynamic information의 분위수를 이어 붙이고 샘플·lead·변수·분위수
+전체의 제곱오차를 평균합니다. 기존 Statistical의 두 그룹 1:1 평균과는 달리, CFM의 그룹별
+실효 비중은 변수 수에 비례합니다. `information_only`에서는 동적 정보 항만 사용합니다.
+고정 지형은 분포 생성 대상에서 제외합니다.
+W2와 KL 모두 같은 CFM을 사용할 수 있으며 KL histogram을 직접 이동시키는 방식은 아닙니다.
+
+\[
+L_{\rm total}=L_{\rm 기존}+\lambda_{\rm CFM}L_{\rm CFM}.
+\]
+
+외부 CFM weight는 Statistical weight와 독립적입니다. CFM만 역전파하면 공유 E, D_rec/D_I 및
+CFM head가 갱신됩니다. **F·예측 D·PINN closure는 CFM으로 직접 갱신되지 않습니다.**
+기존 예측 손실은 계속 E·F·D를 갱신하므로 전체 학습은 동시 학습입니다.
+CFM head의 파라미터는 보조 파라미터 수에 기록하고, 주 예측기의 파라미터 수와 구분합니다.
+
+### 선택과 비교 실행
+
+| 환경 변수 | 기본값 | 허용 범위·의미 |
+|---|---|---|
+| `CONDITIONAL_FLOW_WEIGHT` | `0` | 단일 CFM 가중치, 0이면 비활성 |
+| `CONDITIONAL_FLOW_WEIGHTS` | 단일값 사용 | 예: `"0 0.1"`; 단일 변수보다 우선 |
+| `CONDITIONAL_FLOW_QUANTILES` | `32` | 정수 1–512, 변수별 분위수 개수 |
+| `CONDITIONAL_FLOW_HIDDEN_DIM` | `128` | 정수 1–4096, 보조 head 폭 |
+| `CONDITIONAL_FLOW_NOISE_SCALE` | `0.2` | 유한 양수, 정규화 단위의 초기 noise 표준편차 |
+
+직접 Python 학습에서는 각각 `--conditional-flow-weight`, `--conditional-flow-quantiles`,
+`--conditional-flow-hidden-dim`, `--conditional-flow-noise-scale`를 사용합니다.
+비활성 상태에서는 head를 생성하지 않고 head 설정 옵션도 받지 않습니다. 이전 checkpoint에
+`conditional_flow_config`가 없으면 비활성으로 해석합니다. 선택 설정과 head 구조는 checkpoint와
+평가 보고서에 보존합니다. 서로 다른 head 구조의 결과를 같은 seed 반복으로 섞지 않습니다.
+
+기존 ARCHIVE/INFO 환경에서 W2/KL 각각 CFM on/off를 비교하려면:
+
+```bash
+RUN=runs/pinn_observed_conditional_flow \
+MODELS="mlp neural_ode climode convlstm simvp" \
+PAIRS=pinn_statistical SEEDS=7 BATCH_SIZE=16 \
+STATISTICAL_LOSSES="w2 kl_entropy" STATISTICAL_FLOW_WEIGHTS=0 \
+CONDITIONAL_FLOW_WEIGHTS="0 0.1" \
+CONDITIONAL_FLOW_QUANTILES=32 CONDITIONAL_FLOW_HIDDEN_DIM=128 \
+CONDITIONAL_FLOW_NOISE_SCALE=0.2 \
+bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+예측기 5개마다 Raw·W2·W2+CFM·KL·KL+CFM을 학습하므로 총 25회입니다.
+Raw와 PINN+Static은 CFM 설정마다 반복하지 않습니다. 활성 파일에는 `-cfm0.1`이 붙으며,
+집계 arm은 `pinn_statistical:cfm=0.1`, `pinn_statistical:kl_entropy:cfm=0.1`처럼 구분합니다.
+가중치는 runner에서 음수가 아닌 유한 소수로 입력하고 12개 유효숫자로 정리합니다.
+`0.1`은 성능을 검증한 권장값이 아니라 비교용 예시입니다.
+같은 W2/KL 설정에서 CFM weight만 바꾼 결과는 `comparison.conditional-flow-effects.csv`와
+JSON의 `conditional_flow_effects`에 기록합니다. CFM 설정이 같을 때의 W2→KL 비교는 기존
+`comparison.statistical-effects.csv`에 남깁니다. CFM과 기존 예측 Flow를 교체한 비교를
+한 가지 weight 변화의 효과로 합치지 않습니다.
+
+### 미래 정답 없는 분포 sampling
+
+학습된 CFM head는 관측 쌍과 현재 정보만으로 초기 noise를 바꾸어 여러 시나리오를 만듭니다.
+`τ=0 → 1`의 벡터장을 midpoint 방법(기본 32 steps)으로 적분하고 마지막 분위수 축을 정렬하여
+각 marginal의 분위수를 단조롭게 만듭니다.
+이는 SDE solver가 아니라 **확률적 초기값을 사용하는 ODE sampling**입니다.
+
+```bash
+PYTHONPATH=src python -m climate_manifold.downstream.sample_conditional_flow \
+  --checkpoint runs/pinn_observed_conditional_flow/neural_ode-pinn_statistical-cfm0.1-seed7.pt \
+  --archive "$ARCHIVE" --information "$INFO" \
+  --split validation --max-cases 16 --members 8 --steps 32 --seed 7 \
+  --output runs/pinn_observed_conditional_flow/neural_ode-cfm-samples.npz
+```
+
+새 `.npz`와 같은 이름의 `.json` 보고서를 저장합니다. `normalized_quantiles`의 축은
+`[case, member, lead, variable, quantile]`입니다. 변수명·분위수 수준·lead 시간·origin·seed와
+정규화 정보를 함께 보존합니다. sampler는 예측기 F와 미래 정답을 사용하지 않습니다.
+학습 때 endpoint에 미래 정답이 들어가는 것은 감독 학습이며, inference에는 전달하지 않습니다.
+
+### 결과를 해석할 때
+
+CFM은 미래 분포를 만드는 보조 생성 목적입니다. 기상장 예측력이 좋아진다면 공유 표현을 통한
+효과일 수 있지만, **미래 상층 정보 감독과 보조 파라미터도 추가**되므로 개선을 Flow 방식만의
+효과로 단정할 수 없습니다. 같은 미래 정답을 쓰는 endpoint 감독·동일 head 용량 비교가
+추가로 필요합니다. 기존 최종 기상장 RMSE/ACC와 함께 CFM 생성 분포의 보정·다양성을 별도 평가해야 합니다.
+
+출력은 **정규화된 공간 주변분포**이며 위치가 있는 기상장·태풍 track ensemble이 아닙니다.
+격자별로 정규화한 surface의 marginal을 하나의 scalar inverse transform으로 물리 Pa 분포로
+바꿀 수 없습니다. 마지막 정렬은 분위수 단조성만 보장하고 확률 보정이나 시간적 물리 일관성을
+보장하지 않습니다. 실제 ERA5에서의 정확도·장기 안정성·불확실성 보정은 아직 검증하지 않았습니다.
+
+구현 검증: 전체 회귀 테스트 702개와 이후 추가한 checkpoint decoder 계약 검증 1개가 통과했습니다.
+W2/KL × Neural ODE/ClimODE 합성 학습, CFM 단독 gradient 분리, 미래 입력 누출 방지,
+기존 파라미터 초기값·비활성 checkpoint 호환, seed 재현성과 분포 sampling을 확인했습니다.
+이는 코드 동작 검증이며 실제 자료 예측력·앙상블 보정의 성능 근거는 아닙니다.

@@ -252,3 +252,96 @@ def test_invalid_flow_configuration_fails_before_any_training(tmp_path, settings
     result, commands = run_runner(tmp_path, **settings)
     assert result.returncode != 0 and not commands
     assert message in result.stderr
+
+
+def test_observed_conditional_flow_sweep_shares_raw_and_preserves_base_arms(tmp_path):
+    result, commands = run_runner(tmp_path, SEEDS='7', PAIRS='pinn_statistical',
+        MODELS='mlp neural_ode climode convlstm simvp', STATISTICAL_LOSSES='w2 kl_entropy',
+        CONDITIONAL_FLOW_WEIGHTS='0 .100', CONDITIONAL_FLOW_QUANTILES='17',
+        CONDITIONAL_FLOW_HIDDEN_DIM='48', CONDITIONAL_FLOW_NOISE_SCALE='.3')
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 25
+    assert len({option(row, '--output') for row in training}) == 25
+    raw = [row for row in training if option(row, '--bridge') == 'raw']
+    assert len(raw) == 5
+    enabled = [row for row in training if '--conditional-flow-weight' in row]
+    assert len(enabled) == 10
+    assert {option(row, '--statistical-loss') for row in enabled} == {'w2', 'kl_entropy'}
+    for row in enabled:
+        assert option(row, '--conditional-flow-weight') == '0.1'
+        assert option(row, '--conditional-flow-quantiles') == '17'
+        assert option(row, '--conditional-flow-hidden-dim') == '48'
+        assert option(row, '--conditional-flow-noise-scale') == '0.3'
+        assert option(row, '--constraint-decoder') == 'separate_surface_and_information'
+        assert option(row, '--output').endswith('-cfm0.1-seed7.pt')
+    for row in training:
+        assert '--statistical-flow-weight' not in row
+        assert option(row, '--batch-size') == '16'
+        if '--conditional-flow-weight' not in row:
+            assert not {'--conditional-flow-quantiles', '--conditional-flow-hidden-dim',
+                        '--conditional-flow-noise-scale'} & set(row)
+            assert '-cfm' not in Path(option(row, '--output')).name
+    for row in raw:
+        assert '--statistical-loss' not in row
+    comparison = commands[-1]
+    assert len(comparison[comparison.index('--reports') + 1:comparison.index('--output')]) == 25
+
+
+def test_all_pair_conditional_sweep_keeps_nonstatistical_and_raw_single(tmp_path):
+    result, commands = run_runner(tmp_path, MODELS='neural_ode', SEEDS='7',
+        STATISTICAL_LOSSES='w2 kl_entropy', CONDITIONAL_FLOW_WEIGHTS='0 0.2')
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 10
+    inactive = [row for row in training if '--statistical-loss' not in row]
+    assert len(inactive) == 2
+    assert all('--conditional-flow-weight' not in row for row in inactive)
+
+
+@pytest.mark.parametrize('decoder', ['separate_surface_and_information', 'information_only'])
+def test_single_conditional_weight_uses_defaults_and_supported_decoder(tmp_path, decoder):
+    result, commands = run_runner(tmp_path, MODELS='climode', SEEDS='7',
+        PAIRS='pinn_statistical', STATISTICAL_LOSS='kl_entropy',
+        CONDITIONAL_FLOW_WEIGHT='0.05', CONSTRAINT_DECODER=decoder)
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 2
+    latent = next(row for row in training if option(row, '--bridge') == 'latent')
+    assert option(latent, '--conditional-flow-weight') == '0.05'
+    assert option(latent, '--conditional-flow-quantiles') == '32'
+    assert option(latent, '--conditional-flow-hidden-dim') == '128'
+    assert option(latent, '--conditional-flow-noise-scale') == '0.2'
+
+
+@pytest.mark.parametrize('settings,message', [
+    ({'CONDITIONAL_FLOW_WEIGHTS': '0 0.0'}, 'Duplicate conditional flow weight'),
+    ({'CONDITIONAL_FLOW_WEIGHTS': '0.1 .100'}, 'Duplicate conditional flow weight'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '-1'}, 'finite nonnegative decimal'),
+    ({'CONDITIONAL_FLOW_WEIGHT': 'NaN'}, 'finite nonnegative decimal'),
+    ({'CONDITIONAL_FLOW_WEIGHT': 'inf'}, 'finite nonnegative decimal'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '1e-3'}, 'finite nonnegative decimal'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '9' * 400}, 'finite nonnegative decimal'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '0.1', 'PAIRS': 'pinn_static'}, 'pair containing statistical'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '0.1', 'CONSTRAINT_DECODER': 'surface_and_information'},
+     'independent or information-only'),
+    ({'CONDITIONAL_FLOW_WEIGHTS': '0 .1', 'STATISTICAL_FLOW_WEIGHTS': '0 .1'},
+     'cannot both have positive weights'),
+    ({'CONDITIONAL_FLOW_QUANTILES': '16'}, 'requires a positive conditional flow weight'),
+    ({'CONDITIONAL_FLOW_HIDDEN_DIM': '16'}, 'requires a positive conditional flow weight'),
+    ({'CONDITIONAL_FLOW_NOISE_SCALE': '.2'}, 'requires a positive conditional flow weight'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_QUANTILES': '0'}, 'between 1 and 512'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_QUANTILES': '513'}, 'between 1 and 512'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_HIDDEN_DIM': '1.5'}, 'between 1 and 4096'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_HIDDEN_DIM': '0'}, 'between 1 and 4096'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_HIDDEN_DIM': '4097'}, 'between 1 and 4096'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_NOISE_SCALE': '0'}, 'finite and positive'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_NOISE_SCALE': '-0.2'}, 'finite and positive'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_NOISE_SCALE': 'NaN'}, 'finite and positive'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_NOISE_SCALE': 'inf'}, 'finite and positive'),
+    ({'CONDITIONAL_FLOW_WEIGHT': '.1', 'CONDITIONAL_FLOW_NOISE_SCALE': '1e999'}, 'finite and positive'),
+])
+def test_invalid_conditional_configuration_fails_before_any_training(tmp_path, settings, message):
+    result, commands = run_runner(tmp_path, **settings)
+    assert result.returncode != 0 and not commands
+    assert message in result.stderr

@@ -22,6 +22,8 @@ from .constraint_protocol import CONSTRAINT_DECODERS, make_constraint_contract, 
 from .statistical_objective import STATISTICAL_LOSSES, statistical_config_from_args, statistical_config_from_payload
 from .statistical_flow import (statistical_flow_config_from_args, statistical_flow_config_from_payload,
                                forecast_statistical_flow_losses)
+from .conditional_flow import (conditional_flow_config_from_args, conditional_flow_config_from_payload,
+                               observed_conditional_flow_losses)
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
@@ -146,6 +148,7 @@ def load_predictor(path,device='cpu'):
     constraint_decoder=constraint_decoder_from_payload(p)
     statistical_config_from_payload(p)
     statistical_flow_config_from_payload(p)
+    conditional_config=conditional_flow_config_from_payload(p)
     config=PredictorConfig(**p['config'])
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
         raise ValueError('Frozen checkpoints require a sealed A')
@@ -156,7 +159,9 @@ def load_predictor(path,device='cpu'):
         representation.core.manifold_ready.fill_(True)
     model=ForecastPipeline(new_a(p['a_metadata'],bool(p.get('a_was_sealed')),raw=config.bridge=='raw'),config,
         p['constants'],p['a_metadata']['schema'],representation,
-        separate_reconstruction_decoder=constraint_decoder=='separate_surface_and_information')
+        separate_reconstruction_decoder=constraint_decoder=='separate_surface_and_information',
+        conditional_flow_config=conditional_config,
+        constraint_decoder_mode=constraint_decoder or 'separate_surface_and_information')
     model.load_state_dict(p['model'],strict=True)
     return model.to(device).eval(),p
 
@@ -184,6 +189,7 @@ def prepare_constraint_pair(args):
     pair=getattr(args,'constraint_pair',None)
     statistical_config_from_args(args, pair)
     statistical_flow_config_from_args(args, pair)
+    conditional_flow_config_from_args(args, pair)
     if pair is None:
         if getattr(args,'constraint_decoder',None) is not None:
             raise ValueError('--constraint-decoder requires --constraint-pair')
@@ -391,26 +397,36 @@ def train(args):
     constraint_decoder=args.constraint_decoder if split_constraints else None
     statistical_config=statistical_config_from_args(args,args.constraint_pair)
     flow_config=statistical_flow_config_from_args(args,args.constraint_pair)
+    conditional_config=conditional_flow_config_from_args(args,args.constraint_pair)
     information_only=constraint_decoder=='information_only'
     separate_decoder=constraint_decoder=='separate_surface_and_information'
     target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
     loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info,
-        reconstruction_constraints=split_constraints,statistical_flow_targets=flow_config is not None),batch_size=args.batch_size,
+        reconstruction_constraints=split_constraints,statistical_flow_targets=flow_config is not None or conditional_config is not None),batch_size=args.batch_size,
         shuffle=(name=='train'),generator=torch.Generator().manual_seed(args.seed)) for name in ('train','calibration')]
     # A and AE construction consume different RNG amounts. Reset so equal-size
     # latent predictors start with identical weights for the same forecast seed.
     torch.manual_seed(args.seed)
     model=ForecastPipeline(a,config,constants,p['schema'],representation,
-        separate_reconstruction_decoder=separate_decoder).to(args.device)
+        separate_reconstruction_decoder=separate_decoder,
+        conditional_flow_config=conditional_config,
+        constraint_decoder_mode=constraint_decoder or 'separate_surface_and_information').to(args.device)
     temporal=TemporalObjective(p['schema'],p['mean'],p['scale'],p['statistics']).to(args.device)
     parameters=[x for x in model.parameters() if x.requires_grad]
     optimizer=torch.optim.AdamW(parameters,lr=args.learning_rate) if parameters else None
     leads=torch.arange(1,args.horizon_steps+1,device=args.device,dtype=torch.float32)*a.config.step_hours
+    # Separate RNG streams keep CFM sampling independent of forecast initialization
+    # and reset selection noise every epoch for comparable diagnostics.
+    cfm_train_rng=torch.Generator(device=args.device).manual_seed(args.seed+104729) if conditional_config else None
+    cfm_selection_rng=torch.Generator(device=args.device).manual_seed(args.seed+104730) if conditional_config else None
     best=float('inf');best_state=None;rows=[];started=time.perf_counter();best_epoch=0
     for epoch in range(1,args.epochs+1):
         row={'epoch':epoch}
         for training,loader in zip((True,False),loaders):
             model.train(training);total={};count=0
+            cfm_rng=cfm_train_rng if training else cfm_selection_rng
+            if not training and cfm_rng is not None:
+                cfm_rng.manual_seed(args.seed+104730)
             with torch.set_grad_enabled(training and optimizer is not None):
                 for batch in loader:
                     batch={k:v.to(args.device) for k,v in batch.items()}
@@ -432,6 +448,11 @@ def train(args):
                                 model,prediction,batch,leads,flow_config,decoder_mode=constraint_decoder)
                             losses.update(flow_losses)
                             losses['loss']=losses['loss']+flow_losses['statistical_flow_regularization']
+                        if conditional_config is not None:
+                            conditional_losses=observed_conditional_flow_losses(
+                                model,batch,leads,conditional_config,generator=cfm_rng)
+                            losses.update(conditional_losses)
+                            losses['loss']=losses['loss']+conditional_losses['conditional_flow_regularization']
                     if training and optimizer is not None:
                         optimizer.zero_grad(set_to_none=True);losses['loss'].backward()
                         torch.nn.utils.clip_grad_norm_(parameters,1.,error_if_nonfinite=True);optimizer.step()
@@ -456,7 +477,7 @@ def train(args):
     constraint_contract=(make_constraint_contract(args.constraint_pair,args.constraint_pair.split('_'),
                          constraint_decoder) if split_constraints else None)
     auxiliary_modules=() if model.bridge.manifold is None else (
-        model.bridge.manifold.info_head,model.bridge.manifold.pinn,model.reconstruction_decoder)
+        model.bridge.manifold.info_head,model.bridge.manifold.pinn,model.reconstruction_decoder,model.conditional_flow)
     auxiliary_ids={id(parameter) for module in auxiliary_modules if module is not None
                    for parameter in module.parameters()}
     forecast_parameters=sum(parameter.numel() for parameter in parameters if id(parameter) not in auxiliary_ids)
@@ -511,6 +532,7 @@ def train(args):
         'statistical_loss':statistical_config['kind'] if statistical_config else None,
         'statistical_loss_config':statistical_config,
         'statistical_flow_config':flow_config,
+        'conditional_flow_config':conditional_config,
         'split_objective_weights':({'reconstruction':weights.reconstruction,'pinn':weights.pinn,
             'statistical':weights.distribution,'static':weights.static} if split_constraints else None),
         'initialization':'pretrained' if config.training_mode=='frozen' else args.initialization,
@@ -529,6 +551,8 @@ def train(args):
                 if information_only else
                 'selected surface spatial marginal quantiles through independent reconstruction decoder, including sea-level pressure, averaged with dynamic-information quantiles; not ensemble CRPS'
                 if separate_decoder else 'selected surface and dynamic-information spatial marginal quantiles on observed reconstructions; not ensemble CRPS'),
+            'conditional_flow':('observed pair -> shared E and auxiliary decoded origin -> conditional flow matching of future spatial quantile trajectories; source is observed origin plus noise, future targets are supervision only; no predictor or forecast-D gradient; physical lead time and flow tau are distinct'
+                if conditional_config is not None else 'disabled'),
             'statistical_flow':('optional forecast latent -> auxiliary decoder quantile transport velocity matching per day; observed origin anchored, future information is supervision only; gradients reach E, predictor and auxiliary decoders'
                 if flow_config is not None else 'disabled'),
             'static':'selected area-weighted static information L2 on observed reconstructions',
@@ -538,6 +562,8 @@ def train(args):
             'distribution':'optional deterministic spatial quantiles of dynamic information fields; not ensemble CRPS',
             'physics':'future-field diagnostic matching, not exact conservation',
             'pinn':'same forecast trajectory; no independent A drift or auxiliary sampler'}),
+        'conditional_flow_training_rng':({'train_seed':args.seed+104729,
+            'selection_seed':args.seed+104730,'selection_reset_each_epoch':True} if conditional_config else None),
         'resume':'optimizer/RNG resume not implemented'}
     output.parent.mkdir(parents=True,exist_ok=True)
     torch.save(payload,output)
@@ -568,6 +594,14 @@ def parser():
         help='With --constraint-pair: separate_surface_and_information (default) uses an independent field decoder; information_only disables field reconstruction; surface_and_information shares forecast D')
     p.add_argument('--statistical-weight',type=float,default=.1,
         help='Selected spatial distribution loss weight for split pairs; legacy route uses --distribution-weight')
+    p.add_argument('--conditional-flow-weight',type=float,default=0.,
+        help='Observed-pair conditional Flow Matching auxiliary weight; 0 disables, excludes forecast statistical flow')
+    p.add_argument('--conditional-flow-quantiles',type=int,default=None,
+        help='Observed conditional flow only: per-variable quantile count (default 32)')
+    p.add_argument('--conditional-flow-hidden-dim',type=int,default=None,
+        help='Observed conditional flow only: hidden width (default 128)')
+    p.add_argument('--conditional-flow-noise-scale',type=float,default=None,
+        help='Observed conditional flow only: source Gaussian noise std in normalized quantile coordinates (default 0.2)')
     p.add_argument('--statistical-flow-weight',type=float,default=0.,
         help='Add forecast distribution transport velocity loss to W2/KL (default 0 disables it)')
     p.add_argument('--statistical-flow-quantiles',type=int,default=None,
