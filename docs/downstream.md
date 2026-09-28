@@ -6,8 +6,11 @@
 세부 손실과 단일 실행 예제는 [joint_training.md](joint_training.md)를 참고하세요.
 이 브랜치의 **관측 복원 PINN·Statistical/Static 쌍별 실험과 Raw 비교군**은
 [split_manifold_constraints.md](split_manifold_constraints.md)의 runner를 사용합니다.
-쌍별 실험의 기본 제약 경로는 `E → D_I`이며, 관측 기상장 D의 복원·분포 손실을 끕니다.
-예측 경로의 D는 계속 공동 학습합니다. 이전 제약 범위는 `CONSTRAINT_DECODER=surface_and_information`으로 선택합니다.
+쌍별 실험은 기본 `CONSTRAINT_DECODER=separate_surface_and_information`에서
+관측 기상장 전용 `E → D_rec`와 정보 복원 `E → D_I`를 사용합니다. D_rec는 예측 decoder D와
+독립된 파라미터를 가지며, 기상장 복원과 `msl`을 포함한 surface 변수들의 W₂²를 학습합니다.
+예측 경로의 D는 미래 예측 손실로 계속 공동 학습합니다. 정보 전용 제약은 `information_only`,
+이전의 D 공유 제약은 `surface_and_information`으로 선택합니다. D_rec는 새 분리 모드에만 추가합니다.
 아래 3-way 실험은 `--constraint-pair`를 지정하지 않은 기존 경로입니다.
 
 ## 주실험: 직접 예측과 공동 학습의 3-way 비교

@@ -6,8 +6,9 @@ are origin minus six hours and origin, each encoded with co-located information.
 PINN temporal derivatives therefore describe reconstructed observations, not a
 forecast trajectory. All pairs retain a common pointwise reconstruction anchor;
 the three optional constraint families are selected exactly two at a time.
-By default only the information decoder is used. The former shared surface
-decoder reconstruction is retained behind ``surface_and_information`` mode.
+By default a dedicated surface reconstruction decoder and the information
+decoder are used. The forecast decoder is never shared by that default route.
+The previous information-only and shared-decoder routes remain selectable.
 """
 from __future__ import annotations
 
@@ -16,10 +17,11 @@ import math
 import torch
 
 from .joint_objective import JointObjectiveWeights, spatial_quantile_loss
+from .constraint_protocol import CONSTRAINT_DECODERS
 
 
 PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static')
-DECODER_MODES = ('information_only', 'surface_and_information')
+DECODER_MODES = CONSTRAINT_DECODERS
 
 
 def _validate_weights(weights, constraint_pair):
@@ -60,16 +62,20 @@ def _observed_pair(batch, manifold):
 
 
 def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, *,
-                                     decoder_mode='information_only'):
+                                     decoder_mode='separate_surface_and_information'):
     """Return manifold-only losses and their weighted ``regularization`` sum.
 
-    In ``information_only`` mode, ``reconstruction`` and
+    By default ``separate_surface_and_information`` reconstructs observed fields
+    through ``pipeline.reconstruction_decoder`` and information through D_I,
+    using their equal average for reconstruction and spatial quantile losses.
+    The forecast surface decoder D is not invoked. In ``information_only`` mode,
+    ``reconstruction`` and
     ``information_spatial_quantile`` use dynamic information alone. The surface
     decoder is not invoked and its reported losses are zero; its forecasting
     path remains trainable. ``surface_and_information`` restores the legacy
     equal average of surface and dynamic-information terms. Quantile losses are
     spatial marginals, neither ensemble CRPS nor temporal distribution losses.
-    Both modes exclude static information from these terms. ``static`` compares
+    All modes exclude static information from these terms. ``static`` compares
     both reconstructed endpoints to origin terrain. PINN contributes physical
     residuals and closure regularization without duplicated tendency loss.
     """
@@ -86,6 +92,9 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
         raise ValueError('Split constraints require enriched inputs and an information decoder')
     if weights.pinn and manifold.pinn is None:
         raise ValueError('Positive PINN weight requires an enabled Hybrid PINN')
+    reconstruction_decoder = getattr(pipeline, 'reconstruction_decoder', None)
+    if decoder_mode == 'separate_surface_and_information' and reconstruction_decoder is None:
+        raise ValueError('Separate surface constraints require a dedicated reconstruction_decoder')
 
     states, information, dt = _observed_pair(batch, manifold)
     grid = manifold.config.grid
@@ -106,8 +115,8 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
         raise ValueError('Constraint losses require positive finite geographic areas')
 
     # Neither F nor an independent A dynamics/sampling network is involved.
-    # The default auxiliary path bypasses D entirely, without freezing it for
-    # E--F--D forecasting. D_I and E still receive all active constraint losses.
+    # The default auxiliary path uses D_rec, bypassing forecast D entirely.
+    # Forecast D remains trainable on E--F--D, while E is shared across routes.
     raw_pair = manifold.raw_encode(states, information)
     decoded_information = manifold.info_head(raw_pair)
     if decoded_information.shape != information.shape:
@@ -115,8 +124,10 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
     decoded = decoded_information.reshape(len(states), 2, info_shape[0], cells)
     info_target = information.reshape_as(decoded)
     surface = surface_target = None
-    if decoder_mode == 'surface_and_information':
-        reconstructed = manifold.core.manifold.decode(raw_pair)
+    if decoder_mode != 'information_only':
+        reconstructed = (reconstruction_decoder(raw_pair)
+                         if decoder_mode == 'separate_surface_and_information'
+                         else manifold.core.manifold.decode(raw_pair))
         if reconstructed.shape != states.shape:
             raise ValueError('Constraint surface decoder must preserve observed endpoint shapes')
         surface = reconstructed.reshape(len(states), 2, grid[0], cells)

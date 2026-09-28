@@ -23,13 +23,14 @@ def _split_args(archive, tmp_path, pair='pinn_statistical', *extra):
 
 @pytest.mark.parametrize('pair', CONSTRAINT_PAIRS)
 @pytest.mark.parametrize('family', ['neural_ode', 'climode'])
-@pytest.mark.parametrize('decoder', ['information_only', 'surface_and_information'])
+@pytest.mark.parametrize('decoder', [
+    'information_only', 'surface_and_information', 'separate_surface_and_information'])
 def test_split_training_joint_gradients_metadata_and_roundtrip(
         pinn_prepared, tmp_path, monkeypatch, pair, family, decoder):
     _, _, _, archive = pinn_prepared
     args = _split_args(archive, tmp_path, pair, '--model', family)
-    # An omitted flag is the new default; the old route must be explicitly unlocked.
-    if decoder == 'surface_and_information':
+    # An omitted flag creates an independent current-field reconstruction head.
+    if decoder != 'separate_surface_and_information':
         args.constraint_decoder = decoder
     captured = _capture(monkeypatch)
     checkpoint = train(args)
@@ -43,15 +44,23 @@ def test_split_training_joint_gradients_metadata_and_roundtrip(
         _assert_finite_gradient(component)
         assert any(not torch.equal(value, model.state_dict()[key])
                    for key, value in initial.items() if key.startswith(prefix))
+    separate = decoder == 'separate_surface_and_information'
+    assert (model.reconstruction_decoder is not None) == separate
+    if separate:
+        _assert_finite_gradient(model.reconstruction_decoder)
+        assert any(not torch.equal(value, model.state_dict()[key])
+                   for key, value in initial.items() if key.startswith('reconstruction_decoder.'))
     restored, payload = load_predictor(checkpoint)
     assert payload['constraint_pair'] == pair
     assert payload['constraint_path'] == 'observed_reconstruction'
     assert payload['training_contract']['constraint_path'] == 'observed_reconstruction'
     assert 'constraint_pair' not in payload['training_contract']
     contract = payload['constraint_contract']
-    assert contract['version'] == 'climate_manifold.reconstruction_constraints.v2'
+    assert contract['version'] == 'climate_manifold.reconstruction_constraints.v3'
     assert contract['decoder'] == payload['constraint_decoder'] == decoder
-    assert contract['surface_decoder_in_constraints'] == (decoder == 'surface_and_information')
+    assert contract['surface_decoder_in_constraints'] == (decoder != 'information_only')
+    assert contract['forecast_decoder_in_constraints'] == (decoder == 'surface_and_information')
+    assert contract['separate_reconstruction_decoder'] == separate
     assert contract['observed_pair'] == 'origin-6h,origin'
     assert contract['groups'] == pair.split('_')
     assert contract['pinn_tendency_supervision'] is False
@@ -62,6 +71,11 @@ def test_split_training_joint_gradients_metadata_and_roundtrip(
         assert bool(weights[name]) == (group in pair.split('_'))
     assert (manifold.pinn is not None) == ('pinn' in pair.split('_'))
     assert payload['forecast_parameters'] + payload['constraint_parameters'] == payload['trainable_parameters']
+    if separate:
+        auxiliary = (manifold.info_head, manifold.pinn, model.reconstruction_decoder)
+        expected_auxiliary_count = sum(p.numel() for module in auxiliary if module is not None
+                                       for p in module.parameters() if p.requires_grad)
+        assert payload['constraint_parameters'] == expected_auxiliary_count
     assert payload['representation_training'] == 'jointly_trained' and not payload['a_frozen']
     metrics = json.loads(checkpoint.with_suffix('.metrics.json').read_text())[0]
     assert metrics['selection']['state_mse'] == payload['best_selection_state_mse']
@@ -72,6 +86,8 @@ def test_split_training_joint_gradients_metadata_and_roundtrip(
             assert metrics[split]['reconstruction_surface'] == 0
             assert metrics[split]['statistical_surface'] == 0
             assert metrics[split]['reconstruction'] == metrics[split]['reconstruction_information']
+    elif 'statistical' in pair:
+        assert metrics['train']['statistical_surface'] > 0
     if manifold.pinn is not None:
         assert metrics['train']['pinn_tendency'] == 0
         _assert_finite_gradient(manifold.pinn)
@@ -83,6 +99,11 @@ def test_split_training_joint_gradients_metadata_and_roundtrip(
     with torch.no_grad():
         expected, actual = model(*inputs)['mean'], restored(*inputs)['mean']
         torch.testing.assert_close(expected, actual, rtol=0, atol=0)
+        assert (restored.reconstruction_decoder is not None) == separate
+        if separate:
+            raw = manifold.raw_encode(batch['constraint_states'], batch['constraint_information'])
+            torch.testing.assert_close(model.reconstruction_decoder(raw),
+                                       restored.reconstruction_decoder(raw), rtol=0, atol=0)
         # Standalone inference never consumes the auxiliary observations/labels.
         for key in ('constraint_states', 'constraint_information', 'targets'):
             batch[key].fill_(float('nan'))
@@ -105,19 +126,24 @@ def test_split_training_joint_gradients_metadata_and_roundtrip(
     assert report['finite_forecast_fraction'] == 1.
 
 
-def test_information_only_training_skips_current_surface_decode(pinn_prepared, tmp_path, monkeypatch):
+@pytest.mark.parametrize('decoder', ['information_only', 'separate_surface_and_information'])
+def test_independent_constraints_skip_current_forecast_decode(pinn_prepared, tmp_path, monkeypatch, decoder):
     """Actual training calls D only for forecasts, including the selection pass."""
     from climate_manifold.downstream.pipeline import ForecastPipeline
     _, _, _, archive = pinn_prepared
     args = _split_args(archive, tmp_path)
+    args.constraint_decoder = decoder
     original = ForecastPipeline.forward
-    forecast_calls, surface_calls = [], []
+    forecast_calls, surface_calls, reconstruction_calls = [], [], []
     hooks = []
 
     def traced(self, *inputs, **kwargs):
         if not hooks:
             hooks.append(self.bridge.manifold.core.manifold.decoder.register_forward_hook(
                 lambda *unused: surface_calls.append(self.training)))
+            if self.reconstruction_decoder is not None:
+                hooks.append(self.reconstruction_decoder.register_forward_hook(
+                    lambda *unused: reconstruction_calls.append(self.training)))
         output = original(self, *inputs, **kwargs)
         forecast_calls.append(self.training)
         assert output['reconstructed_origin'] is None
@@ -132,6 +158,7 @@ def test_information_only_training_skips_current_surface_decode(pinn_prepared, t
     assert True in forecast_calls and False in forecast_calls
     # No extra D call in the auxiliary objective or for unused origin output.
     assert surface_calls == forecast_calls
+    assert reconstruction_calls == (forecast_calls if decoder == 'separate_surface_and_information' else [])
 
 
 def test_constraint_decoder_requires_a_pair(tmp_path):

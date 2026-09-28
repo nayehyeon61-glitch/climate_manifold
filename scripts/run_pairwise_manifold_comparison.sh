@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared E: forecasting through E-F-D; observed constraints default to E-D_I.
+# Shared E: E-F-D forecasts; independent D_rec and D_I reconstruct observations.
 # Include one data-to-forecast raw control per model/seed, shared across pairs.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -14,10 +14,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [[ -z "${A_CHECKPOINT:-}" ]] || { echo 'Pairwise runner initializes fresh E/F/D; unset A_CHECKPOINT' >&2; exit 2; }
 INCLUDE_RAW="${INCLUDE_RAW:-1}"
 [[ "$INCLUDE_RAW" == 0 || "$INCLUDE_RAW" == 1 ]] || { echo 'INCLUDE_RAW must be 0 or 1' >&2; exit 2; }
-CONSTRAINT_DECODER="${CONSTRAINT_DECODER:-information_only}"
+CONSTRAINT_DECODER="${CONSTRAINT_DECODER:-separate_surface_and_information}"
 case "$CONSTRAINT_DECODER" in
-  information_only|surface_and_information) ;;
-  *) echo 'CONSTRAINT_DECODER must be information_only or surface_and_information' >&2; exit 2;;
+  separate_surface_and_information|information_only|surface_and_information) ;;
+  *) echo 'CONSTRAINT_DECODER must be separate_surface_and_information, information_only or surface_and_information' >&2; exit 2;;
 esac
 PYTHON="${PYTHON:-python}"
 export PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}"

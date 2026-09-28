@@ -132,7 +132,7 @@ def load_predictor(path,device='cpu'):
         raise ValueError('Not a standalone forecast checkpoint')
     # Historical split checkpoints retain their original surface + information
     # objective; absence of the new field must not relabel an old experiment.
-    constraint_decoder_from_payload(p)
+    constraint_decoder=constraint_decoder_from_payload(p)
     config=PredictorConfig(**p['config'])
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
         raise ValueError('Frozen checkpoints require a sealed A')
@@ -142,7 +142,8 @@ def load_predictor(path,device='cpu'):
         representation=new_plain_ae(p['a_metadata'])
         representation.core.manifold_ready.fill_(True)
     model=ForecastPipeline(new_a(p['a_metadata'],bool(p.get('a_was_sealed')),raw=config.bridge=='raw'),config,
-        p['constants'],p['a_metadata']['schema'],representation)
+        p['constants'],p['a_metadata']['schema'],representation,
+        separate_reconstruction_decoder=constraint_decoder=='separate_surface_and_information')
     model.load_state_dict(p['model'],strict=True)
     return model.to(device).eval(),p
 
@@ -174,7 +175,7 @@ def prepare_constraint_pair(args):
         return
     if pair not in CONSTRAINT_PAIRS:
         raise ValueError('Unknown --constraint-pair')
-    decoder=getattr(args,'constraint_decoder',None) or 'information_only'
+    decoder=getattr(args,'constraint_decoder',None) or 'separate_surface_and_information'
     if decoder not in CONSTRAINT_DECODERS:
         raise ValueError('Unknown --constraint-decoder')
     args.constraint_decoder=decoder
@@ -374,6 +375,7 @@ def train(args):
     split_constraints=args.constraint_pair is not None
     constraint_decoder=args.constraint_decoder if split_constraints else None
     information_only=constraint_decoder=='information_only'
+    separate_decoder=constraint_decoder=='separate_surface_and_information'
     target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
     loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info,
         reconstruction_constraints=split_constraints),batch_size=args.batch_size,
@@ -381,7 +383,8 @@ def train(args):
     # A and AE construction consume different RNG amounts. Reset so equal-size
     # latent predictors start with identical weights for the same forecast seed.
     torch.manual_seed(args.seed)
-    model=ForecastPipeline(a,config,constants,p['schema'],representation).to(args.device)
+    model=ForecastPipeline(a,config,constants,p['schema'],representation,
+        separate_reconstruction_decoder=separate_decoder).to(args.device)
     temporal=TemporalObjective(p['schema'],p['mean'],p['scale'],p['statistics']).to(args.device)
     parameters=[x for x in model.parameters() if x.requires_grad]
     optimizer=torch.optim.AdamW(parameters,lr=args.learning_rate) if parameters else None
@@ -395,7 +398,7 @@ def train(args):
                 for batch in loader:
                     batch={k:v.to(args.device) for k,v in batch.items()}
                     prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads,
-                                     reconstruct_origin=not information_only)
+                                     reconstruct_origin=not (information_only or separate_decoder))
                     losses=forecast_loss(prediction,batch,temporal,leads,args.tendency_weight)
                     if config.training_mode == 'joint' and config.bridge != 'raw':
                         if split_constraints:
@@ -431,7 +434,7 @@ def train(args):
     constraint_contract=(make_constraint_contract(args.constraint_pair,args.constraint_pair.split('_'),
                          constraint_decoder) if split_constraints else None)
     auxiliary_modules=() if model.bridge.manifold is None else (
-        model.bridge.manifold.info_head,model.bridge.manifold.pinn)
+        model.bridge.manifold.info_head,model.bridge.manifold.pinn,model.reconstruction_decoder)
     auxiliary_ids={id(parameter) for module in auxiliary_modules if module is not None
                    for parameter in module.parameters()}
     forecast_parameters=sum(parameter.numel() for parameter in parameters if id(parameter) not in auxiliary_ids)
@@ -491,9 +494,13 @@ def train(args):
             'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal'),
         'objective_semantics':({'forecast':'E -> predictor -> D; future field MSE or Gaussian NLL plus physical-time tendency',
             'reconstruction':('shared E -> information decoder only on observed origin-6h,origin; surface decoder and predictor bypassed'
-                if information_only else 'shared E -> surface and information decoders on observed origin-6h,origin; predictor bypassed'),
+                if information_only else
+                'shared E -> independent field reconstruction decoder and information decoder on observed origin-6h,origin; forecast D and predictor bypassed'
+                if separate_decoder else 'shared E -> surface and information decoders on observed origin-6h,origin; predictor bypassed'),
             'statistical':('selected dynamic-information spatial marginal quantiles only; surface and sea-level-pressure W2 disabled; not ensemble CRPS'
-                if information_only else 'selected surface and dynamic-information spatial marginal quantiles on observed reconstructions; not ensemble CRPS'),
+                if information_only else
+                'selected surface spatial marginal quantiles through independent reconstruction decoder, including sea-level pressure, averaged with dynamic-information quantiles; not ensemble CRPS'
+                if separate_decoder else 'selected surface and dynamic-information spatial marginal quantiles on observed reconstructions; not ensemble CRPS'),
             'static':'selected area-weighted static information L2 on observed reconstructions',
             'pinn':'selected observed reconstruction pair residuals and closure penalty; no tendency supervision or forecast-path PINN',
             'information':'legacy pointwise dynamic-information and surface-physics losses disabled'} if split_constraints else
@@ -528,7 +535,7 @@ def parser():
     p.add_argument('--constraint-pair',choices=CONSTRAINT_PAIRS,default=None,
         help='Opt-in paired constraints on an observed reconstruction path, separate from forecasting')
     p.add_argument('--constraint-decoder',choices=CONSTRAINT_DECODERS,default=None,
-        help='With --constraint-pair: information_only (default) locks surface reconstruction; surface_and_information restores both')
+        help='With --constraint-pair: separate_surface_and_information (default) uses an independent field decoder; information_only disables field reconstruction; surface_and_information shares forecast D')
     p.add_argument('--statistical-weight',type=float,default=.1,
         help='Spatial marginal quantile weight for split constraint pairs; legacy route uses --distribution-weight')
     for name,value in dict(manifold_dim=64,manifold_hidden_dim=512,context_dim=64,history_steps=6,history_stride=4).items():

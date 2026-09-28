@@ -1,4 +1,4 @@
-"""Observed information constraints bypass F and, by default, surface D."""
+"""Observed constraints use a dedicated surface D_rec and bypass forecast D/F."""
 from dataclasses import replace
 
 import pytest
@@ -34,7 +34,8 @@ def split_prepared(pinn_prepared):
     )
     pipe = ForecastPipeline(manifold, PredictorConfig(
         model='neural_ode', bridge='latent', training_mode='joint',
-        latent_layout='spatial', hidden_dim=8), schema=data['schema'])
+        latent_layout='spatial', hidden_dim=8), schema=data['schema'],
+        separate_reconstruction_decoder=True)
     origin = config.history_span_steps - 1
     information = torch.stack([torch.as_tensor(data['information'][i-1:i+1].copy())
                                for i in (origin, origin + 1)])
@@ -56,11 +57,16 @@ def test_auxiliary_only_gradients_update_representation_never_predictor(
         raise AssertionError('Forecast F must never enter observed reconstruction constraints')
 
     monkeypatch.setattr(pipe.predictor, 'forward', forbidden)
-    if decoder_mode == 'information_only':
+    if decoder_mode != 'surface_and_information':
         def surface_forbidden(*args, **kwargs):
-            raise AssertionError('Surface D must not enter information-only constraints')
+            raise AssertionError('Forecast D must not enter separated constraints')
 
         monkeypatch.setattr(manifold.core.manifold.decoder, 'forward', surface_forbidden)
+    if decoder_mode != 'separate_surface_and_information':
+        def reconstruction_forbidden(*args, **kwargs):
+            raise AssertionError('Dedicated D_rec must not enter legacy constraints')
+
+        monkeypatch.setattr(pipe.reconstruction_decoder, 'forward', reconstruction_forbidden)
     values = reconstruction_constraint_losses(pipe, batch, pair_weights(pair), pair,
                                               decoder_mode=decoder_mode)
     values['regularization'].backward()
@@ -68,9 +74,14 @@ def test_auxiliary_only_gradients_update_representation_never_predictor(
     if decoder_mode == 'surface_and_information':
         groups.append(manifold.core.manifold.decoder)
     else:
-        assert values['reconstruction_surface'] == values['statistical_surface'] == 0
         assert all(p.requires_grad and p.grad is None
                    for p in manifold.core.manifold.decoder.parameters())
+    if decoder_mode == 'separate_surface_and_information':
+        groups.append(pipe.reconstruction_decoder)
+    else:
+        assert all(p.grad is None for p in pipe.reconstruction_decoder.parameters())
+    if decoder_mode == 'information_only':
+        assert values['reconstruction_surface'] == values['statistical_surface'] == 0
     if 'pinn' in pair:
         groups.append(manifold.pinn.closure_head)
         assert values['pinn_tendency'] == 0
@@ -155,7 +166,9 @@ def test_losses_use_area_and_variable_mean_and_static_origin_target(split_prepar
     values = reconstruction_constraint_losses(pipe, batch, weights, pair, decoder_mode=decoder_mode)
     area = manifold.temporal.area.flatten()
     cells = len(area)
-    surface = manifold.core.manifold.decode(z).reshape(2, 2, -1, cells)
+    surface_decoder = (pipe.reconstruction_decoder if decoder_mode == 'separate_surface_and_information'
+                       else manifold.core.manifold.decode)
+    surface = surface_decoder(z).reshape(2, 2, -1, cells)
     truth = batch['constraint_states'].reshape_as(surface)
     decoded = manifold.info_head(z).reshape(2, 2, -1, cells)
     information = batch['constraint_information'].reshape_as(decoded)
@@ -164,11 +177,11 @@ def test_losses_use_area_and_variable_mean_and_static_origin_target(split_prepar
     dynamic_mse = ((decoded[:, :, ~static] - information[:, :, ~static]).square() * area).sum(-1).mean()
     static_mse = ((decoded[:, :, static] - information[:, 1:2, static]).square() * area).sum(-1).mean()
     expected_mse = (.5 * (surface_mse + dynamic_mse)
-                    if decoder_mode == 'surface_and_information' else dynamic_mse)
+                    if decoder_mode != 'information_only' else dynamic_mse)
     torch.testing.assert_close(values['reconstruction'], expected_mse)
     torch.testing.assert_close(values['static'], static_mse)
     quantile = spatial_quantile_loss(decoded[:, :, ~static], information[:, :, ~static], area)
-    if decoder_mode == 'surface_and_information':
+    if decoder_mode != 'information_only':
         quantile = .5 * (spatial_quantile_loss(surface, truth, area) + quantile)
     torch.testing.assert_close(values['information_spatial_quantile'], quantile)
     changed = batch['constraint_information'].detach().clone().reshape_as(decoded)
@@ -201,17 +214,21 @@ def test_default_bypasses_surface_decoder_without_freezing_forecast_decoder(spli
     def forbidden(*args, **kwargs):
         raise AssertionError('Default auxiliary route must not invoke surface D or predictor F')
 
-    # Calling the default, without a mode argument, must disable both operations.
+    # Calling the default must use D_rec instead of forecast D and bypass F.
     with monkeypatch.context() as isolated:
         isolated.setattr(manifold.core.manifold.decoder, 'forward', forbidden)
         isolated.setattr(pipe.predictor, 'forward', forbidden)
         values = reconstruction_constraint_losses(pipe, batch, pair_weights('pinn_statistical'),
                                                   'pinn_statistical')
         values['regularization'].backward()
-    assert values['reconstruction_surface'] == values['statistical_surface'] == 0
-    torch.testing.assert_close(values['reconstruction'], values['reconstruction_information'], rtol=0, atol=0)
-    torch.testing.assert_close(values['information_spatial_quantile'], values['statistical_information'],
-                               rtol=0, atol=0)
+    assert values['reconstruction_surface'] > 0
+    assert values['statistical_surface'] > 0
+    torch.testing.assert_close(values['reconstruction'], .5 * (
+        values['reconstruction_surface'] + values['reconstruction_information']))
+    torch.testing.assert_close(values['information_spatial_quantile'], .5 * (
+        values['statistical_surface'] + values['statistical_information']))
+    assert any(p.grad is not None and bool(p.grad.abs().sum() > 0)
+               for p in pipe.reconstruction_decoder.parameters())
     assert all(p.requires_grad and p.grad is None for p in manifold.core.manifold.decoder.parameters())
     assert all(p.grad is None for p in pipe.predictor.parameters())
 
@@ -223,6 +240,47 @@ def test_default_bypasses_surface_decoder_without_freezing_forecast_decoder(spli
         assert gradients and all(torch.isfinite(g).all() for g in gradients)
         assert sum(g.abs().sum() for g in gradients) > 0
     assert all(p.grad is None for p in manifold.info_head.parameters())
+    assert all(p.grad is None for p in pipe.reconstruction_decoder.parameters())
+
+
+def test_separate_surface_statistics_respond_to_msl_labels(split_prepared, pinn_prepared, monkeypatch):
+    pipe, batch = split_prepared
+    manifold = pipe.bridge.manifold
+    schema = pinn_prepared[2]['schema']
+    msl = next(i for i, variable in enumerate(schema['variables']) if variable['name'] == 'msl')
+    latent = manifold.raw_encode(batch['constraint_states'], batch['constraint_information']).detach()
+    monkeypatch.setattr(manifold, 'raw_encode', lambda *args: latent)
+    weights = pair_weights('pinn_statistical')
+    baseline = reconstruction_constraint_losses(pipe, batch, weights, 'pinn_statistical')
+    changed_states = batch['constraint_states'].detach().clone()
+    fields = changed_states.reshape(2, 2, *manifold.config.grid)
+    fields[:, :, msl] += 100
+    changed = reconstruction_constraint_losses(pipe, {**batch, 'constraint_states': changed_states},
+                                               weights, 'pinn_statistical')
+    assert changed['statistical_surface'] > baseline['statistical_surface']
+    assert changed['reconstruction_surface'] > baseline['reconstruction_surface']
+    for key in ('statistical_information', 'reconstruction_information', 'pinn_total'):
+        torch.testing.assert_close(baseline[key], changed[key], rtol=0, atol=0)
+    torch.testing.assert_close(changed['information_spatial_quantile'], .5 * (
+        changed['statistical_surface'] + changed['statistical_information']))
+    # Surface W2 itself trains D_rec, not the forecast decoder or information D_I.
+    changed['statistical_surface'].backward()
+    assert any(p.grad is not None and bool(p.grad.abs().sum() > 0)
+               for p in pipe.reconstruction_decoder.parameters())
+    for module in (manifold.core.manifold.decoder, manifold.info_head, pipe.predictor):
+        assert all(p.grad is None for p in module.parameters())
+
+
+def test_missing_dedicated_decoder_fails_before_encoding(split_prepared, monkeypatch):
+    pipe, batch = split_prepared
+    pipe.reconstruction_decoder = None
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Missing D_rec must fail before encoding')
+
+    monkeypatch.setattr(pipe.bridge.manifold, 'raw_encode', forbidden)
+    with pytest.raises(ValueError, match='dedicated reconstruction_decoder'):
+        reconstruction_constraint_losses(pipe, batch, pair_weights('pinn_statistical'), 'pinn_statistical')
 
 
 @pytest.mark.parametrize('mode', ['', 'both', 'information', None])

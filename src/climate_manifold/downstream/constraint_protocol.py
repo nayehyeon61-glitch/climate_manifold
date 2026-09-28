@@ -1,17 +1,21 @@
 """Versioned decoder scope for observed reconstruction constraints.
 
-The original contract always constrained both the surface and information
-decoders.  Missing decoder metadata in those v1 records must retain that meaning
-when they are loaded alongside the newer information-only experiment.
+Historical v1/v2 surface reconstruction shared the forecast decoder. The v3
+contract distinguishes that route from an independent reconstruction decoder
+without relabeling old checkpoints as the new experiment.
 """
 
-CONSTRAINT_DECODERS = ('information_only', 'surface_and_information')
-CONSTRAINT_CONTRACT_VERSION = 'climate_manifold.reconstruction_constraints.v2'
+CONSTRAINT_DECODERS = ('information_only', 'surface_and_information',
+                       'separate_surface_and_information')
+CONSTRAINT_CONTRACT_VERSION = 'climate_manifold.reconstruction_constraints.v3'
+PREVIOUS_CONSTRAINT_CONTRACT_VERSION = 'climate_manifold.reconstruction_constraints.v2'
 LEGACY_CONSTRAINT_CONTRACT_VERSION = 'climate_manifold.reconstruction_constraints.v1'
 
 _RECONSTRUCTION = {
     'information_only': 'dynamic-information pointwise reconstruction only',
     'surface_and_information': 'common surface and dynamic-information pointwise reconstruction',
+    'separate_surface_and_information':
+        'mean of independent surface and dynamic-information pointwise reconstruction',
 }
 
 
@@ -19,6 +23,20 @@ def _validate_decoder(decoder):
     if decoder not in CONSTRAINT_DECODERS:
         raise ValueError('Invalid reconstruction constraint_contract decoder: '+str(decoder))
     return decoder
+
+
+def _decoder_scope(decoder):
+    return {
+        'surface_decoder_in_constraints': decoder != 'information_only',
+        'forecast_decoder_in_constraints': decoder == 'surface_and_information',
+        'separate_reconstruction_decoder': decoder == 'separate_surface_and_information',
+    }
+
+
+def _validate_scope_flags(contract, decoder, *, require_all):
+    for name, expected in _decoder_scope(decoder).items():
+        if (require_all or name in contract) and contract.get(name) is not expected:
+            raise ValueError('Invalid reconstruction constraint_contract: inconsistent '+name)
 
 
 def make_constraint_contract(pair, groups, decoder):
@@ -30,14 +48,14 @@ def make_constraint_contract(pair, groups, decoder):
         'groups': sorted(groups) if isinstance(groups, (set, frozenset)) else list(groups),
         'observed_pair': 'origin-6h,origin',
         'decoder': decoder,
-        'surface_decoder_in_constraints': decoder == 'surface_and_information',
+        **_decoder_scope(decoder),
         'reconstruction': _RECONSTRUCTION[decoder],
         'pinn_tendency_supervision': False,
     }
 
 
 def normalize_constraint_contract(contract):
-    """Return a comparable v2 contract without changing its scientific scope.
+    """Return a comparable v3 contract without changing its scientific scope.
 
     Extra metadata is preserved, so experiments with different additional
     declarations cannot silently be pooled. Historical reconstruction prose is
@@ -50,20 +68,25 @@ def normalize_constraint_contract(contract):
         decoder = 'surface_and_information'
         if contract.get('decoder', decoder) != decoder:
             raise ValueError('Invalid reconstruction constraint_contract: v1 used both decoders')
-        if contract.get('surface_decoder_in_constraints', True) is not True:
-            raise ValueError('Invalid reconstruction constraint_contract: v1 constrained the surface decoder')
-    elif version == CONSTRAINT_CONTRACT_VERSION:
+        _validate_scope_flags(contract, decoder, require_all=False)
+    elif version in (PREVIOUS_CONSTRAINT_CONTRACT_VERSION, CONSTRAINT_CONTRACT_VERSION):
         decoder = _validate_decoder(contract.get('decoder'))
-        expected_surface = decoder == 'surface_and_information'
-        if contract.get('surface_decoder_in_constraints') is not expected_surface:
-            raise ValueError('Invalid reconstruction constraint_contract: inconsistent surface decoder scope')
+        if version == PREVIOUS_CONSTRAINT_CONTRACT_VERSION:
+            if decoder == 'separate_surface_and_information':
+                raise ValueError('Invalid reconstruction constraint_contract: v2 had no separate decoder')
+            # v2 required surface scope; the two newer flags were absent, but
+            # any supplied flag must still match its historical implementation.
+            if contract.get('surface_decoder_in_constraints') is not _decoder_scope(decoder)['surface_decoder_in_constraints']:
+                raise ValueError('Invalid reconstruction constraint_contract: inconsistent surface decoder scope')
+            _validate_scope_flags(contract, decoder, require_all=False)
+        else:
+            _validate_scope_flags(contract, decoder, require_all=True)
         if contract.get('reconstruction') != _RECONSTRUCTION[decoder]:
             raise ValueError('Invalid reconstruction constraint_contract: inconsistent reconstruction scope')
     else:
         raise ValueError('Invalid reconstruction constraint_contract version: '+str(version))
     return {**contract, 'version': CONSTRAINT_CONTRACT_VERSION, 'decoder': decoder,
-            'surface_decoder_in_constraints': decoder == 'surface_and_information',
-            'reconstruction': _RECONSTRUCTION[decoder]}
+            **_decoder_scope(decoder), 'reconstruction': _RECONSTRUCTION[decoder]}
 
 
 def constraint_decoder_from_payload(payload):

@@ -78,8 +78,15 @@ class PredictorConfig:
 
 
 class ForecastPipeline(nn.Module):
-    def __init__(self, manifold, config, constants=None, schema=None, representation=None):
+    def __init__(self, manifold, config, constants=None, schema=None, representation=None,
+                 *, separate_reconstruction_decoder=False):
         super().__init__()
+        if not isinstance(separate_reconstruction_decoder, bool):
+            raise ValueError('separate_reconstruction_decoder must be a boolean')
+        if separate_reconstruction_decoder and (
+                config.training_mode != 'joint' or config.bridge != 'latent'
+                or config.anchor != 'none' or config.representation != 'climate_manifold'):
+            raise ValueError('Separate reconstruction decoder requires a joint unanchored latent climate manifold')
         self.config, self.a_config = config, manifold.config
         if config.representation == 'plain_ae':
             if representation is None:
@@ -158,6 +165,12 @@ class ForecastPipeline(nn.Module):
                     velocity_iterations=config.velocity_iterations,
                     history_dt_hours=manifold.config.history_stride*manifold.config.step_hours)
         else:self.predictor = None
+        # Create the observed-field head after F so enabling it cannot change
+        # the forecast model's random initialization. Historical checkpoints
+        # omit it completely and retain their original state-dict contract.
+        from .observed_decoder import ObservedFieldDecoder
+        self.reconstruction_decoder = (
+            ObservedFieldDecoder(selected) if separate_reconstruction_decoder else None)
         self.train(self.training)
 
     def forward(self, history, information, origin_ns, lead_hours, *, reconstruct_origin=True):

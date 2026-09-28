@@ -10,7 +10,7 @@ import pytest
 
 from climate_manifold.downstream.climode_benchmark import benchmark
 from climate_manifold.downstream.compare import CONSTRAINT_GROUPS
-from climate_manifold.downstream.constraint_protocol import make_constraint_contract
+from climate_manifold.downstream.constraint_protocol import CONSTRAINT_DECODERS, make_constraint_contract
 from test_raw_comparison import report, run_compare
 
 
@@ -66,13 +66,14 @@ def scoped_pair_report(pair, seed=7, decoder='information_only'):
     return row
 
 
-def test_information_only_pairs_accept_matched_raw_and_export_scope(tmp_path):
-    data = [scoped_pair_report(pair) for pair in CONSTRAINT_GROUPS]
+@pytest.mark.parametrize('decoder', CONSTRAINT_DECODERS)
+def test_scoped_pairs_accept_matched_raw_and_export_scope(tmp_path, decoder):
+    data = [scoped_pair_report(pair, decoder=decoder) for pair in CONSTRAINT_GROUPS]
     result = run_compare(tmp_path, [report('raw'), *data])
     assert result['direct_comparison']['ranking_allowed']
     assert len(result['direct_comparison']['effects']) == 6
     assert result['rows'][0]['constraint_decoder'] is None
-    assert all(row['constraint_decoder'] == 'information_only' for row in result['rows'][1:])
+    assert all(row['constraint_decoder'] == decoder for row in result['rows'][1:])
     assert len(result['constraint_pair_effects']) == 6
 
 
@@ -86,8 +87,15 @@ def test_legacy_scope_is_inferred_and_matches_explicit_both_mode(tmp_path):
 
 
 @pytest.mark.parametrize('second_pair,second_seed', [('pinn_static', 7), ('pinn_statistical', 19)])
-def test_mixed_decoder_scopes_cannot_be_compared_or_pooled(tmp_path, second_pair, second_seed):
-    data = [scoped_pair_report('pinn_statistical'), pair_report(second_pair, second_seed)]
+@pytest.mark.parametrize('first_decoder,second_decoder', [
+    ('information_only', 'surface_and_information'),
+    ('information_only', 'separate_surface_and_information'),
+    ('surface_and_information', 'separate_surface_and_information'),
+])
+def test_mixed_decoder_scopes_cannot_be_compared_or_pooled(
+        tmp_path, second_pair, second_seed, first_decoder, second_decoder):
+    data = [scoped_pair_report('pinn_statistical', decoder=first_decoder),
+            scoped_pair_report(second_pair, second_seed, decoder=second_decoder)]
     with pytest.raises(ValueError, match='constraint_decoder scope'):
         run_compare(tmp_path, data)
 
@@ -144,7 +152,7 @@ def test_constraint_contract_cannot_change_observations_or_double_tendencies(tmp
     with pytest.raises(ValueError,match='constraint_contract'):run_compare(tmp_path,[first,second])
 
 
-@pytest.mark.parametrize('decoder', [None, 'surface_and_information', 'information_only'])
+@pytest.mark.parametrize('decoder', [None, *CONSTRAINT_DECODERS])
 def test_pairs_preserved_in_climode_benchmark_identity(decoder):
     data=[pair_report(pair) if decoder is None else scoped_pair_report(pair, decoder=decoder)
           for pair in CONSTRAINT_GROUPS]
@@ -218,3 +226,15 @@ def test_runner_requires_new_output_directory(tmp_path):
     outcome,commands=_runner(tmp_path)
     assert outcome.returncode!=0 and not commands
     assert 'Choose a new RUN' in outcome.stderr
+
+
+@pytest.mark.parametrize('decoder', ['information_only', 'surface_and_information'])
+def test_v2_reports_pool_only_with_equivalent_v3_scope(tmp_path, decoder):
+    first = scoped_pair_report('pinn_statistical', decoder=decoder)
+    first['constraint_contract']['version'] = 'climate_manifold.reconstruction_constraints.v2'
+    first['constraint_contract'].pop('forecast_decoder_in_constraints')
+    first['constraint_contract'].pop('separate_reconstruction_decoder')
+    second = scoped_pair_report('pinn_statistical', seed=19, decoder=decoder)
+    result = run_compare(tmp_path, [first, second])
+    assert len(result['seed_summary']) == 1
+    assert all(row['constraint_decoder'] == decoder for row in result['rows'])

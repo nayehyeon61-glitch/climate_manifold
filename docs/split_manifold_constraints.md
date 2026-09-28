@@ -1,8 +1,9 @@
 # 예측과 표현 제약을 분리한 쌍별 실험
 
 이 브랜치의 새 실험은 하나의 encoder를 공유하는 두 경로를 함께 학습합니다.
-예측은 `E → F → D`, 표현 제약은 **관측 정보를 직접 복원하는 `E → D_I`**에서
-계산합니다. 표현 제약 계산은 예측기 `F`를 호출하지 않습니다.
+예측은 `E → F → D`, 표현 제약은 **관측 기상장의 `E → D_rec`와 관측 정보의 `E → D_I`**에서
+계산합니다. D_rec는 예측 decoder D와 독립된 장복원 decoder입니다. 표현 제약 계산은
+예측기 `F`와 예측 decoder `D`를 호출하지 않습니다.
 
 ```mermaid
 flowchart TD
@@ -10,21 +11,28 @@ flowchart TD
     O["관측 t−6h, t + 각 시점의 정보"] --> E
     E -->|"예측 경로"| F["선택한 공간 예측기 F"]
     F --> D["기상장 decoder D"]
+    E -->|"관측 기상장 복원 경로"| DR["별도 장복원 decoder D_rec"]
     E -->|"관측 정보 복원 경로"| I["정보 decoder D_I"]
     D --> P["미래 출력: 예측 손실"]
+    DR --> SR["현재 기상장: 복원 + 선택 시 W₂²"]
     I --> R["동적 정보 복원 + 선택한 두 제약"]
 ```
 
-기본 `--constraint-decoder information_only`에서는 관측 복원용 D 호출과 해당 손실을
-끄고, 정보 decoder `D_I`만 제약 경로에 사용합니다. **D 자체를 동결하는 것은 아닙니다.**
-D는 미래 기상장 예측 손실로 계속 학습합니다. `D_I`는 상층 변수와 지형 정보를 복원하는
-보조 decoder입니다. 제약 경로를 위해 예측기나 encoder를 별도로 복제하지 않습니다.
+기본 `--constraint-decoder separate_surface_and_information`에서는 관측 기상장 복원을
+독립된 D_rec에 맡깁니다. D_rec는 D와 같은 구조·초기 가중치로 시작하지만 파라미터를 공유하지
+않습니다. **D 자체를 동결하는 것은 아닙니다.** D는 미래 기상장 예측 손실로 계속 학습합니다.
+`D_I`는 상층 변수와 지형 정보를 복원하는 보조 decoder입니다. 예측기나 encoder를 별도로
+복제하지 않습니다. D_rec는 새 분리 모드에만 추가되며 Raw와 기존 모드의 구조는 유지합니다.
 PINN closure도 관측 복원 latent에서만 계산합니다. 이 학습의 추론 경로는 그대로
 `관측 history → E → F → D → 미래 기상장`입니다.
 
-기존 관측 기상장 복원 경로는 삭제하지 않습니다.
-`--constraint-decoder surface_and_information`으로 D와 D_I를 함께 사용하는 이전 제약을
-복원할 수 있습니다. 이 옵션은 `--constraint-pair`를 사용하는 latent 공동 학습에만 적용합니다.
+기존 경로도 삭제하지 않습니다. 아래 옵션은 `--constraint-pair`를 사용하는 latent 공동 학습에만 적용합니다.
+
+| `--constraint-decoder` | 관측 기상장 복원 | 관측 정보 복원 | 제약이 예측 D를 직접 갱신 |
+|---|---|---|---|
+| `separate_surface_and_information` (기본) | 별도 D_rec | D_I | 아니요 |
+| `information_only` | 사용 안 함 | D_I | 아니요 |
+| `surface_and_information` | 예측 D 공유 | D_I | 예 |
 
 ## 정확히 두 개의 추가 제약
 
@@ -37,31 +45,36 @@ PINN closure도 관측 복원 latent에서만 계산합니다. 이 학습의 추
 - **PINN:** 복원한 두 관측 시점의 기압면 운동량·온도·연속·층 두께 잔차와 closure 크기 규제.
   PDE 안의 시간차분은 유지하지만 기존의 별도 관측 tendency 감독과 지표 tendency 보조항은
   포함하지 않습니다. `HybridPINN.forward(include_tendency=False)`로 명시합니다.
-- **Statistical:** 기본값에서는 D_I가 복원한 동적 정보장의 면적 가중 공간 분위수 W₂² 매칭.
+- **Statistical:** 기본값에서는 D_rec의 관측 기상장과 D_I의 동적 정보장에 면적 가중 공간 분위수 W₂² 매칭.
   각 변수와 시점을 따로 비교합니다. 고정 지형을 포함하지 않으며, 앙상블 CRPS가 아닙니다.
-  D가 복원한 기상장의 W₂²는 끄므로 **해면기압 `msl`의 분포 손실도 꺼집니다.**
-  현재 D_I에 `msl` 출력은 없으며, 기존 정보 변수만 복원합니다. 이전
-  `surface_and_information` 모드에서는 기상장과 동적 정보장의 W₂²를 함께 사용합니다.
+  **해면기압 `msl`을 포함한 surface archive의 모든 변수**가 기상장 분포 손실에 포함됩니다.
+  해면기압에만 걸리는 손실은 아닙니다. `information_only`에서는 동적 정보 W₂²만 사용하므로
+  기상장 W₂²와 `msl` 분포 손실이 꺼집니다. D_I에는 `msl` 출력을 추가하지 않습니다.
+  이전 `surface_and_information`에서는 같은 기상장 손실을 예측 D로 계산합니다.
 - **Static:** 정보 decoder가 복원한 고정 변수의 면적 가중 L². 두 시점 모두 origin의 고정
   정보를 목표로 사용합니다. 현재 자료 계약에서는 지형 높이·경사가 해당합니다.
   위경도는 격자 좌표이며 별도의 학습 대상 변수로 추가되지 않습니다.
 
-동적 정보의 기본 복원오차는 세 조합에 공통으로 **한 번** 유지합니다.
+기상장과 동적 정보의 기본 복원오차는 세 조합에 공통으로 **한 번씩** 유지합니다.
 
 \[
-L_{\rm rec}=L_{\rm dynamic\ information\ reconstruction},\qquad
-L_{\rm statistical}=L_{\rm dynamic\ information\ W_2^2}.
+L_{\rm rec}=\tfrac12\left(L_{\rm surface\ reconstruction}^{D_{\rm rec}}
+  +L_{\rm dynamic\ information\ reconstruction}^{D_I}\right),
+\qquad
+L_{\rm statistical}=\tfrac12\left(L_{\rm surface\ W_2^2}^{D_{\rm rec}}
+  +L_{\rm dynamic\ information\ W_2^2}^{D_I}\right).
 \]
 
-각 항은 train 자료로 정규화한 변수별 면적 가중 MSE를 평균합니다. Static 변수는 여기서
+복원 항은 train 자료로 정규화한 변수별 면적 가중 MSE를 평균합니다. Static 변수는 여기서
 제외하여 Static 제약의 on/off 의미를 유지합니다. 이 공통 오차는 PINN+Static에서 상층
 decoder가 물리 잔차만 작은 상수장을 출력하는 퇴화해를 견제합니다. Statistical 그룹은
 이 점별 복원과 구별되는 **분포 매칭**입니다.
 
-기본값에서는 제거한 기상장 항을 0으로 두고 평균하는 대신 정보 손실 자체를 사용합니다.
-이전 `surface_and_information` 모드는 reconstruction과 Statistical 각각에
-`0.5 × (기상장 손실 + 동적 정보 손실)`을 그대로 사용합니다. 따라서 두 모드는 외부
-가중치가 같아도 정보 항의 실효 가중치가 다릅니다. 실험 비교 시 decoder 모드와 가중치를 함께 기록합니다.
+기본값과 이전 `surface_and_information`은 reconstruction과 Statistical 각각에 같은
+`0.5 × (기상장 손실 + 동적 정보 손실)`을 사용하고, 기상장 손실을 받는 decoder가 다릅니다.
+`information_only`는 제거한 기상장 항을 0으로 두고 평균하는 대신 정보 손실 자체를 사용합니다.
+따라서 외부 가중치가 같아도 정보 전용 모드는 정보 항의 실효 가중치가 다릅니다.
+실험 비교 시 decoder 모드와 가중치를 함께 기록합니다.
 
 \[
 L = L_{\rm forecast}+\lambda_\Delta L_{\rm future\ tendency}
@@ -85,10 +98,18 @@ MSE, 미래 분포·static·PINN은 이 경로에서 추가로 부과하지 않�
 전달됩니다. 미래 상층 정보는 제약 경로에서 읽지 않습니다. train/calibration/validation/test
 분할과 train-only 정규화는 기존 자료 계약을 유지합니다.
 
-기본 정보 전용 모드에서 제약 손실만 역전파하면 `F`와 기상장 `D`에는 gradient가 없고,
-공유 `E`, `D_I` 및 활성 closure에 전달됩니다. 미래 예측 손실은 `E`, `F`, `D`를 함께
-갱신합니다. 이전 두 decoder 모드에서는 제약 손실도 D를 갱신합니다. 공유 encoder를 통해
+기본 분리 모드에서 제약 손실만 역전파하면 `F`와 예측 `D`에는 gradient가 없고,
+공유 `E`, `D_rec`, `D_I` 및 활성 closure에 전달됩니다. 미래 예측 손실은 `E`, `F`, `D`를 함께
+갱신하며 D_rec를 직접 갱신하지 않습니다. 정보 전용 모드에는 D_rec가 없으며,
+이전 공유 모드에서는 제약 손실도 D를 갱신합니다. 공유 encoder를 통해
 제약이 예측에 간접 영향을 주므로 두 학습 목적이 완전히 독립이라는 의미는 아닙니다.
+별도 D_rec를 추가하면 학습 파라미터 수가 늘어납니다. decoder 간 직접적인 손실 충돌을
+분리하는 설계이며, 중복 정보나 과적합을 제거했다는 증거는 아닙니다.
+
+장복원 출력은 `pipeline.reconstruction_decoder(raw_latent)`로 계산하고,
+학습 로그의 `reconstruction_surface`와 `statistical_surface`에서 해당 손실을 확인합니다.
+평가의 no-grad 현재장 복원·latent 진단은 기존 예측 D를 진단하는 항목으로 유지합니다.
+이 진단값은 D_rec 성능을 측정한 값이 아니며, 학습 손실에도 추가되지 않습니다.
 
 ## 전체 세 조합 실행
 
@@ -118,7 +139,7 @@ export INFO=/absolute/path/to/information_pinn
 export RUN=runs/split_pairs_001
 export DEVICE=cuda MODELS="neural_ode climode" SEEDS=7
 export INCLUDE_RAW=1 PAIRS="pinn_statistical pinn_static statistical_static"
-export CONSTRAINT_DECODER=information_only
+export CONSTRAINT_DECODER=separate_surface_and_information
 export EPOCHS=20 BATCH_SIZE=16
 bash scripts/run_pairwise_manifold_comparison.sh
 ```
@@ -156,7 +177,7 @@ export RUN="runs/pinn_statistical_five_models_$(date +%Y%m%d_%H%M%S)"
 
 export MODELS="mlp neural_ode climode convlstm simvp"
 export PAIRS="pinn_statistical" INCLUDE_RAW=1 SEEDS=7
-export CONSTRAINT_DECODER=information_only
+export CONSTRAINT_DECODER=separate_surface_and_information
 export TRAINING_MODE=joint INITIALIZATION=fresh LATENT_LAYOUT=spatial ANCHOR=none
 unset A_CHECKPOINT CLIMODE_REFERENCE_DIR
 
@@ -199,7 +220,7 @@ python -m climate_manifold.downstream.train \
   --training-mode joint --initialization fresh \
   --bridge latent --model neural_ode --latent-layout spatial \
   --constraint-pair pinn_statistical \
-  --constraint-decoder information_only \
+  --constraint-decoder separate_surface_and_information \
   --reconstruction-weight 0.1 --statistical-weight 0.1 --pinn-weight 0.1 \
   --epochs 20 --batch-size 16 --device cuda \
   --output runs/split_single/model.pt
@@ -210,8 +231,8 @@ python -m climate_manifold.downstream.train \
 새 쌍별 runner에는 기존 `INFORMATION_WEIGHT`, `PHYSICS_WEIGHT`, `DISTRIBUTION_WEIGHT`
 설정이 필요하지 않습니다. 실제 활성 가중치와 경로는 checkpoint와 평가 보고서에 기록됩니다.
 
-새 명령에서 `--constraint-decoder`를 생략하면 `information_only`가 적용됩니다. 기존
-두 decoder 제약을 재현하려면 새 RUN에서 다음처럼 실행합니다. Raw 비교군에는 이 옵션을
+새 명령에서 `--constraint-decoder`를 생략하면 `separate_surface_and_information`이 적용됩니다.
+기존의 예측 D 공유 제약을 재현하려면 새 RUN에서 다음처럼 실행합니다. Raw 비교군에는 이 옵션을
 전달하지 않으며, 직접 예측 경로는 그대로 유지됩니다.
 
 ```bash
@@ -221,8 +242,10 @@ bash scripts/run_pairwise_manifold_comparison.sh
 ```
 
 다시 정보 decoder만 사용하려면 `CONSTRAINT_DECODER=information_only`로 설정합니다.
-기존 checkpoint의 손실 의미를 새 기본값으로 바꾸지는 않습니다. 이전 v1 제약 메타데이터는
-두 decoder 모드로 해석하며, 새 모드와 이전 모드의 보고서를 같은 쌍별 비교에 섞지 않습니다.
+기존 checkpoint의 손실 의미와 모델 구조를 새 기본값으로 바꾸지는 않습니다. 이전 v1 제약 메타데이터는
+예측 D 공유 모드로 해석하며, 서로 다른 decoder 모드의 보고서를 같은 쌍별 비교에 섞지 않습니다.
+새 분리 모드의 D_rec는 checkpoint에 함께 저장합니다. 기존 checkpoint를 재평가하는 것만으로
+독립된 장복원 decoder가 생기거나 재학습되지는 않습니다.
 
 ## 결과 해석
 
@@ -236,7 +259,7 @@ Statistical+Static은 Static을 공유하면서 다른 제약을 교체하는 �
 제약 조합 간 비교는 `comparison.constraint-effects.csv`에 기록합니다. Raw와 E→F→D는
 표현·용량·추가 감독이 함께 달라지므로 이는 전체 모델 비교이며 제약만의 효과는 아닙니다.
 학습/검증 오차의 차이와 여러 seed의 결과를 확인해야 과적합 변화에 대해 판단할 수 있습니다.
-경로 분리나 손실 항 개수 감소 자체는 일반화 개선을 보장하지 않습니다.
+경로 분리 자체는 일반화 개선을 보장하지 않습니다. 새 장복원 decoder의 추가 용량도 함께 고려합니다.
 
 이 설계는 **관측된 상태들의 표현**에 물리 제약을 주며, 생성된 미래 궤적의 PDE 만족을
 직접 감독하지 않습니다. 특히 관측 복원 PINN 잔차가 작다는 사실만으로 미래 궤적의 물리적
@@ -244,7 +267,13 @@ Statistical+Static은 Static을 공유하면서 다른 제약을 교체하는 �
 
 ## 구현 검증
 
-정보 decoder 전용 모드 추가 후 전체 테스트 **460개**를 통과했습니다. 기본 모드에서
+별도 장복원 decoder 추가 후 전체 테스트 **526개**를 통과했습니다. D_rec가 예측 D와
+파라미터를 공유하지 않는지, 관측 제약은 D_rec를 갱신하면서 예측 F/D에는 직접 gradient를
+전달하지 않는지, 미래 예측 손실은 E/F/D를 계속 갱신하는지 확인했습니다. 기상장 복원·분포
+손실의 복구, 세 decoder 모드의 선택, checkpoint 재로딩과 이전 모드 호환성, Raw 비교군도
+검증했습니다. 이 결과는 소프트웨어 동작 검증이며 실제 예측력이나 과적합 감소를 뜻하지 않습니다.
+
+이전 정보 decoder 전용 모드 추가 시 전체 테스트 **460개**를 통과했습니다. 해당 모드에서
 관측 제약과 학습 루프가 기상장 D를 호출하지 않는지, 예측 손실은 E/F/D를 계속 갱신하는지,
 정보 손실의 가중치·기존 모드 복구·checkpoint 재로딩·Raw 비교군이 올바른지 확인했습니다.
 평가의 no-grad 현재장 복원 진단은 유지하며, 학습 손실에는 포함하지 않습니다.
@@ -271,8 +300,9 @@ hidden width 8/latent channels 2의 CPU 실행입니다. 실제 ERA5 예측력�
 | 역할 | 코드 |
 |---|---|
 | 관측 쌍 구성·학습 분기·메타데이터 | `src/climate_manifold/downstream/train.py` |
-| E→D_I 제약 계산·이전 D 경로 잠금·쌍별 활성화 | `src/climate_manifold/downstream/reconstruction_objective.py` |
+| E→D_rec / E→D_I 제약 계산·decoder 모드·쌍별 활성화 | `src/climate_manifold/downstream/reconstruction_objective.py` |
+| 독립 장복원 decoder D_rec | `src/climate_manifold/downstream/observed_decoder.py` |
 | 물리 잔차와 선택적 tendency 감독 | `src/climate_manifold/hybrid_pinn.py` |
-| 예측 E→F→D | `src/climate_manifold/downstream/pipeline.py` |
+| 예측 E→F→D 및 별도 장복원 decoder D_rec 구성 | `src/climate_manifold/downstream/pipeline.py` |
 | 전체 쌍별 실행 | `scripts/run_pairwise_manifold_comparison.sh` |
 | 평가 및 조합별 집계 | `src/climate_manifold/downstream/evaluate.py`, `compare.py` |

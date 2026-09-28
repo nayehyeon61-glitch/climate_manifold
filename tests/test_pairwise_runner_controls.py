@@ -63,7 +63,7 @@ def test_one_seed_has_eight_fits_with_shared_training_settings_and_batch_16(tmp_
         assert option(row, '--output').endswith(f"{option(row, '--model')}-raw-seed7.pt")
     for row in latent:
         assert option(row, '--regularization') == 'full'
-        assert option(row, '--constraint-decoder') == 'information_only'
+        assert option(row, '--constraint-decoder') == 'separate_surface_and_information'
         pair = option(row, '--constraint-pair')
         assert ('--pinn' in row) == pair.startswith('pinn_')
     comparison = commands[-1]
@@ -101,22 +101,25 @@ def test_raw_controls_can_be_disabled_and_batch_size_overridden(tmp_path):
     assert all(option(row, '--batch-size') == '8' for row in training)
 
 
-def test_legacy_constraint_decoder_can_be_unlocked_only_for_latent_routes(tmp_path):
+@pytest.mark.parametrize('mode', [
+    'separate_surface_and_information', 'information_only', 'surface_and_information',
+])
+def test_constraint_decoder_override_only_applies_to_latent_routes(tmp_path, mode):
     result, commands = run_runner(tmp_path, SEEDS='7', PAIRS='pinn_statistical',
-        CONSTRAINT_DECODER='surface_and_information')
+        CONSTRAINT_DECODER=mode)
     assert result.returncode == 0, result.stderr
     for row in trains(commands):
         if option(row, '--bridge') == 'raw':
             assert '--constraint-decoder' not in row
         else:
-            assert option(row, '--constraint-decoder') == 'surface_and_information'
+            assert option(row, '--constraint-decoder') == mode
 
 
 @pytest.mark.parametrize('value', ['both', 'surface_only', 'information'])
 def test_invalid_constraint_decoder_fails_before_training(tmp_path, value):
     result, commands = run_runner(tmp_path, CONSTRAINT_DECODER=value)
     assert result.returncode != 0 and not commands
-    assert 'CONSTRAINT_DECODER must be information_only or surface_and_information' in result.stderr
+    assert 'CONSTRAINT_DECODER must be separate_surface_and_information, information_only or surface_and_information' in result.stderr
 
 
 @pytest.mark.parametrize('value', ['yes', '2', '-1'])
