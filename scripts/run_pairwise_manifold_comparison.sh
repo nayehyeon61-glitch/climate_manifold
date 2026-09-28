@@ -51,11 +51,48 @@ for loss in "${statistical_losses[@]}"; do
   [[ ! -v "loss_seen[$loss]" ]] || { echo "Duplicate statistical loss: $loss" >&2; exit 2; }
   loss_seen[$loss]=1
 done
+read -r -a flow_weights <<< "${STATISTICAL_FLOW_WEIGHTS:-${STATISTICAL_FLOW_WEIGHT:-0}}"
+[[ ${#flow_weights[@]} -gt 0 ]] || { echo 'STATISTICAL_FLOW_WEIGHTS must be nonempty' >&2; exit 2; }
+declare -A flow_seen=()
+flow_enabled=0
+for index in "${!flow_weights[@]}"; do
+  weight="${flow_weights[$index]}"
+  [[ "$weight" =~ ^([0-9]+([.][0-9]*)?|[.][0-9]+)$ ]] || {
+    echo 'Statistical flow weights must be finite nonnegative decimal numbers' >&2; exit 2;
+  }
+  # Match comparison arm formatting without invoking the training Python process.
+  weight=$(LC_ALL=C awk -v value="$weight" 'BEGIN { printf "%.12g", value + 0 }')
+  [[ "$weight" =~ ^[0-9]+([.][0-9]+)?([eE][-+]?[0-9]+)?$ ]] || {
+    echo 'Statistical flow weights must be finite nonnegative decimal numbers' >&2; exit 2;
+  }
+  [[ ! -v "flow_seen[$weight]" ]] || { echo "Duplicate statistical flow weight: $weight" >&2; exit 2; }
+  flow_seen[$weight]=1
+  flow_weights[$index]="$weight"
+  if [[ "$weight" != 0 ]]; then flow_enabled=1; fi
+done
+if [[ "$flow_enabled" == 1 ]]; then
+  [[ " ${pairs[*]} " == *statistical* ]] || {
+    echo 'Statistical flow requires a pair containing statistical' >&2; exit 2;
+  }
+fi
+if [[ -n "${STATISTICAL_FLOW_QUANTILES:-}" ]]; then
+  [[ "$flow_enabled" == 1 ]] || {
+    echo 'STATISTICAL_FLOW_QUANTILES requires a positive statistical flow weight' >&2; exit 2;
+  }
+  if ! [[ "$STATISTICAL_FLOW_QUANTILES" =~ ^[0-9]+$ ]] ||
+      ! LC_ALL=C awk -v count="$STATISTICAL_FLOW_QUANTILES" 'BEGIN { exit !(count >= 1 && count <= 512) }'; then
+    echo 'STATISTICAL_FLOW_QUANTILES must be a positive integer between 1 and 512' >&2; exit 2
+  fi
+fi
 arms=()
 for pair in "${pairs[@]}"; do
   if [[ "$pair" == *statistical* ]]; then
     for loss in "${statistical_losses[@]}"; do
-      if [[ "$loss" == w2 ]]; then arms+=("$pair"); else arms+=("$pair:kl_entropy"); fi
+      base_arm="$pair"
+      if [[ "$loss" != w2 ]]; then base_arm+=":kl_entropy"; fi
+      for weight in "${flow_weights[@]}"; do
+        if [[ "$weight" == 0 ]]; then arms+=("$base_arm"); else arms+=("$base_arm:flow=$weight"); fi
+      done
     done
   else
     arms+=("$pair")
@@ -86,7 +123,8 @@ reports=()
 for seed in "${seeds[@]}"; do
   for family in "${families[@]}"; do
     for arm in "${arms[@]}"; do
-      prefix="$RUN/${family}-${arm//:/-}-seed${seed}"
+      arm_label="${arm//:/-}"
+      prefix="$RUN/${family}-${arm_label//flow=/flow}-seed${seed}"
       pair="${arm%%:*}"
       if [[ "$arm" == raw ]]; then
         route=(--bridge raw --raw-backend matched --regularization none)
@@ -96,11 +134,15 @@ for seed in "${seeds[@]}"; do
           --statistical-weight "${STATISTICAL_WEIGHT:-0.1}" --static-weight "${STATIC_WEIGHT:-0.05}")
         if [[ "$pair" == *statistical* ]]; then
           loss=w2
-          [[ "$arm" != *:kl_entropy ]] || loss=kl_entropy
+          [[ ":$arm:" != *:kl_entropy:* ]] || loss=kl_entropy
           route+=(--statistical-loss "$loss")
           if [[ "$loss" == kl_entropy ]]; then
             route+=(--kl-bins "${KL_BINS:-64}" --kl-range "${KL_RANGE:-6}"
               --kl-bandwidth "${KL_BANDWIDTH:-0.2}")
+          fi
+          if [[ "$arm" == *:flow=* ]]; then
+            route+=(--statistical-flow-weight "${arm##*:flow=}"
+              --statistical-flow-quantiles "${STATISTICAL_FLOW_QUANTILES:-32}")
           fi
         fi
         if [[ "$pair" == pinn_* ]]; then

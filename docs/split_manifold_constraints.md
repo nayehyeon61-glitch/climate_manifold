@@ -2,8 +2,9 @@
 
 이 브랜치의 새 실험은 하나의 encoder를 공유하는 두 경로를 함께 학습합니다.
 예측은 `E → F → D`, 표현 제약은 **관측 기상장의 `E → D_rec`와 관측 정보의 `E → D_I`**에서
-계산합니다. D_rec는 예측 decoder D와 독립된 장복원 decoder입니다. 표현 제약 계산은
-예측기 `F`와 예측 decoder `D`를 호출하지 않습니다.
+계산합니다. D_rec는 예측 decoder D와 독립된 장복원 decoder입니다. 기존 관측 제약 계산은
+예측기 `F`와 예측 decoder `D`를 호출하지 않습니다. 기본값이 꺼진 선택적
+[분포 flow 손실](#선택적-현재미래-분포-flow-손실)은 별도로 F의 미래 latent에서 계산합니다.
 
 ```mermaid
 flowchart TD
@@ -83,8 +84,9 @@ L = L_{\rm forecast}+\lambda_\Delta L_{\rm future\ tendency}
 \]
 
 기본 외부 가중치는 reconstruction 0.1, statistical 0.1, static 0.05, PINN 0.1입니다.
-미래 tendency는 기존 예측 손실의 설정을 사용합니다. 예측장 surface physics, 미래 information
-MSE, 미래 분포·static·PINN은 이 경로에서 추가로 부과하지 않습니다.
+미래 tendency는 기존 예측 손실의 설정을 사용합니다. 기본값에서는 예측장 surface physics,
+미래 information MSE, 미래 분포·static·PINN을 추가로 부과하지 않습니다.
+선택적 분포 flow를 활성화하면 아래에 정의한 미래 분포 변화율 손실만 별도로 추가합니다.
 
 ## 자료와 gradient 계약
 
@@ -95,10 +97,12 @@ MSE, 미래 분포·static·PINN은 이 경로에서 추가로 부과하지 않�
 최소 2개의 원자료 시점이어야 합니다.
 
 `constraint_states`, `constraint_information`, `constraint_dt_hours`는 제약 손실에만
-전달됩니다. 미래 상층 정보는 제약 경로에서 읽지 않습니다. train/calibration/validation/test
+전달됩니다. 미래 상층 정보는 기존 관측 제약 경로에서 읽지 않습니다. 선택적 flow가 켜진 경우에만
+미래 동적 정보가 flow 손실의 정답으로 사용되며 encoder나 예측기 입력에는 들어가지 않습니다.
+train/calibration/validation/test
 분할과 train-only 정규화는 기존 자료 계약을 유지합니다.
 
-기본 분리 모드에서 제약 손실만 역전파하면 `F`와 예측 `D`에는 gradient가 없고,
+기본 분리 모드에서 기존 관측 제약만 역전파하면 `F`와 예측 `D`에는 gradient가 없고,
 공유 `E`, `D_rec`, `D_I` 및 활성 closure에 전달됩니다. 미래 예측 손실은 `E`, `F`, `D`를 함께
 갱신하며 D_rec를 직접 갱신하지 않습니다. 정보 전용 모드에는 D_rec가 없으며,
 이전 공유 모드에서는 제약 손실도 D를 갱신합니다. 공유 encoder를 통해
@@ -261,7 +265,7 @@ Statistical+Static은 Static을 공유하면서 다른 제약을 교체하는 �
 학습/검증 오차의 차이와 여러 seed의 결과를 확인해야 과적합 변화에 대해 판단할 수 있습니다.
 경로 분리 자체는 일반화 개선을 보장하지 않습니다. 새 장복원 decoder의 추가 용량도 함께 고려합니다.
 
-이 설계는 **관측된 상태들의 표현**에 물리 제약을 주며, 생성된 미래 궤적의 PDE 만족을
+PINN은 **관측된 상태들의 표현**에 물리 제약을 주며, 생성된 미래 궤적의 PDE 만족을
 직접 감독하지 않습니다. 특히 관측 복원 PINN 잔차가 작다는 사실만으로 미래 궤적의 물리적
 타당성을 주장할 수 없습니다.
 
@@ -302,6 +306,7 @@ hidden width 8/latent channels 2의 CPU 실행입니다. 실제 ERA5 예측력�
 | 관측 쌍 구성·학습 분기·메타데이터 | `src/climate_manifold/downstream/train.py` |
 | E→D_rec / E→D_I 제약 계산·decoder 모드·쌍별 활성화 | `src/climate_manifold/downstream/reconstruction_objective.py` |
 | 독립 장복원 decoder D_rec | `src/climate_manifold/downstream/observed_decoder.py` |
+| 선택적 미래 분위수 변화율 감독 | `src/climate_manifold/downstream/statistical_flow.py` |
 | 물리 잔차와 선택적 tendency 감독 | `src/climate_manifold/hybrid_pinn.py` |
 | 예측 E→F→D 및 별도 장복원 decoder D_rec 구성 | `src/climate_manifold/downstream/pipeline.py` |
 | 전체 쌍별 실행 | `scripts/run_pairwise_manifold_comparison.sh` |
@@ -380,3 +385,134 @@ PINN을 함께 평가해야 합니다.
 선택 손실 추가 후 전체 suite 542개와 KL 단독 gradient 경로 테스트 1개가 통과했습니다.
 합성 자료 학습·checkpoint 재로딩·평가, 이전 W2의 수치 동일성, KL gradient와 entropy 항등식,
 비교군 분리 및 Raw 중복 실행 방지를 확인했습니다. 실제 자료 성능 비교는 실행하지 않았습니다.
+
+## 선택적 현재→미래 분포 flow 손실
+
+`--statistical-flow-weight`를 양수로 지정하면 **기존 관측 복원의 W2/KL 손실을 유지하면서**,
+예측기가 만든 미래 분포의 변화율에 대한 보조 손실을 추가합니다. 기본값 0은 기존 경로와 같습니다.
+`pinn_statistical`과 `statistical_static`의 공동 latent 학습에서만 지원하며,
+Raw와 `pinn_static`에는 추가하지 않습니다. W2와 KL 중 어느 Statistical 손실을 선택해도
+같은 flow 항을 사용할 수 있으므로 복원 분포의 척도와 시간 변화 감독의 효과를 나누어 비교합니다.
+
+각 샘플·변수·시각에서 격자 면적으로 가중한 정규화 값의 공간 주변분포를 구성합니다.
+그 역누적분포의 중간 분위수들을
+`Q_k(q_j)`, `q_j=(j+0.5)/J`로 나타냅니다. 기본 `J=32`이며,
+`--statistical-flow-quantiles`로 1–512 범위에서 설정합니다. 실제 미래 분포는 `Q_k`, 예측 미래 분포는
+`Q̂_k`, 관측 origin은 `Q_0`입니다. 미래 분포는 F의 예측 latent를 **D_rec와 D_I**로
+복원해서 얻습니다. 정답 미래를 encoder에 넣어 미래 latent를 만드는 방식이 아닙니다.
+
+\[
+\widehat Q_0=Q_0,\qquad
+v_k(q_j)=\frac{Q_k(q_j)-Q_{k-1}(q_j)}{\Delta t_k},\qquad
+\widehat v_k(q_j)=\frac{\widehat Q_k(q_j)-\widehat Q_{k-1}(q_j)}{\Delta t_k},
+\]
+\[
+L_{\mathrm{flow,field}}
+=\operatorname{mean}_{\text{sample},k,\text{variable},j}
+\left|\widehat v_k(q_j)-v_k(q_j)\right|^2.
+\]
+
+`Δt_k`는 origin부터 시작하는 각 예측 lead 간 실제 시간 간격이며 **일(days)** 단위입니다.
+첫 미래 구간은 두 경로 모두 동일한 실제 origin 분포에서 시작합니다. 이후에는 각각의
+예측 분포와 실제 분포 사이 변화율을 비교하므로 변화 방향과 크기의 시간적 오차를 감독합니다.
+이 정의는 per-step 평균이고 시간 적분의 quadrature는 아닙니다.
+해당 변수의 정규화 좌표를 사용하므로 손실의 단위는 정규화 값²/day²이며,
+Pa/day 단위의 기압 속도를 직접 비교하는 것은 아닙니다.
+
+기본 분리 모드와 이전 D 공유 모드는
+`L_flow = 0.5 × (L_flow,surface + L_flow,dynamic_information)`입니다.
+`information_only`에서는 dynamic information 항만 사용합니다. 정적 지형은 제외하고,
+surface가 활성화되면 `msl`을 포함한 archive의 모든 변수를 사용합니다.
+별도의 신경망이나 새로운 decoder는 만들지 않습니다.
+
+\[
+L_{\mathrm{total}}=L_{\mathrm{기존}}+
+\lambda_{\mathrm{flow}}L_{\mathrm{flow}}.
+\]
+
+여기서 `L_기존`에는 예측·미래 tendency·관측 복원·선택한 PINN/Statistical/Static이 그대로
+포함됩니다. **flow weight는 `--statistical-weight`와 독립적**이며 Statistical weight를
+다시 곱하지 않습니다. KL을 선택하더라도 flow는 분위수 변화율 손실이고,
+두 시각의 KL 값을 빼는 방식이 아닙니다.
+
+```mermaid
+flowchart TD
+    E["관측 history → E"] --> F["F: 미래 latent"]
+    F --> D["예측 D: 미래 기상장"]
+    F --> DR["D_rec: 미래 기상장 복원"]
+    F --> DI["D_I: 미래 동적 정보 복원"]
+    DR --> L["분위수 변화율 손실"]
+    DI --> L
+    T["실제 origin·미래 분포: 정답만"] --> L
+```
+
+flow만 역전파해도 E/F와 활성 보조 decoder에 gradient가 전달됩니다. 기본 분리 모드에서는
+예측 D에 직접 전달하지 않고, 이전 `surface_and_information` 모드에서는 D도 갱신합니다.
+관측 PINN/복원/Statistical의 입력과 gradient 경로는 바뀌지 않습니다. 미래 상층 정보는
+학습 시 정답으로만 사용하고, 추론에는 과거 관측과 origin 정보만 필요합니다.
+실제 예측 출력은 여전히 `E → F → D`이며 보조 decoder는 추가 추론 입력을 요구하지 않습니다.
+
+학습 로그에는 `statistical_flow`, `statistical_flow_surface`, `statistical_flow_information`,
+그리고 외부 weight를 곱한 `statistical_flow_regularization`을 기록합니다.
+checkpoint와 평가 보고서의 `statistical_flow_config`에는 weight·분위수 개수·시간 단위와
+origin 기준을 보존합니다. 이전 checkpoint처럼 이 설정이 없으면 꺼진 상태로 해석합니다.
+
+### 실행과 비교
+
+하나의 설정만 실행하려면 기존 자료 환경에서 새 RUN 경로를 지정하고:
+
+```bash
+RUN=runs/pinn_statistical_kl_flow \
+PAIRS=pinn_statistical SEEDS=7 BATCH_SIZE=16 \
+STATISTICAL_LOSS=kl_entropy STATISTICAL_FLOW_WEIGHT=0.1 \
+bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+W2/KL 각각에 대해 flow on/off를 비교하려면:
+
+```bash
+RUN=runs/pinn_statistical_flow_comparison \
+MODELS="mlp neural_ode climode convlstm simvp" \
+PAIRS=pinn_statistical SEEDS=7 BATCH_SIZE=16 \
+STATISTICAL_LOSSES="w2 kl_entropy" STATISTICAL_FLOW_WEIGHTS="0 0.1" \
+STATISTICAL_FLOW_QUANTILES=32 \
+bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+`STATISTICAL_FLOW_WEIGHTS`는 단일 `STATISTICAL_FLOW_WEIGHT`보다 우선합니다.
+runner에는 음수가 아닌 유한 소수(예: `0`, `0.1`, `.05`)를 입력합니다.
+지수 표기는 runner에서 사용하지 않으며, 수치는 12개 유효숫자로 정리합니다.
+같은 값을 중복 입력하면 학습 전에 오류를 냅니다. 분위수 옵션은 양수 flow가 있는 경우에만
+지정할 수 있고, off 실험에는 전달하지 않습니다. 활성 실험의 파일명에는 `-flow0.1` 같은
+접미사가 붙으며, 꺼진 실험의 파일명은 기존과 같습니다.
+
+위 예시는 **5개 예측기 × (Raw + W2 + W2·flow + KL + KL·flow) = 25회** 학습합니다.
+Raw는 모델·seed별 한 번만 실행합니다. 세 제약 조합을 모두 선택하면 예측기당 10회입니다.
+PINN+Static은 flow 및 Statistical 종류마다 반복하지 않습니다.
+같은 base Statistical 손실에서 flow weight만 바꾼 실험을 우선 비교하고,
+같은 flow 설정에서 W2/KL을 비교합니다. 종류와 flow를 동시에 바꾸면 두 효과가 섞입니다.
+다른 분위수 개수를 같은 seed 반복으로 합치지 않습니다.
+flow 효과는 `comparison.flow-effects.csv`와 JSON의 `statistical_flow_effects`에 기록합니다.
+
+### 해석의 범위
+
+이 항은 1차원 주변분포의 분위수 대응을 활용한 **수송 속도 감독**입니다.
+노이즈에서 자료로 가는 벡터장을 학습하는 생성형 conditional flow matching을 구현한 것은
+아니며, 확률 예측의 ensemble 분포나 고차원 기상장 전체의 공간 수송을 뜻하지 않습니다.
+모든 값의 공간 위치를 섞어도 분포가 같으면 감지하지 못하며, 변수 사이의 결합분포도 보장하지
+않습니다. 따라서 태풍 이동이나 시공간 궤적의 정확도는 기존 예측 손실·평가로 확인해야 합니다.
+연속적인 물리 방정식을 푸는 새 solver나 미래 PINN 손실도 추가하지 않습니다.
+
+기본 분리 모드에서 flow는 보조 decoder가 읽은 미래 latent의 분포를 감독합니다.
+최종 예측 decoder D의 출력 분포가 자동으로 같은 개선을 얻는다는 보장은 없습니다.
+또한 flow를 켜면 **미래 동적 정보에 대한 감독도 추가**되므로 예측력 차이를 변화율 식만의
+효과로 해석할 수 없습니다. 더 강한 주장을 위해서는 향후 같은 미래 정답을 쓰면서
+시점별 분포만 맞추는 endpoint-only 비교군도 필요합니다. 이번 변경에는 그 비교군을 추가하지 않습니다.
+flow를 켠 뒤 보조 손실만 감소했는지, 최종 기상장의 RMSE/ACC와 분포 변화 오차도 개선됐는지
+함께 확인해야 합니다. `λ_flow=0.1`은 예시이며 간격²으로 나누는 손실의 크기를 고려해
+훈련/selection 구간에서 조정합니다. 검증·시험 자료로 weight를 맞추지 않습니다.
+
+전체 회귀 테스트 601개와 이후 추가한 시간 정합성 4개·runner 분위수 상한 1개 검증이 통과했습니다.
+W2/KL 각각의 Neural ODE·ClimODE 합성자료 학습, flow 단독 gradient 경로,
+checkpoint 재로딩·평가와 미래 정답의 추론 입력 누출 방지를 확인했습니다.
+실제 ERA5 자료의 예측력 향상은 아직 검증하지 않았습니다.

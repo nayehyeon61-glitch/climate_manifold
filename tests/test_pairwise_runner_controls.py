@@ -177,3 +177,78 @@ def test_primary_sequence_predictors_reject_unsupported_routes_before_training(t
         MODELS='convlstm simvp', SEEDS='7', **settings)
     assert result.returncode != 0 and not commands
     assert message in result.stderr
+
+
+def test_flow_and_statistical_sweeps_share_raw_controls_across_five_models(tmp_path):
+    result, commands = run_runner(tmp_path, SEEDS='7', PAIRS='pinn_statistical',
+        MODELS='mlp neural_ode climode convlstm simvp', STATISTICAL_LOSSES='w2 kl_entropy',
+        STATISTICAL_FLOW_WEIGHTS='0 .100', STATISTICAL_FLOW_QUANTILES='17')
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 25
+    assert len({option(row, '--output') for row in training}) == 25
+    raw = [row for row in training if option(row, '--bridge') == 'raw']
+    assert len(raw) == 5
+    for row in raw:
+        assert not {'--statistical-flow-weight', '--statistical-flow-quantiles',
+                    '--statistical-loss'} & set(row)
+    latent = [row for row in training if option(row, '--bridge') == 'latent']
+    assert len(latent) == 20
+    enabled = [row for row in latent if '--statistical-flow-weight' in row]
+    assert len(enabled) == 10
+    assert {option(row, '--statistical-loss') for row in enabled} == {'w2', 'kl_entropy'}
+    for row in enabled:
+        assert option(row, '--statistical-flow-weight') == '0.1'
+        assert option(row, '--statistical-flow-quantiles') == '17'
+        assert option(row, '--output').endswith('-flow0.1-seed7.pt')
+    for row in latent:
+        assert option(row, '--statistical-weight') == '0.1'
+        assert option(row, '--batch-size') == '16'
+        assert ('--kl-bins' in row) == (option(row, '--statistical-loss') == 'kl_entropy')
+        if '--statistical-flow-weight' not in row:
+            assert '--statistical-flow-quantiles' not in row
+            assert '-flow' not in Path(option(row, '--output')).name
+    assert len(commands[-1][commands[-1].index('--reports') + 1:commands[-1].index('--output')]) == 25
+
+
+def test_all_pair_flow_sweep_does_not_duplicate_pinn_static(tmp_path):
+    result, commands = run_runner(tmp_path, MODELS='neural_ode', SEEDS='7',
+        STATISTICAL_LOSSES='w2 kl_entropy', STATISTICAL_FLOW_WEIGHTS='0 0.2')
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 10  # 2 statistical pairs x 2 losses x 2 weights + PINN/Static + Raw.
+    inactive = [row for row in training if '--statistical-loss' not in row]
+    assert len(inactive) == 2
+    assert all('--statistical-flow-weight' not in row for row in inactive)
+
+
+def test_single_flow_option_applies_to_both_statistical_losses(tmp_path):
+    result, commands = run_runner(tmp_path, MODELS='climode', SEEDS='7',
+        PAIRS='pinn_statistical', STATISTICAL_LOSSES='w2 kl_entropy', STATISTICAL_FLOW_WEIGHT='0.05')
+    assert result.returncode == 0, result.stderr
+    training = trains(commands)
+    assert len(training) == 3
+    for row in training:
+        if option(row, '--bridge') == 'latent':
+            assert option(row, '--statistical-flow-weight') == '0.05'
+            assert option(row, '--statistical-flow-quantiles') == '32'
+
+
+@pytest.mark.parametrize('settings,message', [
+    ({'STATISTICAL_FLOW_WEIGHTS': '0 0.0'}, 'Duplicate statistical flow weight'),
+    ({'STATISTICAL_FLOW_WEIGHTS': '0.1 .100'}, 'Duplicate statistical flow weight'),
+    ({'STATISTICAL_FLOW_WEIGHT': '-1'}, 'finite nonnegative decimal'),
+    ({'STATISTICAL_FLOW_WEIGHT': 'NaN'}, 'finite nonnegative decimal'),
+    ({'STATISTICAL_FLOW_WEIGHT': 'inf'}, 'finite nonnegative decimal'),
+    ({'STATISTICAL_FLOW_WEIGHT': '1e-3'}, 'finite nonnegative decimal'),
+    ({'STATISTICAL_FLOW_WEIGHT': '9' * 400}, 'finite nonnegative decimal'),
+    ({'STATISTICAL_FLOW_WEIGHT': '0.1', 'PAIRS': 'pinn_static'}, 'pair containing statistical'),
+    ({'STATISTICAL_FLOW_QUANTILES': '16'}, 'requires a positive statistical flow weight'),
+    ({'STATISTICAL_FLOW_WEIGHT': '0.1', 'STATISTICAL_FLOW_QUANTILES': '0'}, 'positive integer'),
+    ({'STATISTICAL_FLOW_WEIGHT': '0.1', 'STATISTICAL_FLOW_QUANTILES': '1.5'}, 'positive integer'),
+    ({'STATISTICAL_FLOW_WEIGHT': '0.1', 'STATISTICAL_FLOW_QUANTILES': '513'}, 'between 1 and 512'),
+])
+def test_invalid_flow_configuration_fails_before_any_training(tmp_path, settings, message):
+    result, commands = run_runner(tmp_path, **settings)
+    assert result.returncode != 0 and not commands
+    assert message in result.stderr

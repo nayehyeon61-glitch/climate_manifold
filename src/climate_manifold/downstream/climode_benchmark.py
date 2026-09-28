@@ -6,6 +6,7 @@ from pathlib import Path
 from ..train import write_json
 from .constraint_protocol import constraint_decoder_from_payload
 from .statistical_objective import statistical_config_from_payload
+from .statistical_flow import statistical_flow_config_from_payload
 
 
 def _a_hash(report):
@@ -32,6 +33,7 @@ def _identity(report):
                 constraint_decoder=constraint_decoder_from_payload(report),
                 statistical_loss=statistical_config['kind'] if statistical_config else None,
                 statistical_loss_config=statistical_config,
+                statistical_flow_config=statistical_flow_config_from_payload(report),
                 initialization=report.get('initialization','pretrained' if pure_a or cfg['bridge']!='raw' else 'fresh'),
                 raw_backend=(cfg.get('raw_backend','legacy') if not pure_a and cfg['bridge']=='raw' else None),
                 implementation=report.get('implementation'),

@@ -20,6 +20,8 @@ from .pipeline import ForecastPipeline, PredictorConfig, SEQUENCE_IMPLEMENTATION
 from .protocol import validate_experiment
 from .constraint_protocol import CONSTRAINT_DECODERS, make_constraint_contract, constraint_decoder_from_payload
 from .statistical_objective import STATISTICAL_LOSSES, statistical_config_from_args, statistical_config_from_payload
+from .statistical_flow import (statistical_flow_config_from_args, statistical_flow_config_from_payload,
+                               forecast_statistical_flow_losses)
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
@@ -66,10 +68,13 @@ class RawFieldContract:
 
 class CausalWindows(TemporalWindowDataset):
     def __init__(self,*args,information=None,information_targets=False,
-                 reconstruction_constraints=False,**kwargs):
+                 reconstruction_constraints=False,statistical_flow_targets=False,**kwargs):
         super().__init__(*args,**kwargs);self.information=information
         self.information_targets=information_targets
         self.reconstruction_constraints=reconstruction_constraints
+        self.statistical_flow_targets=statistical_flow_targets
+        if statistical_flow_targets and (not reconstruction_constraints or information is None):
+            raise ValueError('Statistical flow targets require reconstruction constraints and information')
         if reconstruction_constraints:
             if information_targets:
                 raise ValueError('Observed reconstruction constraints do not load future information targets')
@@ -84,6 +89,11 @@ class CausalWindows(TemporalWindowDataset):
             if self.information_targets:
                 row['information_targets']=torch.from_numpy(
                     self.information[origin+1:origin+self.config.horizon_steps+1].copy())
+            if self.statistical_flow_targets:
+                # Future observations are labels only for an explicitly enabled
+                # forecast-flow loss; the forecasting call never receives them.
+                row['statistical_flow_information_targets']=torch.as_tensor(
+                    self.information[origin+1:origin+self.config.horizon_steps+1].copy(),dtype=torch.float32)
             if self.reconstruction_constraints:
                 # Dense adjacent observations remain inside the observed span,
                 # even when the predictor subsamples history every 24 hours.
@@ -97,13 +107,13 @@ class CausalWindows(TemporalWindowDataset):
 
 
 def windows(data,config,split,stride=1,max_windows=0,*,information_targets=False,
-            reconstruction_constraints=False):
+            reconstruction_constraints=False,statistical_flow_targets=False):
     starts=data['split'][split][::stride]
     if max_windows:starts=starts[:max_windows]
     if not len(starts):raise ValueError('Forecast training/evaluation requires nonempty windows')
     return CausalWindows(data['states'],data['times'],config,starts,data['mean'],data['scale'],data['schema'],
         information=data['information'],information_targets=information_targets,
-        reconstruction_constraints=reconstruction_constraints)
+        reconstruction_constraints=reconstruction_constraints,statistical_flow_targets=statistical_flow_targets)
 
 
 def new_a(metadata, sealed=True, raw=False):
@@ -135,6 +145,7 @@ def load_predictor(path,device='cpu'):
     # objective; absence of the new field must not relabel an old experiment.
     constraint_decoder=constraint_decoder_from_payload(p)
     statistical_config_from_payload(p)
+    statistical_flow_config_from_payload(p)
     config=PredictorConfig(**p['config'])
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
         raise ValueError('Frozen checkpoints require a sealed A')
@@ -172,6 +183,7 @@ def prepare_constraint_pair(args):
     """Validate the opt-in split objective before any representation is built."""
     pair=getattr(args,'constraint_pair',None)
     statistical_config_from_args(args, pair)
+    statistical_flow_config_from_args(args, pair)
     if pair is None:
         if getattr(args,'constraint_decoder',None) is not None:
             raise ValueError('--constraint-decoder requires --constraint-pair')
@@ -378,11 +390,12 @@ def train(args):
     split_constraints=args.constraint_pair is not None
     constraint_decoder=args.constraint_decoder if split_constraints else None
     statistical_config=statistical_config_from_args(args,args.constraint_pair)
+    flow_config=statistical_flow_config_from_args(args,args.constraint_pair)
     information_only=constraint_decoder=='information_only'
     separate_decoder=constraint_decoder=='separate_surface_and_information'
     target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
     loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info,
-        reconstruction_constraints=split_constraints),batch_size=args.batch_size,
+        reconstruction_constraints=split_constraints,statistical_flow_targets=flow_config is not None),batch_size=args.batch_size,
         shuffle=(name=='train'),generator=torch.Generator().manual_seed(args.seed)) for name in ('train','calibration')]
     # A and AE construction consume different RNG amounts. Reset so equal-size
     # latent predictors start with identical weights for the same forecast seed.
@@ -414,6 +427,11 @@ def train(args):
                             auxiliary=joint_losses(model,prediction,batch,weights,leads)
                         losses.update(auxiliary)
                         losses['loss']=losses['loss']+auxiliary['regularization']
+                        if flow_config is not None:
+                            flow_losses=forecast_statistical_flow_losses(
+                                model,prediction,batch,leads,flow_config,decoder_mode=constraint_decoder)
+                            losses.update(flow_losses)
+                            losses['loss']=losses['loss']+flow_losses['statistical_flow_regularization']
                     if training and optimizer is not None:
                         optimizer.zero_grad(set_to_none=True);losses['loss'].backward()
                         torch.nn.utils.clip_grad_norm_(parameters,1.,error_if_nonfinite=True);optimizer.step()
@@ -492,6 +510,7 @@ def train(args):
         'constraint_decoder':constraint_decoder,
         'statistical_loss':statistical_config['kind'] if statistical_config else None,
         'statistical_loss_config':statistical_config,
+        'statistical_flow_config':flow_config,
         'split_objective_weights':({'reconstruction':weights.reconstruction,'pinn':weights.pinn,
             'statistical':weights.distribution,'static':weights.static} if split_constraints else None),
         'initialization':'pretrained' if config.training_mode=='frozen' else args.initialization,
@@ -510,6 +529,8 @@ def train(args):
                 if information_only else
                 'selected surface spatial marginal quantiles through independent reconstruction decoder, including sea-level pressure, averaged with dynamic-information quantiles; not ensemble CRPS'
                 if separate_decoder else 'selected surface and dynamic-information spatial marginal quantiles on observed reconstructions; not ensemble CRPS'),
+            'statistical_flow':('optional forecast latent -> auxiliary decoder quantile transport velocity matching per day; observed origin anchored, future information is supervision only; gradients reach E, predictor and auxiliary decoders'
+                if flow_config is not None else 'disabled'),
             'static':'selected area-weighted static information L2 on observed reconstructions',
             'pinn':'selected observed reconstruction pair residuals and closure penalty; no tendency supervision or forecast-path PINN',
             'information':'legacy pointwise dynamic-information and surface-physics losses disabled'} if split_constraints else
@@ -547,6 +568,10 @@ def parser():
         help='With --constraint-pair: separate_surface_and_information (default) uses an independent field decoder; information_only disables field reconstruction; surface_and_information shares forecast D')
     p.add_argument('--statistical-weight',type=float,default=.1,
         help='Selected spatial distribution loss weight for split pairs; legacy route uses --distribution-weight')
+    p.add_argument('--statistical-flow-weight',type=float,default=0.,
+        help='Add forecast distribution transport velocity loss to W2/KL (default 0 disables it)')
+    p.add_argument('--statistical-flow-quantiles',type=int,default=None,
+        help='Positive flow weight only: area-weighted quantile count (default 32)')
     p.add_argument('--statistical-loss',choices=STATISTICAL_LOSSES,default=None,
         help='With statistical constraint pairs: w2 (default) or kl_entropy = KL(observed||reconstructed)')
     p.add_argument('--kl-bins',type=int,default=None,help='KL only: total bins including two open tails (default 64)')

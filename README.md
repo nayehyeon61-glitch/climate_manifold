@@ -11,7 +11,9 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 예측 decoder D는 미래 예측 손실로, 정보 decoder D_I는 정보 복원과 선택한 제약으로 학습됩니다.
 D_rec는 D를 복사해 초기화하지만 파라미터를 공유하지 않습니다. 공유 encoder E는 함께 학습합니다.
 `information_only`로 장복원을 끌 수 있고, `surface_and_information`으로 이전의 D 공유 경로를 다시 켤 수 있습니다.
-제약 손실은 예측기 F를 직접 통과하지 않습니다.
+기존 관측 복원 제약은 예측기 F를 직접 통과하지 않습니다. 선택적 **분포 flow 손실**을 켜면
+F가 예측한 미래 latent를 D_rec/D_I로 복원하여 관측된 미래 분포 변화와 비교합니다.
+기존 W2/KL 복원 손실은 유지하며, 추론은 계속 E→F→D입니다.
 [설계·손실 정의·실행 방법](docs/split_manifold_constraints.md)을 먼저 참고하세요.
 전체 실행은 `bash scripts/run_pairwise_manifold_comparison.sh`이며,
 직접 예측 비교군을 포함해 기본 **2개 예측기 × 4개 실험군 = seed당 8회**를 실행합니다.
@@ -235,3 +237,20 @@ PINN의 방정식·단위·mask·gradient 범위는 [물리 설명](docs/physics
 Statistical 제약은 기존 W2 또는 KL–entropy를 선택할 수 있습니다.
 `STATISTICAL_LOSSES="w2 kl_entropy"`로 동일 예측기·seed 비교를 실행하며 Raw는 한 번만 학습합니다.
 [선택 옵션·수식·비교 실행](docs/split_manifold_constraints.md#statistical-선택-w2-또는-klentropy)을 참고하세요.
+
+두 선택 모두에 **현재→미래 공간 주변분포의 분위수 변화율 손실**을 추가할 수 있습니다.
+기본 `STATISTICAL_FLOW_WEIGHT=0`은 기존 동작이며, 양수이면 예측 미래와 실제 미래의
+분포 이동 속도를 비교합니다. 생성 모델의 conditional flow matching이나 공간 위치의
+수송을 학습하는 항은 아닙니다. [정의·gradient·한계](docs/split_manifold_constraints.md#선택적-현재미래-분포-flow-손실)를 참고하세요.
+
+```bash
+# 기존 ARCHIVE/INFO 환경에서, 새 RUN 경로 사용.
+RUN=runs/pinn_statistical_flow_comparison \
+MODELS="mlp neural_ode climode convlstm simvp" \
+PAIRS=pinn_statistical SEEDS=7 BATCH_SIZE=16 \
+STATISTICAL_LOSSES="w2 kl_entropy" STATISTICAL_FLOW_WEIGHTS="0 0.1" \
+bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+이 명령은 **5개 예측기 × (Raw + W2 + W2·flow + KL + KL·flow) = 25회** 학습합니다.
+flow weight는 기존 Statistical weight와 별개이며, 0.1은 비교를 시작하기 위한 예시입니다.
