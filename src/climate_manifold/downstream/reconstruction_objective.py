@@ -16,8 +16,9 @@ import math
 
 import torch
 
-from .joint_objective import JointObjectiveWeights, spatial_quantile_loss
+from .joint_objective import JointObjectiveWeights
 from .constraint_protocol import CONSTRAINT_DECODERS
+from .statistical_objective import make_statistical_config, validate_statistical_config, spatial_statistical_loss
 
 
 PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static')
@@ -62,18 +63,18 @@ def _observed_pair(batch, manifold):
 
 
 def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, *,
-                                     decoder_mode='separate_surface_and_information'):
+                                     decoder_mode='separate_surface_and_information',
+                                     statistical_config=None):
     """Return manifold-only losses and their weighted ``regularization`` sum.
 
     By default ``separate_surface_and_information`` reconstructs observed fields
     through ``pipeline.reconstruction_decoder`` and information through D_I,
-    using their equal average for reconstruction and spatial quantile losses.
+    using their equal average for reconstruction and selected statistical losses.
     The forecast surface decoder D is not invoked. In ``information_only`` mode,
-    ``reconstruction`` and
-    ``information_spatial_quantile`` use dynamic information alone. The surface
+    reconstruction and statistical losses use dynamic information alone. The surface
     decoder is not invoked and its reported losses are zero; its forecasting
     path remains trainable. ``surface_and_information`` restores the legacy
-    equal average of surface and dynamic-information terms. Quantile losses are
+    equal average of surface and dynamic-information terms. W2/KL losses are
     spatial marginals, neither ensemble CRPS nor temporal distribution losses.
     All modes exclude static information from these terms. ``static`` compares
     both reconstructed endpoints to origin terrain. PINN contributes physical
@@ -82,6 +83,10 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
     if decoder_mode not in DECODER_MODES:
         raise ValueError(f'decoder_mode must be one of {DECODER_MODES}')
     _validate_weights(weights, constraint_pair)
+    if statistical_config is not None and not weights.distribution:
+        raise ValueError('Statistical config requires an active statistical constraint')
+    statistical_config = (make_statistical_config() if statistical_config is None
+                          else validate_statistical_config(statistical_config))
     bridge = getattr(pipeline, 'bridge', None)
     manifold = getattr(bridge, 'manifold', None)
     if manifold is None or not hasattr(manifold, 'temporal'):
@@ -139,7 +144,9 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
     zero = states.new_zeros(())
     values = {name: zero for name in (
         'physics', 'information', 'static', 'information_spatial_quantile',
-        'reconstruction_surface', 'statistical_surface', 'statistical_information', 'pinn_total')}
+        'reconstruction_surface', 'statistical_surface', 'statistical_information', 'pinn_total',
+        'statistical_total', 'statistical_kl_entropy', 'statistical_target_entropy',
+        'statistical_reconstructed_entropy', 'statistical_cross_entropy')}
     values['reconstruction_information'] = mse(decoded[:, :, ~static], info_target[:, :, ~static])
     values['reconstruction'] = values['reconstruction_information']
     if surface is not None:
@@ -148,13 +155,23 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
                                          + values['reconstruction_information'])
 
     if weights.distribution:
-        values['statistical_information'] = spatial_quantile_loss(
-            decoded[:, :, ~static], info_target[:, :, ~static], area)
-        values['information_spatial_quantile'] = values['statistical_information']
+        information_scores = spatial_statistical_loss(
+            decoded[:, :, ~static], info_target[:, :, ~static], area, statistical_config)
+        values['statistical_information'] = information_scores['loss']
+        combined_scores = information_scores
         if surface is not None:
-            values['statistical_surface'] = spatial_quantile_loss(surface, surface_target, area)
-            values['information_spatial_quantile'] = .5 * (values['statistical_surface']
-                                                          + values['statistical_information'])
+            surface_scores = spatial_statistical_loss(surface, surface_target, area, statistical_config)
+            values['statistical_surface'] = surface_scores['loss']
+            combined_scores = {key: .5*(surface_scores[key]+information_scores[key])
+                               for key in information_scores}
+        values['statistical_total'] = combined_scores['loss']
+        if statistical_config['kind'] == 'w2':
+            # Preserve the old W2 metric; never put KL values in a quantile column.
+            values['information_spatial_quantile'] = values['statistical_total']
+        else:
+            values['statistical_kl_entropy'] = values['statistical_total']
+            for key in ('target_entropy', 'reconstructed_entropy', 'cross_entropy'):
+                values['statistical_'+key] = combined_scores[key]
     if weights.static:
         # Endpoint 1 is the observed origin, never a future label.
         values['static'] = mse(decoded[:, :, static], info_target[:, 1:2, static])
@@ -165,7 +182,7 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
             include_tendency=False,
         ))
     values['regularization'] = (weights.reconstruction * values['reconstruction']
-                                + weights.distribution * values['information_spatial_quantile']
+                                + weights.distribution * values['statistical_total']
                                 + weights.static * values['static']
                                 + weights.pinn * values['pinn_total'])
     if any(not bool(torch.isfinite(value).all()) for value in values.values()):

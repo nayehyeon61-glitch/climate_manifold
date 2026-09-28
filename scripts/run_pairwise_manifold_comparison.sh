@@ -40,7 +40,27 @@ for pair in "${pairs[@]}"; do
     *) echo "Unsupported constraint pair: $pair" >&2; exit 2;;
   esac
 done
-arms=("${pairs[@]}")
+read -r -a statistical_losses <<< "${STATISTICAL_LOSSES:-${STATISTICAL_LOSS:-w2}}"
+[[ ${#statistical_losses[@]} -gt 0 ]] || { echo 'STATISTICAL_LOSSES must be nonempty' >&2; exit 2; }
+declare -A loss_seen=()
+for loss in "${statistical_losses[@]}"; do
+  case "$loss" in
+    w2|kl_entropy) ;;
+    *) echo "Unsupported statistical loss: $loss" >&2; exit 2;;
+  esac
+  [[ ! -v "loss_seen[$loss]" ]] || { echo "Duplicate statistical loss: $loss" >&2; exit 2; }
+  loss_seen[$loss]=1
+done
+arms=()
+for pair in "${pairs[@]}"; do
+  if [[ "$pair" == *statistical* ]]; then
+    for loss in "${statistical_losses[@]}"; do
+      if [[ "$loss" == w2 ]]; then arms+=("$pair"); else arms+=("$pair:kl_entropy"); fi
+    done
+  else
+    arms+=("$pair")
+  fi
+done
 if [[ "$INCLUDE_RAW" == 1 ]]; then arms+=(raw); fi
 # Duplicate identities must fail before starting any expensive training.
 declare -A identities=()
@@ -66,14 +86,24 @@ reports=()
 for seed in "${seeds[@]}"; do
   for family in "${families[@]}"; do
     for arm in "${arms[@]}"; do
-      prefix="$RUN/${family}-${arm}-seed${seed}"
+      prefix="$RUN/${family}-${arm//:/-}-seed${seed}"
+      pair="${arm%%:*}"
       if [[ "$arm" == raw ]]; then
         route=(--bridge raw --raw-backend matched --regularization none)
       else
-        route=(--bridge latent --regularization full --constraint-pair "$arm"
+        route=(--bridge latent --regularization full --constraint-pair "$pair"
           --constraint-decoder "$CONSTRAINT_DECODER"
           --statistical-weight "${STATISTICAL_WEIGHT:-0.1}" --static-weight "${STATIC_WEIGHT:-0.05}")
-        if [[ "$arm" == pinn_* ]]; then
+        if [[ "$pair" == *statistical* ]]; then
+          loss=w2
+          [[ "$arm" != *:kl_entropy ]] || loss=kl_entropy
+          route+=(--statistical-loss "$loss")
+          if [[ "$loss" == kl_entropy ]]; then
+            route+=(--kl-bins "${KL_BINS:-64}" --kl-range "${KL_RANGE:-6}"
+              --kl-bandwidth "${KL_BANDWIDTH:-0.2}")
+          fi
+        fi
+        if [[ "$pair" == pinn_* ]]; then
           route+=(--pinn --pinn-levels "${levels[@]}" --pinn-weight "${PINN_WEIGHT:-0.1}")
         fi
       fi

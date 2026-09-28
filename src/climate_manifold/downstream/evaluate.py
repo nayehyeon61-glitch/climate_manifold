@@ -11,6 +11,7 @@ from .train import load_predictor,windows
 from .metrics import ForecastMetrics,LatentDiagnostics
 from .protocol import experiment_contract
 from .constraint_protocol import constraint_decoder_from_payload
+from .statistical_objective import statistical_config_from_payload
 
 
 def evaluate(checkpoint,archive,output,*,information=None,split='validation',max_cases=0,
@@ -22,6 +23,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
     if forecast_output and (Path(forecast_output).suffix!='.npz' or Path(forecast_output).resolve()==output.resolve()):
         raise ValueError('Forecast path must be a distinct .npz file')
     model,p=load_predictor(checkpoint,device)
+    statistical_config=statistical_config_from_payload(p)
     a=p['a_metadata'];data=data_contract(archive,information,a['mode'],model.a_config,a)
     ds=windows(data,model.a_config,split,origin_stride,max_cases)
     leads=torch.tensor(p['lead_hours'],device=device,dtype=torch.float32)
@@ -98,6 +100,8 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'constraint_path':p.get('constraint_path','forecast_trajectory'),
             'constraint_contract':p.get('constraint_contract'),
             'constraint_decoder':constraint_decoder_from_payload(p),
+            'statistical_loss':statistical_config['kind'] if statistical_config else None,
+            'statistical_loss_config':statistical_config,
             'split_objective_weights':p.get('split_objective_weights'),
             'forecast_parameters':p.get('forecast_parameters'),
             'constraint_parameters':p.get('constraint_parameters'),

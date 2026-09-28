@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from ..train import write_json
 from .constraint_protocol import constraint_decoder_from_payload
+from .statistical_objective import statistical_config_from_payload
 
 
 def _a_hash(report):
@@ -18,6 +19,7 @@ def _a_hash(report):
 def _identity(report):
     cfg = report['config']
     pure_a = report['format'] == 'climate_manifold.dynamics_evaluation.v1'
+    statistical_config = statistical_config_from_payload(report)
     return dict(model='a_drift' if pure_a else cfg['model'],
                 bridge='latent' if pure_a else cfg['bridge'],
                 representation=('climate_manifold' if pure_a else
@@ -28,6 +30,8 @@ def _identity(report):
                 constraint_pair=report.get('constraint_pair'),
                 constraint_path=report.get('constraint_path','forecast_trajectory'),
                 constraint_decoder=constraint_decoder_from_payload(report),
+                statistical_loss=statistical_config['kind'] if statistical_config else None,
+                statistical_loss_config=statistical_config,
                 initialization=report.get('initialization','pretrained' if pure_a or cfg['bridge']!='raw' else 'fresh'),
                 raw_backend=(cfg.get('raw_backend','legacy') if not pure_a and cfg['bridge']=='raw' else None),
                 implementation=report.get('implementation'),

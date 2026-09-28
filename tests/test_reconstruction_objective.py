@@ -336,3 +336,20 @@ def test_missing_required_representation_and_pinn_fail_explicitly(split_prepared
     pipe.bridge.mode = 'raw'
     with pytest.raises(ValueError, match='unanchored latent bridge'):
         reconstruction_constraint_losses(pipe, batch, pair_weights('statistical_static'), 'statistical_static')
+
+
+def test_kl_alone_updates_auxiliary_decoders_and_encoder_without_forecast_path(split_prepared):
+    from climate_manifold.downstream.statistical_objective import make_statistical_config
+    pipe,batch=split_prepared
+    manifold=pipe.bridge.manifold
+    values=reconstruction_constraint_losses(pipe,batch,pair_weights('pinn_statistical'),
+        'pinn_statistical',statistical_config=make_statistical_config('kl_entropy',bins=16))
+    values['statistical_total'].backward()
+    for module in (manifold.core.manifold.encoder,manifold.info_head,pipe.reconstruction_decoder):
+        grads=[p.grad for p in module.parameters() if p.grad is not None]
+        assert grads and all(torch.isfinite(g).all() for g in grads)
+        assert sum(g.abs().sum() for g in grads)>0
+    for module in (pipe.predictor,manifold.core.manifold.decoder,manifold.pinn):
+        assert all(p.grad is None for p in module.parameters())
+    assert batch['constraint_states'].grad is None
+    assert batch['constraint_information'].grad is None

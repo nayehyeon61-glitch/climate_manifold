@@ -306,3 +306,77 @@ hidden width 8/latent channels 2의 CPU 실행입니다. 실제 ERA5 예측력�
 | 예측 E→F→D 및 별도 장복원 decoder D_rec 구성 | `src/climate_manifold/downstream/pipeline.py` |
 | 전체 쌍별 실행 | `scripts/run_pairwise_manifold_comparison.sh` |
 | 평가 및 조합별 집계 | `src/climate_manifold/downstream/evaluate.py`, `compare.py` |
+
+## Statistical 선택: W2 또는 KL–entropy
+
+기존 W2는 기본값으로 유지합니다. Statistical이 활성화된 두 조합
+(`pinn_statistical`, `statistical_static`)에서만
+`--statistical-loss w2|kl_entropy`를 선택합니다.
+Raw와 `pinn_static`에는 이 항이 없습니다. 이전 checkpoint의 누락된 선택값은
+W2로 해석하며, 기존 `--distribution-weight` 학습 경로는 변경하지 않습니다.
+
+- **W2:** 기존 면적 가중 공간 주변분포의 32개 분위수 제곱 차이.
+- **KL–entropy:** 관측 분포 P와 복원 분포 Q에 대해
+  `KL(P || Q) = H(P,Q) - H(P)`를 최소화합니다.
+  단순히 `|H(P)-H(Q)|`를 줄이거나 복원 entropy를 최대화하는 항이 아닙니다.
+  서로 위치가 다른 분포가 같은 entropy를 가질 수 있기 때문입니다.
+
+각 샘플·관측 시각·변수별로 공간 격자값의 분포를 만듭니다. 기존 정규화 좌표에서
+고정된 공통 bin 경계와 sigmoid soft membership을 사용하고 격자 면적으로 가중합니다.
+기본값은 64 bins(양 끝의 열린 tail bin 포함), 경계 범위 [-6,6], bandwidth 0.2입니다.
+각 bin에 1e-6을 더한 뒤 정규화하여 log(0)을 방지합니다. 경계는 예측값이나 검증자료에
+맞춰 이동하지 않습니다. 관측 target은 detach하며, 복원값을 통해 E와 보조 decoder에
+gradient가 전달됩니다. `--kl-bins`, `--kl-range`, `--kl-bandwidth`는 KL에서만 사용합니다.
+
+현재 Statistical의 변수 범위는 유지됩니다. D_rec가 복원하는 전체 surface 변수
+(해면기압 포함)와 D_I의 dynamic information을 사용하며 static 지형은 제외합니다.
+두 경로가 활성화되면 두 손실을 1:1 평균합니다.
+`information_only`에서는 dynamic information만 사용합니다.
+특히 surface는 기존 **격자별 평균·표준편차로 정규화한 값**이므로 물리 단위 Pa의
+공간 기압 분포 자체와 같지 않습니다. 이 선택은 msl 전용 손실로 변경하는 기능이 아닙니다.
+이산 entropy의 단위는 nats이며, 기상학적 열역학 entropy나 앙상블 예측 불확실성이 아닙니다.
+
+학습 기록에 `statistical_total`, `statistical_kl_entropy`,
+`statistical_target_entropy`, `statistical_reconstructed_entropy`,
+`statistical_cross_entropy`를 저장합니다. W2 전용
+`information_spatial_quantile`에는 KL 값을 넣지 않습니다.
+선택과 histogram 설정은 checkpoint·평가 보고서에도 보존합니다.
+
+하나만 실행할 경우 기존 실행 환경에서 다음과 같이 선택합니다.
+
+```bash
+STATISTICAL_LOSS=w2 bash scripts/run_pairwise_manifold_comparison.sh
+# 또는
+STATISTICAL_LOSS=kl_entropy bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+두 방법을 같은 seed와 예측기로 비교하려면 새 RUN 경로와 자료 경로를 지정하고:
+
+```bash
+MODELS="mlp neural_ode climode convlstm simvp" \
+PAIRS=pinn_statistical SEEDS=7 BATCH_SIZE=16 \
+STATISTICAL_LOSSES="w2 kl_entropy" \
+bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+`STATISTICAL_LOSSES`는 단일 `STATISTICAL_LOSS`보다 우선합니다.
+각 예측기마다 Raw 1회 + W2 1회 + KL 1회, 총 15회 학습합니다.
+세 제약 조합을 모두 비교하면 예측기당 6회입니다.
+Raw와 PINN+Static을 loss 종류마다 반복 학습하지 않습니다.
+W2 파일명은 유지하고 KL 파일명에 `-kl_entropy`를 추가합니다.
+집계에서는 KL arm을 `pinn_statistical:kl_entropy`처럼 구분합니다.
+동일 제약 조합의 W2→KL 효과는 `comparison.statistical-effects.csv`에 기록하며,
+양수 RMSE/CRPS skill은 KL 후보에 유리합니다.
+loss 종류와 제약 조합을 동시에 바꾼 비교는 단일 요인의 효과로 집계하지 않습니다.
+같은 loss 종류의 histogram 설정이 다르면 seed 반복으로 합칠 수 없습니다.
+
+W2와 KL의 수치 크기는 직접 비교할 수 없습니다. 먼저 같은 외부 weight로 통제한 비교를
+하고, 필요하면 훈련/selection 분할에서만 각 weight를 조정하여 최종 검증 예측력을 비교합니다.
+KL의 soft histogram은 근사이며 bin과 bandwidth에 민감합니다. 열린 tail bin은 범위 밖
+이상치의 크기 차이를 구분하지 못하고 sigmoid가 포화되면 gradient가 약해질 수 있습니다.
+값의 공간 위치도 이 주변분포 손실만으로는 보존되지 않으므로 pointwise reconstruction과
+PINN을 함께 평가해야 합니다.
+
+선택 손실 추가 후 전체 suite 542개와 KL 단독 gradient 경로 테스트 1개가 통과했습니다.
+합성 자료 학습·checkpoint 재로딩·평가, 이전 W2의 수치 동일성, KL gradient와 entropy 항등식,
+비교군 분리 및 Raw 중복 실행 방지를 확인했습니다. 실제 자료 성능 비교는 실행하지 않았습니다.

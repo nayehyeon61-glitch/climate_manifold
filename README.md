@@ -231,3 +231,7 @@ PINN은 희소 기압면의 근사 물리 제약이며 완전한 primitive-equat
 
 원본 commit, 파일 대응, 추출 검증은 [SOURCE.md](SOURCE.md)를 참고하세요.
 PINN의 방정식·단위·mask·gradient 범위는 [물리 설명](docs/physics.md)에 정리했습니다.
+
+Statistical 제약은 기존 W2 또는 KL–entropy를 선택할 수 있습니다.
+`STATISTICAL_LOSSES="w2 kl_entropy"`로 동일 예측기·seed 비교를 실행하며 Raw는 한 번만 학습합니다.
+[선택 옵션·수식·비교 실행](docs/split_manifold_constraints.md#statistical-선택-w2-또는-klentropy)을 참고하세요.

@@ -7,6 +7,7 @@ from itertools import combinations
 from pathlib import Path
 import numpy as np
 from ..train import write_json
+from .statistical_objective import statistical_config_from_payload
 from .protocol import experiment_contract,validate_experiment
 from .climode_benchmark import benchmark,write_table
 from .constraint_protocol import constraint_decoder_from_payload, normalize_constraint_contract
@@ -34,7 +35,7 @@ def _regime(report):
 
 def _arm(row):
     if row.get('constraint_pair'):
-        return row['constraint_pair']
+        return row['constraint_pair'] + (':kl_entropy' if row.get('statistical_loss') == 'kl_entropy' else '')
     if row['representation']=='raw':
         return 'raw'
     if (row['representation']=='climate_manifold' and row['training_mode']=='joint'
@@ -67,6 +68,14 @@ def _validate_constraint_pairs(group):
             raise ValueError('Raw controls require zero effective objective_weights')
         if row.get('constraint_parameters', 0) != 0:
             raise ValueError('Raw controls must have zero constraint_parameters')
+    statistical_configs = {}
+    for row in group:
+        config = statistical_config_from_payload(row)
+        if config is not None:
+            kind = config['kind']
+            if kind in statistical_configs and statistical_configs[kind] != config:
+                raise ValueError('Unfair comparison: mismatched statistical_loss_config')
+            statistical_configs[kind] = config
     first = split[0]
     common_contract = None
     active_weights = {}
@@ -251,7 +260,7 @@ def _constraint_field_effects(identity, candidate, baseline):
 
 def compare(reports,output,climode_reference_reports=None):
     output=Path(output)
-    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv')) or output.exists():
+    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv')) or output.exists():
         raise FileExistsError('Choose a new comparison path')
     data=[json.loads(Path(path).read_text()) for path in reports]
     if not data:raise ValueError('At least one evaluation report is required')
@@ -306,6 +315,7 @@ def compare(reports,output,climode_reference_reports=None):
                     raise ValueError('Joint latent comparison requires regularization=none or full')
     rows=[]
     for report,contract in zip(data,contracts):
+        statistical_config = statistical_config_from_payload(report)
         cfg=report['config'];aggregate=report['scores']['aggregate'] or {}
         rows.append(dict(model=cfg['model'],bridge=cfg['bridge'],anchor=cfg['anchor'],seed=report['seed'],
             representation=contract['representation'],prediction_space=contract['prediction_space'],
@@ -319,6 +329,8 @@ def compare(reports,output,climode_reference_reports=None):
             constraint_decoder=constraint_decoder_from_payload(report),
             constraint_contract=report.get('constraint_contract'),
             pinn_config=report.get('pinn_config'),
+            statistical_loss=statistical_config['kind'] if statistical_config else None,
+            statistical_loss_config=statistical_config,
             split_objective_weights=report.get('split_objective_weights'),
             forecast_parameters=report.get('forecast_parameters'),constraint_parameters=report.get('constraint_parameters'),
             normalized_rmse=aggregate.get('normalized_rmse'),wind_speed_rmse_mps=aggregate.get('wind_speed_rmse_mps'),
@@ -330,7 +342,7 @@ def compare(reports,output,climode_reference_reports=None):
     for row in rows:
         key='/'.join(row[k] for k in ('model','representation','bridge','anchor','training_mode','regularization','initialization'))
         if row['constraint_pair']:
-            key += '/'+row['constraint_pair']
+            key += '/'+row['candidate_arm']
         if groups.get(key) and row['objective_weights']!=groups[key][0]['objective_weights']:
             raise ValueError('Cannot pool different objective_weights as seeds within '+key)
         if any(x['seed']==row['seed'] for x in groups.get(key,[])):
@@ -345,7 +357,7 @@ def compare(reports,output,climode_reference_reports=None):
                       'scored_runs':len(scores)} if scores else {'seeds':[x['seed'] for x in group],
                       'mean_normalized_rmse':None,'sample_std_normalized_rmse':None,'scored_runs':0}
     ranking_allowed=same_cases and all(r['finite_forecast_fraction']==1 for r in rows)
-    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[]
+    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[]
     if ranking_allowed and contracts[0]['suite']=='primary':
         indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization']):r
                  for r in rows if not r['constraint_pair']}
@@ -383,25 +395,37 @@ def compare(reports,output,climode_reference_reports=None):
                 paired.append({**identity,
                                'rmse_reduction':error-ours,
                                'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
-        split_index={(r['model'],r['seed'],r['constraint_pair']):r for r in rows if r['constraint_pair']}
         for family,seed in sorted({(r['model'],r['seed']) for r in rows if r['constraint_pair']}):
-            for baseline_arm,candidate_arm in combinations(CONSTRAINT_GROUPS,2):
-                baseline=split_index.get((family,seed,baseline_arm))
-                candidate=split_index.get((family,seed,candidate_arm))
-                if baseline is None or candidate is None:continue
-                base_groups=CONSTRAINT_GROUPS[baseline_arm];candidate_groups=CONSTRAINT_GROUPS[candidate_arm]
+            variants = sorted(
+                (r for r in rows if r['model']==family and r['seed']==seed and r['constraint_pair']),
+                key=lambda r:(list(CONSTRAINT_GROUPS).index(r['constraint_pair']),
+                              r['statistical_loss']=='kl_entropy'))
+            for baseline,candidate in combinations(variants,2):
+                baseline_arm,candidate_arm=baseline['candidate_arm'],candidate['candidate_arm']
+                same_pair=baseline['constraint_pair']==candidate['constraint_pair']
+                base_kind,new_kind=baseline['statistical_loss'],candidate['statistical_loss']
+                if not same_pair and base_kind and new_kind and base_kind!=new_kind:
+                    continue  # Changing both the constraint pair and metric is confounded.
                 identity={'model':family,'seed':seed,'control':baseline_arm,
                     'candidate_arm':candidate_arm,'training_mode':'joint',
-                    'pair_key':family+'/'+candidate_arm+'/vs_'+baseline_arm,
-                    'interpretation':'replace_one_constraint_group_with_one_fixed',
-                    'fixed_group':next(iter(base_groups & candidate_groups)),
-                    'removed_group':next(iter(base_groups-candidate_groups)),
-                    'added_group':next(iter(candidate_groups-base_groups))}
+                    'pair_key':family+'/'+candidate_arm+'/vs_'+baseline_arm}
+                if same_pair:
+                    identity.update(interpretation='replace_statistical_loss',
+                        constraint_pair=candidate['constraint_pair'],
+                        baseline_statistical_loss=base_kind,candidate_statistical_loss=new_kind)
+                else:
+                    base_groups=CONSTRAINT_GROUPS[baseline['constraint_pair']]
+                    candidate_groups=CONSTRAINT_GROUPS[candidate['constraint_pair']]
+                    identity.update(interpretation='replace_one_constraint_group_with_one_fixed',
+                        fixed_group=next(iter(base_groups & candidate_groups)),
+                        removed_group=next(iter(base_groups-candidate_groups)),
+                        added_group=next(iter(candidate_groups-base_groups)))
                 error=baseline['normalized_rmse'];ours=candidate['normalized_rmse']
                 if error is not None and ours is not None:
                     paired.append({**identity,'rmse_reduction':error-ours,
                         'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
-                constraint_physical.extend(_constraint_field_effects(
+                destination=statistical_physical if same_pair else constraint_physical
+                destination.extend(_constraint_field_effects(
                     identity,source[id(candidate)],source[id(baseline)]))
         for row in paired:
             key=row['pair_key'] if row['training_mode']=='joint' else row['model']+'/vs_'+row['control']
@@ -413,6 +437,7 @@ def compare(reports,output,climode_reference_reports=None):
     result={'format':'climate_manifold.comparison.v1','rows':rows,'seed_summary':summary,
         'experiment_suite':contracts[0]['suite'],'paired_effects':paired,'paired_summary':paired_summary,
         'constraint_pair_effects':constraint_physical,
+        'statistical_loss_effects':statistical_physical,
         'direct_comparison':_direct_effects(direct_pairs),
         'same_successful_origins':same_cases,'ranking_allowed':ranking_allowed,
         'notes':['Inspect per-variable and per-lead physical scores in the original reports.',
@@ -437,10 +462,11 @@ def compare(reports,output,climode_reference_reports=None):
     write_table(output.with_suffix('.climode-effects.csv'),result['climode_benchmark'].get('effects',[]))
     write_table(output.with_suffix('.raw-effects.csv'),result['direct_comparison']['effects'])
     write_table(output.with_suffix('.constraint-effects.csv'),result['constraint_pair_effects'])
+    write_table(output.with_suffix('.statistical-effects.csv'),result['statistical_loss_effects'])
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
         for row in rows:
-            structured = ('conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config')
+            structured = ('conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config')
             writer.writerow({**row,**{key:json.dumps(row[key],sort_keys=True) for key in structured}})
     return result
 

@@ -19,6 +19,7 @@ from ..temporal_supervision import TemporalWindowDataset, TemporalObjective
 from .pipeline import ForecastPipeline, PredictorConfig, SEQUENCE_IMPLEMENTATIONS
 from .protocol import validate_experiment
 from .constraint_protocol import CONSTRAINT_DECODERS, make_constraint_contract, constraint_decoder_from_payload
+from .statistical_objective import STATISTICAL_LOSSES, statistical_config_from_args, statistical_config_from_payload
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
@@ -133,6 +134,7 @@ def load_predictor(path,device='cpu'):
     # Historical split checkpoints retain their original surface + information
     # objective; absence of the new field must not relabel an old experiment.
     constraint_decoder=constraint_decoder_from_payload(p)
+    statistical_config_from_payload(p)
     config=PredictorConfig(**p['config'])
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
         raise ValueError('Frozen checkpoints require a sealed A')
@@ -169,6 +171,7 @@ def forecast_loss(output,batch,temporal,lead_hours,tendency_weight):
 def prepare_constraint_pair(args):
     """Validate the opt-in split objective before any representation is built."""
     pair=getattr(args,'constraint_pair',None)
+    statistical_config_from_args(args, pair)
     if pair is None:
         if getattr(args,'constraint_decoder',None) is not None:
             raise ValueError('--constraint-decoder requires --constraint-pair')
@@ -374,6 +377,7 @@ def train(args):
     # All variants share train / downstream-selection calibration / untouched validation,test.
     split_constraints=args.constraint_pair is not None
     constraint_decoder=args.constraint_decoder if split_constraints else None
+    statistical_config=statistical_config_from_args(args,args.constraint_pair)
     information_only=constraint_decoder=='information_only'
     separate_decoder=constraint_decoder=='separate_surface_and_information'
     target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
@@ -404,7 +408,7 @@ def train(args):
                         if split_constraints:
                             from .reconstruction_objective import reconstruction_constraint_losses
                             auxiliary=reconstruction_constraint_losses(model,batch,weights,args.constraint_pair,
-                                                                       decoder_mode=constraint_decoder)
+                                decoder_mode=constraint_decoder,statistical_config=statistical_config)
                         else:
                             from .joint_objective import joint_losses
                             auxiliary=joint_losses(model,prediction,batch,weights,leads)
@@ -486,6 +490,8 @@ def train(args):
         'objective_weights':asdict(weights),
         'constraint_pair':args.constraint_pair,'constraint_path':constraint_path,'constraint_contract':constraint_contract,
         'constraint_decoder':constraint_decoder,
+        'statistical_loss':statistical_config['kind'] if statistical_config else None,
+        'statistical_loss_config':statistical_config,
         'split_objective_weights':({'reconstruction':weights.reconstruction,'pinn':weights.pinn,
             'statistical':weights.distribution,'static':weights.static} if split_constraints else None),
         'initialization':'pretrained' if config.training_mode=='frozen' else args.initialization,
@@ -497,7 +503,10 @@ def train(args):
                 if information_only else
                 'shared E -> independent field reconstruction decoder and information decoder on observed origin-6h,origin; forecast D and predictor bypassed'
                 if separate_decoder else 'shared E -> surface and information decoders on observed origin-6h,origin; predictor bypassed'),
-            'statistical':('selected dynamic-information spatial marginal quantiles only; surface and sea-level-pressure W2 disabled; not ensemble CRPS'
+            'statistical':(('KL(observed||reconstructed) = cross entropy - observed entropy; area-weighted fixed soft histogram on normalized observed fields; '
+                + ('dynamic information only' if information_only else 'mean of surface and dynamic-information losses'))
+                if statistical_config and statistical_config['kind']=='kl_entropy' else
+                'selected dynamic-information spatial marginal quantiles only; surface and sea-level-pressure W2 disabled; not ensemble CRPS'
                 if information_only else
                 'selected surface spatial marginal quantiles through independent reconstruction decoder, including sea-level pressure, averaged with dynamic-information quantiles; not ensemble CRPS'
                 if separate_decoder else 'selected surface and dynamic-information spatial marginal quantiles on observed reconstructions; not ensemble CRPS'),
@@ -537,7 +546,12 @@ def parser():
     p.add_argument('--constraint-decoder',choices=CONSTRAINT_DECODERS,default=None,
         help='With --constraint-pair: separate_surface_and_information (default) uses an independent field decoder; information_only disables field reconstruction; surface_and_information shares forecast D')
     p.add_argument('--statistical-weight',type=float,default=.1,
-        help='Spatial marginal quantile weight for split constraint pairs; legacy route uses --distribution-weight')
+        help='Selected spatial distribution loss weight for split pairs; legacy route uses --distribution-weight')
+    p.add_argument('--statistical-loss',choices=STATISTICAL_LOSSES,default=None,
+        help='With statistical constraint pairs: w2 (default) or kl_entropy = KL(observed||reconstructed)')
+    p.add_argument('--kl-bins',type=int,default=None,help='KL only: total bins including two open tails (default 64)')
+    p.add_argument('--kl-range',type=float,default=None,help='KL only: boundaries span +/- this normalized value (default 6)')
+    p.add_argument('--kl-bandwidth',type=float,default=None,help='KL only: sigmoid smoothing width in normalized units (default 0.2)')
     for name,value in dict(manifold_dim=64,manifold_hidden_dim=512,context_dim=64,history_steps=6,history_stride=4).items():
         p.add_argument('--'+name.replace('_','-'),type=int,default=value)
     for name,value in dict(reconstruction_weight=.1,information_weight=.1,static_weight=.05,

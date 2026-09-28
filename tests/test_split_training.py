@@ -217,3 +217,37 @@ def test_split_training_requires_observed_pair(pinn_prepared, tmp_path):
     args = _split_args(archive, tmp_path, 'statistical_static', '--history-steps', '1')
     with pytest.raises(ValueError, match='history_span_steps >= 2'):
         initialize_manifold(args)
+
+
+def test_kl_training_gradients_checkpoint_and_evaluation(pinn_prepared,tmp_path,monkeypatch):
+    _,_,_,archive=pinn_prepared
+    args=_split_args(archive,tmp_path,'pinn_statistical',
+        '--statistical-loss','kl_entropy','--kl-bins','16')
+    captured=_capture(monkeypatch)
+    checkpoint=train(args)
+    model,_=captured[0]
+    _assert_finite_gradient(model.bridge.manifold.core.manifold.encoder)
+    _assert_finite_gradient(model.reconstruction_decoder)
+    _assert_finite_gradient(model.bridge.manifold.info_head)
+    _,payload=load_predictor(checkpoint)
+    assert payload['statistical_loss']=='kl_entropy'
+    assert payload['statistical_loss_config']['bins']==16
+    metrics=json.loads(checkpoint.with_suffix('.metrics.json').read_text())[0]['train']
+    assert metrics['statistical_total']==metrics['statistical_kl_entropy']>0
+    assert metrics['information_spatial_quantile']==0
+    assert metrics['statistical_cross_entropy']-metrics['statistical_target_entropy']==pytest.approx(
+        metrics['statistical_total'],abs=1e-5)
+    result=evaluate(checkpoint,archive,tmp_path/'kl.evaluation.json',
+        information=tmp_path/'pinn-information.npz',max_cases=2)
+    assert result['statistical_loss_config']==payload['statistical_loss_config']
+    assert result['finite_forecast_fraction']==1.
+
+
+@pytest.mark.parametrize('pair,extra',[
+    ('pinn_static',('--statistical-loss','kl_entropy')),
+    ('pinn_statistical',('--statistical-loss','w2','--kl-bins','16')),
+    ('pinn_statistical',('--statistical-loss','kl_entropy','--kl-bandwidth','0')),
+])
+def test_statistical_options_reject_inactive_or_invalid_configuration(tmp_path,pair,extra):
+    with pytest.raises(ValueError):
+        prepare_constraint_pair(_split_args(tmp_path/'absent.npz',tmp_path,pair,*extra))
