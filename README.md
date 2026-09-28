@@ -4,9 +4,12 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
-**이 브랜치의 새 실험:** 예측 `E → F → D`와 관측 복원 `E → D / D_I`의 제약 경로를
+**이 브랜치의 새 실험:** 예측 `E → F → D`와 관측 정보 복원 `E → D_I`의 제약 경로를
 분리하고 **PINN+Statistical / PINN+Static / Statistical+Static**을 비교합니다.
-기본 동적 자료 복원은 공통으로 한 번 유지하며, 제약 손실은 예측기 F를 직접 통과하지 않습니다.
+기본 `CONSTRAINT_DECODER=information_only`에서는 동적 정보 복원을 공통으로 유지하고,
+관측 기상장 D 복원·분포 손실은 끕니다. D는 미래 예측 손실로 계속 학습됩니다.
+이전 두 decoder 제약 경로는 `CONSTRAINT_DECODER=surface_and_information`으로 다시 켤 수 있습니다.
+제약 손실은 예측기 F를 직접 통과하지 않습니다.
 [설계·손실 정의·실행 방법](docs/split_manifold_constraints.md)을 먼저 참고하세요.
 전체 실행은 `bash scripts/run_pairwise_manifold_comparison.sh`이며,
 직접 예측 비교군을 포함해 기본 **2개 예측기 × 4개 실험군 = seed당 8회**를 실행합니다.

@@ -4,6 +4,7 @@ import csv
 import json
 from pathlib import Path
 from ..train import write_json
+from .constraint_protocol import constraint_decoder_from_payload
 
 
 def _a_hash(report):
@@ -26,6 +27,7 @@ def _identity(report):
                 regularization=report.get('regularization','legacy'),
                 constraint_pair=report.get('constraint_pair'),
                 constraint_path=report.get('constraint_path','forecast_trajectory'),
+                constraint_decoder=constraint_decoder_from_payload(report),
                 initialization=report.get('initialization','pretrained' if pure_a or cfg['bridge']!='raw' else 'fresh'),
                 raw_backend=(cfg.get('raw_backend','legacy') if not pure_a and cfg['bridge']=='raw' else None),
                 implementation=report.get('implementation'),

@@ -160,7 +160,7 @@ class ForecastPipeline(nn.Module):
         else:self.predictor = None
         self.train(self.training)
 
-    def forward(self, history, information, origin_ns, lead_hours):
+    def forward(self, history, information, origin_ns, lead_hours, *, reconstruct_origin=True):
         if (lead_hours.ndim != 1 or not len(lead_hours) or not torch.isfinite(lead_hours).all()
                 or lead_hours[0] <= 0 or not (lead_hours[1:] > lead_hours[:-1]).all()):
             raise ValueError('Lead hours must be finite, positive and strictly increasing')
@@ -181,7 +181,10 @@ class ForecastPipeline(nn.Module):
         mean = self.bridge.to_fields(predicted,history[:,-1],features[:,-1])
         if not torch.isfinite(mean).all() or (std is not None and (not torch.isfinite(std).all() or (std <= 0).any())):
             raise FloatingPointError('Nonfinite or invalid downstream prediction')
-        reconstruction = self.bridge.decode(features[:,-1])
+        # Information-only constraints do not train the surface decoder on the
+        # observed origin. Keep this optional diagnostic for legacy objectives
+        # and no-grad evaluation, without building an unused training graph.
+        reconstruction = self.bridge.decode(features[:,-1]) if reconstruct_origin else None
         return {'mean':mean,'std':std,'reconstructed_origin':reconstruction,
                 'history_latent':features if self.config.bridge == 'latent' else None,
                 'predicted_latent':predicted if self.config.bridge == 'latent' else None,

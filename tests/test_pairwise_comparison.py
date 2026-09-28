@@ -10,6 +10,7 @@ import pytest
 
 from climate_manifold.downstream.climode_benchmark import benchmark
 from climate_manifold.downstream.compare import CONSTRAINT_GROUPS
+from climate_manifold.downstream.constraint_protocol import make_constraint_contract
 from test_raw_comparison import report, run_compare
 
 
@@ -58,6 +59,53 @@ def test_pair_field_effects_do_not_depend_on_mixed_unit_aggregate(tmp_path):
     assert len(result['constraint_pair_effects'])==6
 
 
+def scoped_pair_report(pair, seed=7, decoder='information_only'):
+    row = pair_report(pair, seed)
+    row['constraint_decoder'] = decoder
+    row['constraint_contract'] = make_constraint_contract(pair, CONSTRAINT_GROUPS[pair], decoder)
+    return row
+
+
+def test_information_only_pairs_accept_matched_raw_and_export_scope(tmp_path):
+    data = [scoped_pair_report(pair) for pair in CONSTRAINT_GROUPS]
+    result = run_compare(tmp_path, [report('raw'), *data])
+    assert result['direct_comparison']['ranking_allowed']
+    assert len(result['direct_comparison']['effects']) == 6
+    assert result['rows'][0]['constraint_decoder'] is None
+    assert all(row['constraint_decoder'] == 'information_only' for row in result['rows'][1:])
+    assert len(result['constraint_pair_effects']) == 6
+
+
+def test_legacy_scope_is_inferred_and_matches_explicit_both_mode(tmp_path):
+    data = [pair_report('pinn_statistical'),
+            scoped_pair_report('pinn_statistical', seed=19, decoder='surface_and_information')]
+    result = run_compare(tmp_path, data)
+    assert len(result['seed_summary']) == 1
+    assert all(row['constraint_decoder'] == 'surface_and_information' for row in result['rows'])
+    assert result['rows'][0]['constraint_contract']['version'].endswith('.v1')
+
+
+@pytest.mark.parametrize('second_pair,second_seed', [('pinn_static', 7), ('pinn_statistical', 19)])
+def test_mixed_decoder_scopes_cannot_be_compared_or_pooled(tmp_path, second_pair, second_seed):
+    data = [scoped_pair_report('pinn_statistical'), pair_report(second_pair, second_seed)]
+    with pytest.raises(ValueError, match='constraint_decoder scope'):
+        run_compare(tmp_path, data)
+
+
+def test_explicit_decoder_metadata_cannot_contradict_contract(tmp_path):
+    row = scoped_pair_report('pinn_statistical')
+    row['constraint_decoder'] = 'surface_and_information'
+    with pytest.raises(ValueError, match='constraint_decoder disagrees'):
+        run_compare(tmp_path, [row])
+
+
+def test_raw_cannot_declare_a_decoder_constraint(tmp_path):
+    raw = report('raw')
+    raw['constraint_decoder'] = 'information_only'
+    with pytest.raises(ValueError, match='Raw controls must not declare'):
+        run_compare(tmp_path, [raw, scoped_pair_report('pinn_statistical')])
+
+
 @pytest.mark.parametrize('field,value,message',[
     ('constraint_path','forecast_trajectory','constraint_path'),
     ('constraint_pair','all_three','constraint_pair'),
@@ -96,13 +144,18 @@ def test_constraint_contract_cannot_change_observations_or_double_tendencies(tmp
     with pytest.raises(ValueError,match='constraint_contract'):run_compare(tmp_path,[first,second])
 
 
-def test_pairs_preserved_in_climode_benchmark_identity():
-    data=[pair_report(pair) for pair in CONSTRAINT_GROUPS]
+@pytest.mark.parametrize('decoder', [None, 'surface_and_information', 'information_only'])
+def test_pairs_preserved_in_climode_benchmark_identity(decoder):
+    data=[pair_report(pair) if decoder is None else scoped_pair_report(pair, decoder=decoder)
+          for pair in CONSTRAINT_GROUPS]
     reference=report('raw',family='climode')
     reference['config']['raw_backend']='legacy'
     result=benchmark(data,[reference])
     assert {row['constraint_pair'] for row in result['effects']} == set(CONSTRAINT_GROUPS)
     assert {row['constraint_path'] for row in result['rows']} == {'observed_reconstruction'}
+    expected_decoder = decoder or 'surface_and_information'
+    for name in ('rows', 'effects'):
+        assert {row['constraint_decoder'] for row in result[name]} == {expected_decoder}
 
 
 @pytest.mark.parametrize('field,value',[
@@ -122,7 +175,7 @@ def _runner(tmp_path, **settings):
     calls=tmp_path/'calls.jsonl'
     env={key:value for key,value in os.environ.items() if key not in (
         'MODELS','SEEDS','PAIRS','A_CHECKPOINT','TRAINING_MODE','INITIALIZATION',
-        'LATENT_LAYOUT','ANCHOR','CLIMODE_REFERENCE_DIR','INCLUDE_RAW','BATCH_SIZE')}
+        'LATENT_LAYOUT','ANCHOR','CLIMODE_REFERENCE_DIR','INCLUDE_RAW','BATCH_SIZE','CONSTRAINT_DECODER')}
     env.update(PYTHON=str(stub),CALLS=str(calls),ARCHIVE='surface archive.npz',
                INFO='physical information',RUN=str(tmp_path/'run'),**settings)
     script=Path(__file__).resolve().parents[1]/'scripts/run_pairwise_manifold_comparison.sh'

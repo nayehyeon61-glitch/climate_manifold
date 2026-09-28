@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared E/D: forecasting through E-F-D; observed constraints through E-D.
+# Shared E: forecasting through E-F-D; observed constraints default to E-D_I.
 # Include one data-to-forecast raw control per model/seed, shared across pairs.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -14,6 +14,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 [[ -z "${A_CHECKPOINT:-}" ]] || { echo 'Pairwise runner initializes fresh E/F/D; unset A_CHECKPOINT' >&2; exit 2; }
 INCLUDE_RAW="${INCLUDE_RAW:-1}"
 [[ "$INCLUDE_RAW" == 0 || "$INCLUDE_RAW" == 1 ]] || { echo 'INCLUDE_RAW must be 0 or 1' >&2; exit 2; }
+CONSTRAINT_DECODER="${CONSTRAINT_DECODER:-information_only}"
+case "$CONSTRAINT_DECODER" in
+  information_only|surface_and_information) ;;
+  *) echo 'CONSTRAINT_DECODER must be information_only or surface_and_information' >&2; exit 2;;
+esac
 PYTHON="${PYTHON:-python}"
 export PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}"
 read -r -a families <<< "${MODELS:-neural_ode climode}"
@@ -66,6 +71,7 @@ for seed in "${seeds[@]}"; do
         route=(--bridge raw --raw-backend matched --regularization none)
       else
         route=(--bridge latent --regularization full --constraint-pair "$arm"
+          --constraint-decoder "$CONSTRAINT_DECODER"
           --statistical-weight "${STATISTICAL_WEIGHT:-0.1}" --static-weight "${STATIC_WEIGHT:-0.05}")
         if [[ "$arm" == pinn_* ]]; then
           route+=(--pinn --pinn-levels "${levels[@]}" --pinn-weight "${PINN_WEIGHT:-0.1}")

@@ -1,4 +1,4 @@
-"""Pairwise manifold constraints on observed E--D reconstructions only.
+"""Pairwise manifold constraints on observed information reconstructions.
 
 The forecasting branch trains E--F--D separately. This objective never invokes
 F, consumes its predictions, or reads future targets. Its two observed frames
@@ -6,6 +6,8 @@ are origin minus six hours and origin, each encoded with co-located information.
 PINN temporal derivatives therefore describe reconstructed observations, not a
 forecast trajectory. All pairs retain a common pointwise reconstruction anchor;
 the three optional constraint families are selected exactly two at a time.
+By default only the information decoder is used. The former shared surface
+decoder reconstruction is retained behind ``surface_and_information`` mode.
 """
 from __future__ import annotations
 
@@ -17,6 +19,7 @@ from .joint_objective import JointObjectiveWeights, spatial_quantile_loss
 
 
 PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static')
+DECODER_MODES = ('information_only', 'surface_and_information')
 
 
 def _validate_weights(weights, constraint_pair):
@@ -56,16 +59,22 @@ def _observed_pair(batch, manifold):
     return states.detach(), information.detach(), dt.detach().to(states)[:, 0]
 
 
-def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair):
+def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, *,
+                                     decoder_mode='information_only'):
     """Return manifold-only losses and their weighted ``regularization`` sum.
 
-    ``reconstruction`` averages surface and dynamic-information pointwise MSE.
-    ``information_spatial_quantile`` averages the corresponding spatial-marginal
-    quantile losses; it is neither ensemble CRPS nor temporal distribution loss.
-    Both exclude static information. ``static`` compares both reconstructed
-    endpoints to origin terrain. PINN contributes physical residuals and closure
-    regularization, without its formerly duplicated observed-tendency loss.
+    In ``information_only`` mode, ``reconstruction`` and
+    ``information_spatial_quantile`` use dynamic information alone. The surface
+    decoder is not invoked and its reported losses are zero; its forecasting
+    path remains trainable. ``surface_and_information`` restores the legacy
+    equal average of surface and dynamic-information terms. Quantile losses are
+    spatial marginals, neither ensemble CRPS nor temporal distribution losses.
+    Both modes exclude static information from these terms. ``static`` compares
+    both reconstructed endpoints to origin terrain. PINN contributes physical
+    residuals and closure regularization without duplicated tendency loss.
     """
+    if decoder_mode not in DECODER_MODES:
+        raise ValueError(f'decoder_mode must be one of {DECODER_MODES}')
     _validate_weights(weights, constraint_pair)
     bridge = getattr(pipeline, 'bridge', None)
     manifold = getattr(bridge, 'manifold', None)
@@ -96,17 +105,22 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair):
     if area.shape != (cells,) or not torch.isfinite(area).all() or bool((area <= 0).any()):
         raise ValueError('Constraint losses require positive finite geographic areas')
 
-    # Neither the predictor nor an independent A dynamics/sampling network is
-    # involved. Keep E and both decoders shared with the forecasting pipeline.
+    # Neither F nor an independent A dynamics/sampling network is involved.
+    # The default auxiliary path bypasses D entirely, without freezing it for
+    # E--F--D forecasting. D_I and E still receive all active constraint losses.
     raw_pair = manifold.raw_encode(states, information)
-    reconstructed = manifold.core.manifold.decode(raw_pair)
     decoded_information = manifold.info_head(raw_pair)
-    if reconstructed.shape != states.shape or decoded_information.shape != information.shape:
-        raise ValueError('Constraint decoders must preserve observed endpoint shapes')
-    surface = reconstructed.reshape(len(states), 2, grid[0], cells)
-    surface_target = states.reshape_as(surface)
+    if decoded_information.shape != information.shape:
+        raise ValueError('Constraint information decoder must preserve observed endpoint shapes')
     decoded = decoded_information.reshape(len(states), 2, info_shape[0], cells)
     info_target = information.reshape_as(decoded)
+    surface = surface_target = None
+    if decoder_mode == 'surface_and_information':
+        reconstructed = manifold.core.manifold.decode(raw_pair)
+        if reconstructed.shape != states.shape:
+            raise ValueError('Constraint surface decoder must preserve observed endpoint shapes')
+        surface = reconstructed.reshape(len(states), 2, grid[0], cells)
+        surface_target = states.reshape_as(surface)
 
     def mse(predicted, target):
         return ((predicted - target.detach()).square() * area).sum(-1).mean()
@@ -114,18 +128,22 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair):
     zero = states.new_zeros(())
     values = {name: zero for name in (
         'physics', 'information', 'static', 'information_spatial_quantile',
-        'statistical_surface', 'statistical_information', 'pinn_total')}
-    values['reconstruction_surface'] = mse(surface, surface_target)
+        'reconstruction_surface', 'statistical_surface', 'statistical_information', 'pinn_total')}
     values['reconstruction_information'] = mse(decoded[:, :, ~static], info_target[:, :, ~static])
-    values['reconstruction'] = .5 * (values['reconstruction_surface']
-                                       + values['reconstruction_information'])
+    values['reconstruction'] = values['reconstruction_information']
+    if surface is not None:
+        values['reconstruction_surface'] = mse(surface, surface_target)
+        values['reconstruction'] = .5 * (values['reconstruction_surface']
+                                         + values['reconstruction_information'])
 
     if weights.distribution:
-        values['statistical_surface'] = spatial_quantile_loss(surface, surface_target, area)
         values['statistical_information'] = spatial_quantile_loss(
             decoded[:, :, ~static], info_target[:, :, ~static], area)
-        values['information_spatial_quantile'] = .5 * (values['statistical_surface']
-                                                        + values['statistical_information'])
+        values['information_spatial_quantile'] = values['statistical_information']
+        if surface is not None:
+            values['statistical_surface'] = spatial_quantile_loss(surface, surface_target, area)
+            values['information_spatial_quantile'] = .5 * (values['statistical_surface']
+                                                          + values['statistical_information'])
     if weights.static:
         # Endpoint 1 is the observed origin, never a future label.
         values['static'] = mse(decoded[:, :, static], info_target[:, 1:2, static])

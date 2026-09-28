@@ -23,10 +23,14 @@ def _split_args(archive, tmp_path, pair='pinn_statistical', *extra):
 
 @pytest.mark.parametrize('pair', CONSTRAINT_PAIRS)
 @pytest.mark.parametrize('family', ['neural_ode', 'climode'])
+@pytest.mark.parametrize('decoder', ['information_only', 'surface_and_information'])
 def test_split_training_joint_gradients_metadata_and_roundtrip(
-        pinn_prepared, tmp_path, monkeypatch, pair, family):
+        pinn_prepared, tmp_path, monkeypatch, pair, family, decoder):
     _, _, _, archive = pinn_prepared
     args = _split_args(archive, tmp_path, pair, '--model', family)
+    # An omitted flag is the new default; the old route must be explicitly unlocked.
+    if decoder == 'surface_and_information':
+        args.constraint_decoder = decoder
     captured = _capture(monkeypatch)
     checkpoint = train(args)
     model, initial = captured[0]
@@ -45,7 +49,9 @@ def test_split_training_joint_gradients_metadata_and_roundtrip(
     assert payload['training_contract']['constraint_path'] == 'observed_reconstruction'
     assert 'constraint_pair' not in payload['training_contract']
     contract = payload['constraint_contract']
-    assert contract['version'] == 'climate_manifold.reconstruction_constraints.v1'
+    assert contract['version'] == 'climate_manifold.reconstruction_constraints.v2'
+    assert contract['decoder'] == payload['constraint_decoder'] == decoder
+    assert contract['surface_decoder_in_constraints'] == (decoder == 'surface_and_information')
     assert contract['observed_pair'] == 'origin-6h,origin'
     assert contract['groups'] == pair.split('_')
     assert contract['pinn_tendency_supervision'] is False
@@ -61,6 +67,11 @@ def test_split_training_joint_gradients_metadata_and_roundtrip(
     assert metrics['selection']['state_mse'] == payload['best_selection_state_mse']
     assert 'information_future' not in metrics['train']
     assert metrics['train']['physics'] == metrics['train']['information'] == 0
+    if decoder == 'information_only':
+        for split in ('train', 'selection'):
+            assert metrics[split]['reconstruction_surface'] == 0
+            assert metrics[split]['statistical_surface'] == 0
+            assert metrics[split]['reconstruction'] == metrics[split]['reconstruction_information']
     if manifold.pinn is not None:
         assert metrics['train']['pinn_tendency'] == 0
         _assert_finite_gradient(manifold.pinn)
@@ -88,10 +99,46 @@ def test_split_training_joint_gradients_metadata_and_roundtrip(
         hidden.rename(sidecar)
     report = evaluate(checkpoint, archive, tmp_path/f'{pair}.evaluation.json',
                       information=sidecar, max_cases=2)
-    for key in ('constraint_pair', 'constraint_path', 'constraint_contract',
+    for key in ('constraint_pair', 'constraint_path', 'constraint_contract', 'constraint_decoder',
                 'split_objective_weights', 'forecast_parameters', 'constraint_parameters'):
         assert report[key] == payload[key]
     assert report['finite_forecast_fraction'] == 1.
+
+
+def test_information_only_training_skips_current_surface_decode(pinn_prepared, tmp_path, monkeypatch):
+    """Actual training calls D only for forecasts, including the selection pass."""
+    from climate_manifold.downstream.pipeline import ForecastPipeline
+    _, _, _, archive = pinn_prepared
+    args = _split_args(archive, tmp_path)
+    original = ForecastPipeline.forward
+    forecast_calls, surface_calls = [], []
+    hooks = []
+
+    def traced(self, *inputs, **kwargs):
+        if not hooks:
+            hooks.append(self.bridge.manifold.core.manifold.decoder.register_forward_hook(
+                lambda *unused: surface_calls.append(self.training)))
+        output = original(self, *inputs, **kwargs)
+        forecast_calls.append(self.training)
+        assert output['reconstructed_origin'] is None
+        return output
+
+    monkeypatch.setattr(ForecastPipeline, 'forward', traced)
+    try:
+        train(args)
+    finally:
+        for hook in hooks:
+            hook.remove()
+    assert True in forecast_calls and False in forecast_calls
+    # No extra D call in the auxiliary objective or for unused origin output.
+    assert surface_calls == forecast_calls
+
+
+def test_constraint_decoder_requires_a_pair(tmp_path):
+    args = _args(tmp_path/'absent.npz', tmp_path/'output.pt',
+                 '--constraint-decoder', 'information_only')
+    with pytest.raises(ValueError, match='requires --constraint-pair'):
+        prepare_constraint_pair(args)
 
 
 @pytest.mark.parametrize('extra,match', [

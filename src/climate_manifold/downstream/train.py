@@ -18,6 +18,7 @@ from ..physical_information import digest, information_digest
 from ..temporal_supervision import TemporalWindowDataset, TemporalObjective
 from .pipeline import ForecastPipeline, PredictorConfig, SEQUENCE_IMPLEMENTATIONS
 from .protocol import validate_experiment
+from .constraint_protocol import CONSTRAINT_DECODERS, make_constraint_contract, constraint_decoder_from_payload
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
@@ -129,6 +130,9 @@ def load_predictor(path,device='cpu'):
     p=torch.load(path,map_location='cpu',weights_only=False)
     if p.get('format') not in (FORMAT,LEGACY_FORMAT,'climate_manifold.downstream.v2'):
         raise ValueError('Not a standalone forecast checkpoint')
+    # Historical split checkpoints retain their original surface + information
+    # objective; absence of the new field must not relabel an old experiment.
+    constraint_decoder_from_payload(p)
     config=PredictorConfig(**p['config'])
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
         raise ValueError('Frozen checkpoints require a sealed A')
@@ -165,9 +169,15 @@ def prepare_constraint_pair(args):
     """Validate the opt-in split objective before any representation is built."""
     pair=getattr(args,'constraint_pair',None)
     if pair is None:
+        if getattr(args,'constraint_decoder',None) is not None:
+            raise ValueError('--constraint-decoder requires --constraint-pair')
         return
     if pair not in CONSTRAINT_PAIRS:
         raise ValueError('Unknown --constraint-pair')
+    decoder=getattr(args,'constraint_decoder',None) or 'information_only'
+    if decoder not in CONSTRAINT_DECODERS:
+        raise ValueError('Unknown --constraint-decoder')
+    args.constraint_decoder=decoder
     if (args.training_mode!='joint' or args.bridge!='latent'
             or args.representation!='climate_manifold' or args.anchor!='none'
             or args.regularization!='full'):
@@ -362,6 +372,8 @@ def train(args):
     weights=objective_weights(args,a)
     # All variants share train / downstream-selection calibration / untouched validation,test.
     split_constraints=args.constraint_pair is not None
+    constraint_decoder=args.constraint_decoder if split_constraints else None
+    information_only=constraint_decoder=='information_only'
     target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
     loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info,
         reconstruction_constraints=split_constraints),batch_size=args.batch_size,
@@ -382,12 +394,14 @@ def train(args):
             with torch.set_grad_enabled(training and optimizer is not None):
                 for batch in loader:
                     batch={k:v.to(args.device) for k,v in batch.items()}
-                    prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads)
+                    prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads,
+                                     reconstruct_origin=not information_only)
                     losses=forecast_loss(prediction,batch,temporal,leads,args.tendency_weight)
                     if config.training_mode == 'joint' and config.bridge != 'raw':
                         if split_constraints:
                             from .reconstruction_objective import reconstruction_constraint_losses
-                            auxiliary=reconstruction_constraint_losses(model,batch,weights,args.constraint_pair)
+                            auxiliary=reconstruction_constraint_losses(model,batch,weights,args.constraint_pair,
+                                                                       decoder_mode=constraint_decoder)
                         else:
                             from .joint_objective import joint_losses
                             auxiliary=joint_losses(model,prediction,batch,weights,leads)
@@ -414,10 +428,8 @@ def train(args):
     metadata={k:v for k,v in p.items() if k!='model'}
     constraint_path=('observed_reconstruction' if split_constraints else
                      'forecast_trajectory' if config.training_mode=='joint' and config.bridge=='latent' else None)
-    constraint_contract=({'version':'climate_manifold.reconstruction_constraints.v1',
-        'pair':args.constraint_pair,'groups':args.constraint_pair.split('_'),
-        'observed_pair':'origin-6h,origin','reconstruction':'common surface and dynamic-information pointwise reconstruction',
-        'pinn_tendency_supervision':False} if split_constraints else None)
+    constraint_contract=(make_constraint_contract(args.constraint_pair,args.constraint_pair.split('_'),
+                         constraint_decoder) if split_constraints else None)
     auxiliary_modules=() if model.bridge.manifold is None else (
         model.bridge.manifold.info_head,model.bridge.manifold.pinn)
     auxiliary_ids={id(parameter) for module in auxiliary_modules if module is not None
@@ -470,6 +482,7 @@ def train(args):
         'regularization':('none' if config.bridge=='raw' else args.regularization) if config.training_mode=='joint' else 'legacy',
         'objective_weights':asdict(weights),
         'constraint_pair':args.constraint_pair,'constraint_path':constraint_path,'constraint_contract':constraint_contract,
+        'constraint_decoder':constraint_decoder,
         'split_objective_weights':({'reconstruction':weights.reconstruction,'pinn':weights.pinn,
             'statistical':weights.distribution,'static':weights.static} if split_constraints else None),
         'initialization':'pretrained' if config.training_mode=='frozen' else args.initialization,
@@ -477,8 +490,10 @@ def train(args):
         'latent_coordinates':('not_applicable' if config.bridge=='raw' else
             'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal'),
         'objective_semantics':({'forecast':'E -> predictor -> D; future field MSE or Gaussian NLL plus physical-time tendency',
-            'reconstruction':'shared E -> D on co-located observed origin-6h,origin; predictor bypassed',
-            'statistical':'selected surface and dynamic-information spatial marginal quantiles on observed reconstructions; not ensemble CRPS',
+            'reconstruction':('shared E -> information decoder only on observed origin-6h,origin; surface decoder and predictor bypassed'
+                if information_only else 'shared E -> surface and information decoders on observed origin-6h,origin; predictor bypassed'),
+            'statistical':('selected dynamic-information spatial marginal quantiles only; surface and sea-level-pressure W2 disabled; not ensemble CRPS'
+                if information_only else 'selected surface and dynamic-information spatial marginal quantiles on observed reconstructions; not ensemble CRPS'),
             'static':'selected area-weighted static information L2 on observed reconstructions',
             'pinn':'selected observed reconstruction pair residuals and closure penalty; no tendency supervision or forecast-path PINN',
             'information':'legacy pointwise dynamic-information and surface-physics losses disabled'} if split_constraints else
@@ -511,7 +526,9 @@ def parser():
     p.add_argument('--regularization',choices=['full','none'],default='full',
         help='none keeps common forecast/tendency/reconstruction losses for matched joint controls')
     p.add_argument('--constraint-pair',choices=CONSTRAINT_PAIRS,default=None,
-        help='Opt-in paired constraints on an observed E -> D path, separate from forecasting')
+        help='Opt-in paired constraints on an observed reconstruction path, separate from forecasting')
+    p.add_argument('--constraint-decoder',choices=CONSTRAINT_DECODERS,default=None,
+        help='With --constraint-pair: information_only (default) locks surface reconstruction; surface_and_information restores both')
     p.add_argument('--statistical-weight',type=float,default=.1,
         help='Spatial marginal quantile weight for split constraint pairs; legacy route uses --distribution-weight')
     for name,value in dict(manifold_dim=64,manifold_hidden_dim=512,context_dim=64,history_steps=6,history_stride=4).items():

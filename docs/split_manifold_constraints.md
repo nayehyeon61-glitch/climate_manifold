@@ -1,7 +1,7 @@
 # 예측과 표현 제약을 분리한 쌍별 실험
 
-이 브랜치의 새 실험은 하나의 encoder와 decoder를 공유하는 두 경로를 함께 학습합니다.
-예측은 `E → F → D`, 표현 제약은 **관측 자료를 직접 복원하는 `E → D / D_I`**에서
+이 브랜치의 새 실험은 하나의 encoder를 공유하는 두 경로를 함께 학습합니다.
+예측은 `E → F → D`, 표현 제약은 **관측 정보를 직접 복원하는 `E → D_I`**에서
 계산합니다. 표현 제약 계산은 예측기 `F`를 호출하지 않습니다.
 
 ```mermaid
@@ -9,18 +9,22 @@ flowchart TD
     H["관측 history + origin 정보"] --> E["공유 encoder E"]
     O["관측 t−6h, t + 각 시점의 정보"] --> E
     E -->|"예측 경로"| F["선택한 공간 예측기 F"]
-    F --> D["공유 기상장 decoder D"]
-    E -->|"관측 복원 경로"| D
-    E --> I["정보 decoder D_I"]
+    F --> D["기상장 decoder D"]
+    E -->|"관측 정보 복원 경로"| I["정보 decoder D_I"]
     D --> P["미래 출력: 예측 손실"]
-    D --> R["관측 복원: 기본 복원 + 선택한 두 제약"]
-    I --> R
+    I --> R["동적 정보 복원 + 선택한 두 제약"]
 ```
 
-`D`는 동일한 가중치로 관측 복원과 미래 기상장 출력을 담당합니다. `D_I`는 상층 변수와
-지형 정보를 복원하는 보조 decoder입니다. 제약 경로를 위해 예측기나 encoder를 별도로 복제하지 않습니다.
+기본 `--constraint-decoder information_only`에서는 관측 복원용 D 호출과 해당 손실을
+끄고, 정보 decoder `D_I`만 제약 경로에 사용합니다. **D 자체를 동결하는 것은 아닙니다.**
+D는 미래 기상장 예측 손실로 계속 학습합니다. `D_I`는 상층 변수와 지형 정보를 복원하는
+보조 decoder입니다. 제약 경로를 위해 예측기나 encoder를 별도로 복제하지 않습니다.
 PINN closure도 관측 복원 latent에서만 계산합니다. 이 학습의 추론 경로는 그대로
 `관측 history → E → F → D → 미래 기상장`입니다.
+
+기존 관측 기상장 복원 경로는 삭제하지 않습니다.
+`--constraint-decoder surface_and_information`으로 D와 D_I를 함께 사용하는 이전 제약을
+복원할 수 있습니다. 이 옵션은 `--constraint-pair`를 사용하는 latent 공동 학습에만 적용합니다.
 
 ## 정확히 두 개의 추가 제약
 
@@ -33,23 +37,31 @@ PINN closure도 관측 복원 latent에서만 계산합니다. 이 학습의 추
 - **PINN:** 복원한 두 관측 시점의 기압면 운동량·온도·연속·층 두께 잔차와 closure 크기 규제.
   PDE 안의 시간차분은 유지하지만 기존의 별도 관측 tendency 감독과 지표 tendency 보조항은
   포함하지 않습니다. `HybridPINN.forward(include_tendency=False)`로 명시합니다.
-- **Statistical:** 복원한 동적 지표 기상장 및 동적 상층 정보장의 면적 가중 공간 분위수 매칭.
+- **Statistical:** 기본값에서는 D_I가 복원한 동적 정보장의 면적 가중 공간 분위수 W₂² 매칭.
   각 변수와 시점을 따로 비교합니다. 고정 지형을 포함하지 않으며, 앙상블 CRPS가 아닙니다.
+  D가 복원한 기상장의 W₂²는 끄므로 **해면기압 `msl`의 분포 손실도 꺼집니다.**
+  현재 D_I에 `msl` 출력은 없으며, 기존 정보 변수만 복원합니다. 이전
+  `surface_and_information` 모드에서는 기상장과 동적 정보장의 W₂²를 함께 사용합니다.
 - **Static:** 정보 decoder가 복원한 고정 변수의 면적 가중 L². 두 시점 모두 origin의 고정
   정보를 목표로 사용합니다. 현재 자료 계약에서는 지형 높이·경사가 해당합니다.
   위경도는 격자 좌표이며 별도의 학습 대상 변수로 추가되지 않습니다.
 
-동적 자료의 기본 복원오차는 세 조합에 공통으로 **한 번** 유지합니다.
+동적 정보의 기본 복원오차는 세 조합에 공통으로 **한 번** 유지합니다.
 
 \[
-L_{\rm rec}=\tfrac12\bigl(L_{\rm surface\ reconstruction}
-                         +L_{\rm dynamic\ information\ reconstruction}\bigr).
+L_{\rm rec}=L_{\rm dynamic\ information\ reconstruction},\qquad
+L_{\rm statistical}=L_{\rm dynamic\ information\ W_2^2}.
 \]
 
 각 항은 train 자료로 정규화한 변수별 면적 가중 MSE를 평균합니다. Static 변수는 여기서
 제외하여 Static 제약의 on/off 의미를 유지합니다. 이 공통 오차는 PINN+Static에서 상층
 decoder가 물리 잔차만 작은 상수장을 출력하는 퇴화해를 견제합니다. Statistical 그룹은
 이 점별 복원과 구별되는 **분포 매칭**입니다.
+
+기본값에서는 제거한 기상장 항을 0으로 두고 평균하는 대신 정보 손실 자체를 사용합니다.
+이전 `surface_and_information` 모드는 reconstruction과 Statistical 각각에
+`0.5 × (기상장 손실 + 동적 정보 손실)`을 그대로 사용합니다. 따라서 두 모드는 외부
+가중치가 같아도 정보 항의 실효 가중치가 다릅니다. 실험 비교 시 decoder 모드와 가중치를 함께 기록합니다.
 
 \[
 L = L_{\rm forecast}+\lambda_\Delta L_{\rm future\ tendency}
@@ -73,8 +85,9 @@ MSE, 미래 분포·static·PINN은 이 경로에서 추가로 부과하지 않�
 전달됩니다. 미래 상층 정보는 제약 경로에서 읽지 않습니다. train/calibration/validation/test
 분할과 train-only 정규화는 기존 자료 계약을 유지합니다.
 
-제약 손실만 역전파하면 `F`에는 gradient가 없고, 공유 `E`, `D`, `D_I` 및 활성 closure에
-전달됩니다. 미래 예측 손실은 `E`, `F`, `D`를 함께 갱신합니다. 공유 encoder/decoder를 통해
+기본 정보 전용 모드에서 제약 손실만 역전파하면 `F`와 기상장 `D`에는 gradient가 없고,
+공유 `E`, `D_I` 및 활성 closure에 전달됩니다. 미래 예측 손실은 `E`, `F`, `D`를 함께
+갱신합니다. 이전 두 decoder 모드에서는 제약 손실도 D를 갱신합니다. 공유 encoder를 통해
 제약이 예측에 간접 영향을 주므로 두 학습 목적이 완전히 독립이라는 의미는 아닙니다.
 
 ## 전체 세 조합 실행
@@ -105,6 +118,7 @@ export INFO=/absolute/path/to/information_pinn
 export RUN=runs/split_pairs_001
 export DEVICE=cuda MODELS="neural_ode climode" SEEDS=7
 export INCLUDE_RAW=1 PAIRS="pinn_statistical pinn_static statistical_static"
+export CONSTRAINT_DECODER=information_only
 export EPOCHS=20 BATCH_SIZE=16
 bash scripts/run_pairwise_manifold_comparison.sh
 ```
@@ -142,6 +156,7 @@ export RUN="runs/pinn_statistical_five_models_$(date +%Y%m%d_%H%M%S)"
 
 export MODELS="mlp neural_ode climode convlstm simvp"
 export PAIRS="pinn_statistical" INCLUDE_RAW=1 SEEDS=7
+export CONSTRAINT_DECODER=information_only
 export TRAINING_MODE=joint INITIALIZATION=fresh LATENT_LAYOUT=spatial ANCHOR=none
 unset A_CHECKPOINT CLIMODE_REFERENCE_DIR
 
@@ -184,6 +199,7 @@ python -m climate_manifold.downstream.train \
   --training-mode joint --initialization fresh \
   --bridge latent --model neural_ode --latent-layout spatial \
   --constraint-pair pinn_statistical \
+  --constraint-decoder information_only \
   --reconstruction-weight 0.1 --statistical-weight 0.1 --pinn-weight 0.1 \
   --epochs 20 --batch-size 16 --device cuda \
   --output runs/split_single/model.pt
@@ -193,6 +209,20 @@ python -m climate_manifold.downstream.train \
 `run_model_comparison.sh`는 예측 궤적에 보조 제약을 적용하던 기존 실험을 재현합니다.
 새 쌍별 runner에는 기존 `INFORMATION_WEIGHT`, `PHYSICS_WEIGHT`, `DISTRIBUTION_WEIGHT`
 설정이 필요하지 않습니다. 실제 활성 가중치와 경로는 checkpoint와 평가 보고서에 기록됩니다.
+
+새 명령에서 `--constraint-decoder`를 생략하면 `information_only`가 적용됩니다. 기존
+두 decoder 제약을 재현하려면 새 RUN에서 다음처럼 실행합니다. Raw 비교군에는 이 옵션을
+전달하지 않으며, 직접 예측 경로는 그대로 유지됩니다.
+
+```bash
+export CONSTRAINT_DECODER=surface_and_information
+export RUN="runs/split_pairs_both_decoders_$(date +%Y%m%d_%H%M%S)"
+bash scripts/run_pairwise_manifold_comparison.sh
+```
+
+다시 정보 decoder만 사용하려면 `CONSTRAINT_DECODER=information_only`로 설정합니다.
+기존 checkpoint의 손실 의미를 새 기본값으로 바꾸지는 않습니다. 이전 v1 제약 메타데이터는
+두 decoder 모드로 해석하며, 새 모드와 이전 모드의 보고서를 같은 쌍별 비교에 섞지 않습니다.
 
 ## 결과 해석
 
@@ -214,7 +244,14 @@ Statistical+Static은 Static을 공유하면서 다른 제약을 교체하는 �
 
 ## 구현 검증
 
-전체 테스트 410개를 통과했습니다. 제약만 역전파했을 때 예측기 F의 gradient가 없는지,
+정보 decoder 전용 모드 추가 후 전체 테스트 **460개**를 통과했습니다. 기본 모드에서
+관측 제약과 학습 루프가 기상장 D를 호출하지 않는지, 예측 손실은 E/F/D를 계속 갱신하는지,
+정보 손실의 가중치·기존 모드 복구·checkpoint 재로딩·Raw 비교군이 올바른지 확인했습니다.
+평가의 no-grad 현재장 복원 진단은 유지하며, 학습 손실에는 포함하지 않습니다.
+새 decoder 범위는 checkpoint와 평가 기록에 저장하고, 서로 다른 범위를 같은 쌍별 실험으로
+집계하지 않습니다. 실제 기상자료에서의 예측력·과적합 감소는 아직 검증하지 않았습니다.
+
+정보 전용 모드 추가 전 전체 테스트 410개를 통과했습니다. 제약만 역전파했을 때 예측기 F의 gradient가 없는지,
 미래 information을 바꾸어도 관측 제약이 변하지 않는지, 세 조합의 활성 항과 checkpoint
 재로딩이 올바른지를 확인했습니다. 추가로 합성 자료에서 Neural ODE·ClimODE × (Raw + 세 조합)을
 batch 16으로 각각 1 epoch 학습하고 120시간 예측·평가·집계를 완료했습니다. 8개 실험 모두
@@ -234,7 +271,7 @@ hidden width 8/latent channels 2의 CPU 실행입니다. 실제 ERA5 예측력�
 | 역할 | 코드 |
 |---|---|
 | 관측 쌍 구성·학습 분기·메타데이터 | `src/climate_manifold/downstream/train.py` |
-| E→D 제약 계산·쌍별 활성화 | `src/climate_manifold/downstream/reconstruction_objective.py` |
+| E→D_I 제약 계산·이전 D 경로 잠금·쌍별 활성화 | `src/climate_manifold/downstream/reconstruction_objective.py` |
 | 물리 잔차와 선택적 tendency 감독 | `src/climate_manifold/hybrid_pinn.py` |
 | 예측 E→F→D | `src/climate_manifold/downstream/pipeline.py` |
 | 전체 쌍별 실행 | `scripts/run_pairwise_manifold_comparison.sh` |

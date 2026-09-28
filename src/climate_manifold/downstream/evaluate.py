@@ -10,6 +10,7 @@ from ..physical_information import digest
 from .train import load_predictor,windows
 from .metrics import ForecastMetrics,LatentDiagnostics
 from .protocol import experiment_contract
+from .constraint_protocol import constraint_decoder_from_payload
 
 
 def evaluate(checkpoint,archive,output,*,information=None,split='validation',max_cases=0,
@@ -96,6 +97,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'constraint_pair':p.get('constraint_pair'),
             'constraint_path':p.get('constraint_path','forecast_trajectory'),
             'constraint_contract':p.get('constraint_contract'),
+            'constraint_decoder':constraint_decoder_from_payload(p),
             'split_objective_weights':p.get('split_objective_weights'),
             'forecast_parameters':p.get('forecast_parameters'),
             'constraint_parameters':p.get('constraint_parameters'),

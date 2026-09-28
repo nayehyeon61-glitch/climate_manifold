@@ -9,6 +9,7 @@ import numpy as np
 from ..train import write_json
 from .protocol import experiment_contract,validate_experiment
 from .climode_benchmark import benchmark,write_table
+from .constraint_protocol import constraint_decoder_from_payload, normalize_constraint_contract
 
 
 CONSTRAINT_GROUPS = {
@@ -56,6 +57,7 @@ def _validate_constraint_pairs(group):
                 or row.get('initialization') != 'fresh' or row.get('regularization') != 'none'):
             raise ValueError('Unfair comparison: mixed constraint_path experiments require fresh joint matched raw controls')
         if (row.get('constraint_path') is not None or row.get('constraint_contract') is not None
+                or row.get('constraint_decoder') is not None
                 or row.get('split_objective_weights') is not None):
             raise ValueError('Raw controls must not declare a constraint_path or constraint objective')
         weights = row.get('objective_weights')
@@ -82,14 +84,15 @@ def _validate_constraint_pairs(group):
             raise ValueError('Split experiments require constraint_path=observed_reconstruction')
         if row['config'].get('bridge') != 'latent' or row['config'].get('training_mode') != 'joint':
             raise ValueError('Split experiments require jointly trained latent forecasts')
-        contract = row.get('constraint_contract')
-        if (not isinstance(contract, dict)
-                or contract.get('version') != 'climate_manifold.reconstruction_constraints.v1'
-                or set(contract.get('groups', [])) != CONSTRAINT_GROUPS[pair]
+        decoder = constraint_decoder_from_payload(row)
+        contract = normalize_constraint_contract(row.get('constraint_contract'))
+        if (set(contract.get('groups', [])) != CONSTRAINT_GROUPS[pair]
                 or contract.get('observed_pair') != 'origin-6h,origin'
                 or contract.get('pinn_tendency_supervision') is not False):
             raise ValueError('Invalid reconstruction constraint_contract')
         common = {key:value for key,value in contract.items() if key not in ('groups','pair')}
+        if common_contract is not None and decoder != common_contract['decoder']:
+            raise ValueError('Unfair comparison: mismatched constraint_decoder scope')
         if common_contract is not None and common != common_contract:
             raise ValueError('Unfair comparison: mismatched constraint_contract')
         common_contract = common
@@ -313,6 +316,7 @@ def compare(reports,output,climode_reference_reports=None):
             raw_backend=cfg.get('raw_backend','legacy') if cfg['bridge']=='raw' else None,
             objective_weights=report.get('objective_weights'),
             constraint_pair=report.get('constraint_pair'),constraint_path=report.get('constraint_path'),
+            constraint_decoder=constraint_decoder_from_payload(report),
             constraint_contract=report.get('constraint_contract'),
             pinn_config=report.get('pinn_config'),
             split_objective_weights=report.get('split_objective_weights'),
