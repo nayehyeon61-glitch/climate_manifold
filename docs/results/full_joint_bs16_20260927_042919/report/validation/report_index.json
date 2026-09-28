@@ -1,0 +1,67 @@
+{
+  "run": "runs/full_joint_bs16_20260927_042919",
+  "split": "validation",
+  "finished_runs": [
+    "climode-climate_manifold-seed19",
+    "climode-climate_manifold-seed43",
+    "climode-climate_manifold-seed7",
+    "climode-forecast_only-seed19",
+    "climode-forecast_only-seed43",
+    "climode-forecast_only-seed7",
+    "climode-raw-seed19",
+    "climode-raw-seed43",
+    "climode-raw-seed7",
+    "neural_ode-climate_manifold-seed19",
+    "neural_ode-climate_manifold-seed43",
+    "neural_ode-climate_manifold-seed7",
+    "neural_ode-forecast_only-seed19",
+    "neural_ode-forecast_only-seed43",
+    "neural_ode-forecast_only-seed7",
+    "neural_ode-raw-seed19",
+    "neural_ode-raw-seed43",
+    "neural_ode-raw-seed7"
+  ],
+  "groups": [
+    [
+      "climode",
+      "raw"
+    ],
+    [
+      "climode",
+      "forecast_only"
+    ],
+    [
+      "climode",
+      "climate_manifold"
+    ],
+    [
+      "neural_ode",
+      "raw"
+    ],
+    [
+      "neural_ode",
+      "forecast_only"
+    ],
+    [
+      "neural_ode",
+      "climate_manifold"
+    ]
+  ],
+  "sweep_complete": true,
+  "climode_crosscheck_passed": true,
+  "files": [
+    "aggregate_scalars.png",
+    "climode_by_lead.csv",
+    "climode_crosscheck.json",
+    "climode_lead_rmse_acc.png",
+    "forecast_msl.gif",
+    "forecast_t2m.gif",
+    "learning_curves.png",
+    "maps_msl.png",
+    "maps_t2m.png",
+    "maps_u10.png",
+    "maps_v10.png",
+    "summary_by_group.csv",
+    "summary_by_run.csv"
+  ]
+}

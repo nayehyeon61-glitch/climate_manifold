@@ -1,0 +1,41 @@
+2026-09-27T07:50:04Z waiting for sweep runner 12868
+2026-09-28T11:30:11Z sweep finished: 18 validation reports
+2026-09-28T11:30:11Z test: runs/full_joint_bs16_20260927_042919/climode-climate_manifold-seed19
+{"normalized_rmse": 0.6560005495569559, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1085378723031876}
+2026-09-28T11:37:34Z test: runs/full_joint_bs16_20260927_042919/climode-climate_manifold-seed43
+{"normalized_rmse": 0.6537621376324775, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.0972336937222127}
+2026-09-28T11:45:11Z test: runs/full_joint_bs16_20260927_042919/climode-climate_manifold-seed7
+{"normalized_rmse": 0.6545050585832062, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1017185963798846}
+2026-09-28T11:52:42Z test: runs/full_joint_bs16_20260927_042919/climode-forecast_only-seed19
+{"normalized_rmse": 0.6568406681215825, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.088428342340846}
+2026-09-28T12:00:22Z test: runs/full_joint_bs16_20260927_042919/climode-forecast_only-seed43
+{"normalized_rmse": 0.655213631382518, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.091840044506639}
+2026-09-28T12:08:23Z test: runs/full_joint_bs16_20260927_042919/climode-forecast_only-seed7
+{"normalized_rmse": 0.6530904259740918, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.0848421395653522}
+2026-09-28T12:16:37Z test: runs/full_joint_bs16_20260927_042919/climode-raw-seed19
+{"normalized_rmse": 0.7202548188133258, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.3213370314098256}
+2026-09-28T12:24:35Z test: runs/full_joint_bs16_20260927_042919/climode-raw-seed43
+{"normalized_rmse": 0.7223996598597904, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.3188539131323957}
+2026-09-28T12:32:36Z test: runs/full_joint_bs16_20260927_042919/climode-raw-seed7
+{"normalized_rmse": 0.7213677240490163, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.3051622763180784}
+2026-09-28T12:40:42Z test: runs/full_joint_bs16_20260927_042919/neural_ode-climate_manifold-seed19
+{"normalized_rmse": 0.665541778881679, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.10547345086389}
+2026-09-28T12:42:34Z test: runs/full_joint_bs16_20260927_042919/neural_ode-climate_manifold-seed43
+{"normalized_rmse": 0.6620792488665399, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.102916478216379}
+2026-09-28T12:44:22Z test: runs/full_joint_bs16_20260927_042919/neural_ode-climate_manifold-seed7
+{"normalized_rmse": 0.6662131438172617, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.076497268211891}
+2026-09-28T12:46:03Z test: runs/full_joint_bs16_20260927_042919/neural_ode-forecast_only-seed19
+{"normalized_rmse": 0.6656761162696805, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.080902126477744}
+2026-09-28T12:48:00Z test: runs/full_joint_bs16_20260927_042919/neural_ode-forecast_only-seed43
+{"normalized_rmse": 0.663616140045841, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1272639296586275}
+2026-09-28T12:49:37Z test: runs/full_joint_bs16_20260927_042919/neural_ode-forecast_only-seed7
+{"normalized_rmse": 0.665805969932936, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.0650021023756877}
+2026-09-28T12:51:13Z test: runs/full_joint_bs16_20260927_042919/neural_ode-raw-seed19
+{"normalized_rmse": 0.6333469157929027, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 1.9691447926992915}
+2026-09-28T12:52:42Z test: runs/full_joint_bs16_20260927_042919/neural_ode-raw-seed43
+{"normalized_rmse": 0.6292839554711429, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 1.957318130970275}
+2026-09-28T12:54:35Z test: runs/full_joint_bs16_20260927_042919/neural_ode-raw-seed7
+{"normalized_rmse": 0.627419606875211, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 1.9612529403867518}
+{"split": "validation", "runs": 18, "groups": 6, "crosscheck_passed": true, "output": "runs/full_joint_bs16_20260927_042919/report/validation"}
+{"split": "test", "runs": 18, "groups": 6, "crosscheck_passed": true, "output": "runs/full_joint_bs16_20260927_042919/report/test"}
+2026-09-28T12:57:04Z POST_SWEEP_DONE

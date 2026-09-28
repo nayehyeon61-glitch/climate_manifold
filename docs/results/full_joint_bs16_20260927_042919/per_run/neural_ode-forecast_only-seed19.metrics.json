@@ -1,0 +1,582 @@
+[
+  {
+    "epoch": 1,
+    "train": {
+      "loss": 0.6352668645333144,
+      "state_mse": 0.5178542429564256,
+      "tendency_mse": 0.9866866711694156,
+      "fit": 0.5178542429564256,
+      "reconstruction": 0.18743955271434515,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.018743955586097476
+    },
+    "selection": {
+      "loss": 0.5883501479068409,
+      "state_mse": 0.48381588645598417,
+      "tendency_mse": 0.9357174338895179,
+      "fit": 0.48381588645598417,
+      "reconstruction": 0.10962517476586588,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.010962517635499224
+    }
+  },
+  {
+    "epoch": 2,
+    "train": {
+      "loss": 0.48076882260646,
+      "state_mse": 0.3815640474850061,
+      "tendency_mse": 0.8950924589678574,
+      "fit": 0.3815640474850061,
+      "reconstruction": 0.09695526725269163,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.009695526915588195
+    },
+    "selection": {
+      "loss": 0.5757135411235895,
+      "state_mse": 0.47759610467436503,
+      "tendency_mse": 0.8909613533962201,
+      "fit": 0.47759610467436503,
+      "reconstruction": 0.09021301846626333,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.009021302042697351
+    }
+  },
+  {
+    "epoch": 3,
+    "train": {
+      "loss": 0.40699630200629344,
+      "state_mse": 0.3211084350846257,
+      "tendency_mse": 0.7737444743728139,
+      "fit": 0.3211084350846257,
+      "reconstruction": 0.0851341746484761,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.00851341764133263
+    },
+    "selection": {
+      "loss": 0.5134253117571624,
+      "state_mse": 0.44108486056441243,
+      "tendency_mse": 0.6407481649169232,
+      "fit": 0.44108486056441243,
+      "reconstruction": 0.08265633220393583,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.008265633388137981
+    }
+  },
+  {
+    "epoch": 4,
+    "train": {
+      "loss": 0.3253495087429498,
+      "state_mse": 0.2613459261581075,
+      "tendency_mse": 0.5621009819498257,
+      "fit": 0.2613459261581075,
+      "reconstruction": 0.07793484165790966,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.007793484314583634
+    },
+    "selection": {
+      "loss": 0.5050800916054421,
+      "state_mse": 0.4361451479638526,
+      "tendency_mse": 0.6123015907617587,
+      "fit": 0.4361451479638526,
+      "reconstruction": 0.07704783044814534,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.007704783155846617
+    }
+  },
+  {
+    "epoch": 5,
+    "train": {
+      "loss": 0.2992875359864872,
+      "state_mse": 0.2396359375924923,
+      "tendency_mse": 0.5234935706472418,
+      "fit": 0.2396359375924923,
+      "reconstruction": 0.07302242015359918,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.007302242109424714
+    },
+    "selection": {
+      "loss": 0.5025529516072187,
+      "state_mse": 0.4347722511177323,
+      "tendency_mse": 0.6050698962848299,
+      "fit": 0.4347722511177323,
+      "reconstruction": 0.07273709342531125,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.00727370943796732
+    }
+  },
+  {
+    "epoch": 6,
+    "train": {
+      "loss": 0.283811681398787,
+      "state_mse": 0.22635149274071664,
+      "tendency_mse": 0.5050858689018785,
+      "fit": 0.22635149274071664,
+      "reconstruction": 0.06951601864412446,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006951601963172373
+    },
+    "selection": {
+      "loss": 0.5059829548998481,
+      "state_mse": 0.43844569635852493,
+      "tendency_mse": 0.6062354491583476,
+      "fit": 0.43844569635852493,
+      "reconstruction": 0.0691371417039922,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006913714258391924
+    }
+  },
+  {
+    "epoch": 7,
+    "train": {
+      "loss": 0.2741750873920447,
+      "state_mse": 0.21797904838387427,
+      "tendency_mse": 0.4950430026301416,
+      "fit": 0.21797904838387427,
+      "reconstruction": 0.06691738924203772,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006691739014457323
+    },
+    "selection": {
+      "loss": 0.5114632792466034,
+      "state_mse": 0.44373830622655797,
+      "tendency_mse": 0.6102817022645431,
+      "fit": 0.44373830622655797,
+      "reconstruction": 0.06696803648056698,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006696803740302825
+    }
+  },
+  {
+    "epoch": 8,
+    "train": {
+      "loss": 0.265746402538077,
+      "state_mse": 0.21080639172648677,
+      "tendency_mse": 0.4845075203612622,
+      "fit": 0.21080639172648677,
+      "reconstruction": 0.06489258990904846,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.0064892590836965235
+    },
+    "selection": {
+      "loss": 0.5051598141222124,
+      "state_mse": 0.4383998664549106,
+      "tendency_mse": 0.6026571042908966,
+      "fit": 0.4383998664549106,
+      "reconstruction": 0.06494237207374874,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006494237297139837
+    }
+  },
+  {
+    "epoch": 9,
+    "train": {
+      "loss": 0.2584794807262819,
+      "state_mse": 0.2046364106273568,
+      "tendency_mse": 0.4754476133356107,
+      "fit": 0.2046364106273568,
+      "reconstruction": 0.06298309007564679,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006298309099375164
+    },
+    "selection": {
+      "loss": 0.5084681811406051,
+      "state_mse": 0.4416790577653019,
+      "tendency_mse": 0.6046247912368206,
+      "fit": 0.4416790577653019,
+      "reconstruction": 0.06326646057199456,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006326646150745241
+    }
+  },
+  {
+    "epoch": 10,
+    "train": {
+      "loss": 0.2537803378347007,
+      "state_mse": 0.20056491684514022,
+      "tendency_mse": 0.4704972397907433,
+      "fit": 0.20056491684514022,
+      "reconstruction": 0.061656962568649894,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006165696348521403
+    },
+    "selection": {
+      "loss": 0.5089062240401261,
+      "state_mse": 0.4421922758179092,
+      "tendency_mse": 0.604687961139189,
+      "fit": 0.4421922758179092,
+      "reconstruction": 0.062451524001301335,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.0062451525055205225
+    }
+  },
+  {
+    "epoch": 11,
+    "train": {
+      "loss": 0.24902920167654766,
+      "state_mse": 0.1965569065831047,
+      "tendency_mse": 0.46435657001652303,
+      "fit": 0.1965569065831047,
+      "reconstruction": 0.060366369921407544,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006036637087657068
+    },
+    "selection": {
+      "loss": 0.5132966521823743,
+      "state_mse": 0.4451662174130938,
+      "tendency_mse": 0.617657388235855,
+      "fit": 0.4451662174130938,
+      "reconstruction": 0.06364696549444852,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.006364696636846802
+    }
+  },
+  {
+    "epoch": 12,
+    "train": {
+      "loss": 0.245950514881259,
+      "state_mse": 0.1939002497680404,
+      "tendency_mse": 0.4610370335497958,
+      "fit": 0.1939002497680404,
+      "reconstruction": 0.05946560492516083,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005946560584586057
+    },
+    "selection": {
+      "loss": 0.5290245630988385,
+      "state_mse": 0.45736423305885926,
+      "tendency_mse": 0.6568904716439977,
+      "fit": 0.45736423305885926,
+      "reconstruction": 0.05971282825010979,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005971282923341865
+    }
+  },
+  {
+    "epoch": 13,
+    "train": {
+      "loss": 0.24175230610822146,
+      "state_mse": 0.19035278591815938,
+      "tendency_mse": 0.4556658593555819,
+      "fit": 0.19035278591815938,
+      "reconstruction": 0.058329330152488555,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.0058329331012694895
+    },
+    "selection": {
+      "loss": 0.5182054813347504,
+      "state_mse": 0.44908779094871776,
+      "tendency_mse": 0.6316216350017636,
+      "fit": 0.44908779094871776,
+      "reconstruction": 0.059555266768477506,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005955526765194907
+    }
+  },
+  {
+    "epoch": 14,
+    "train": {
+      "loss": 0.23871865409013235,
+      "state_mse": 0.18784283202889177,
+      "tendency_mse": 0.4511981160110321,
+      "fit": 0.18784283202889177,
+      "reconstruction": 0.05756009274207357,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005756009370088577
+    },
+    "selection": {
+      "loss": 0.5143675040695881,
+      "state_mse": 0.44776515369183895,
+      "tendency_mse": 0.6074238893647743,
+      "fit": 0.44776515369183895,
+      "reconstruction": 0.058599605833797884,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005859960672229084
+    }
+  },
+  {
+    "epoch": 15,
+    "train": {
+      "loss": 0.2361925029227876,
+      "state_mse": 0.18563099493397076,
+      "tendency_mse": 0.44882753762827265,
+      "fit": 0.18563099493397076,
+      "reconstruction": 0.05678753113981481,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005678753200496767
+    },
+    "selection": {
+      "loss": 0.5086856083268028,
+      "state_mse": 0.4425284010793835,
+      "tendency_mse": 0.6035338416010321,
+      "fit": 0.4425284010793835,
+      "reconstruction": 0.05803824574360196,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.0058038246636525565
+    }
+  },
+  {
+    "epoch": 16,
+    "train": {
+      "loss": 0.23356827355282275,
+      "state_mse": 0.18350186169692417,
+      "tendency_mse": 0.4444885455088144,
+      "fit": 0.18350186169692417,
+      "reconstruction": 0.056175555923891216,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.00561755568492131
+    },
+    "selection": {
+      "loss": 0.5090773486633585,
+      "state_mse": 0.44298990912525155,
+      "tendency_mse": 0.6039559450786226,
+      "fit": 0.44298990912525155,
+      "reconstruction": 0.05691844517707144,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.00569184460416389
+    }
+  },
+  {
+    "epoch": 17,
+    "train": {
+      "loss": 0.2316491743612144,
+      "state_mse": 0.18181579824266197,
+      "tendency_mse": 0.44274754770745595,
+      "fit": 0.18181579824266197,
+      "reconstruction": 0.05558620315721412,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005558620412616261
+    },
+    "selection": {
+      "loss": 0.5129479166442842,
+      "state_mse": 0.4468312411696957,
+      "tendency_mse": 0.6047482636290205,
+      "fit": 0.4468312411696957,
+      "reconstruction": 0.056418507808008306,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005641850870595332
+    }
+  },
+  {
+    "epoch": 18,
+    "train": {
+      "loss": 0.22940753873763625,
+      "state_mse": 0.17998108792600812,
+      "tendency_mse": 0.43931113360859175,
+      "fit": 0.17998108792600812,
+      "reconstruction": 0.05495336732016629,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005495336826754476
+    },
+    "selection": {
+      "loss": 0.5106811239592355,
+      "state_mse": 0.4441555355168357,
+      "tendency_mse": 0.6095631121643906,
+      "fit": 0.4441555355168357,
+      "reconstruction": 0.05569278168330448,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005569278256205001
+    }
+  },
+  {
+    "epoch": 19,
+    "train": {
+      "loss": 0.22747594313643318,
+      "state_mse": 0.17830756929811312,
+      "tendency_mse": 0.43715478252160533,
+      "fit": 0.17830756929811312,
+      "reconstruction": 0.05452894042491342,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005452894142710895
+    },
+    "selection": {
+      "loss": 0.5091257908686055,
+      "state_mse": 0.44312353270075794,
+      "tendency_mse": 0.6047292439626808,
+      "fit": 0.44312353270075794,
+      "reconstruction": 0.055293323862630146,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005529332505920095
+    }
+  },
+  {
+    "epoch": 20,
+    "train": {
+      "loss": 0.22560311484762416,
+      "state_mse": 0.1767739189335404,
+      "tendency_mse": 0.43420035511605576,
+      "fit": 0.1767739189335404,
+      "reconstruction": 0.054091590055835005,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.0054091591042947735
+    },
+    "selection": {
+      "loss": 0.5089258650655109,
+      "state_mse": 0.4429012686061436,
+      "tendency_mse": 0.6046914409502249,
+      "fit": 0.4429012686061436,
+      "reconstruction": 0.05555452335279706,
+      "physics": 0.0,
+      "information": 0.0,
+      "static": 0.0,
+      "information_spatial_quantile": 0.0,
+      "pinn_total": 0.0,
+      "regularization": 0.005555452437332338
+    }
+  }
+]

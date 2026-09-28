@@ -1,0 +1,458 @@
+{"model": "neural_ode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.46245278211536767}
+{"model": "neural_ode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.43866704126936346}
+{"model": "neural_ode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.4317688772574781}
+{"model": "neural_ode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.42869011732158}
+{"model": "neural_ode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.43119815688567276}
+{"model": "neural_ode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.43043650932021643}
+{"model": "neural_ode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.4367147070375504}
+{"model": "neural_ode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.4386376654708571}
+{"model": "neural_ode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.4326886644996313}
+{"model": "neural_ode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.41521858308869547}
+{"model": "neural_ode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.4114210677929542}
+{"model": "neural_ode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.41113130386730923}
+{"model": "neural_ode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.4057533906313717}
+{"model": "neural_ode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.406216748425063}
+{"model": "neural_ode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.397161306188933}
+{"model": "neural_ode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.4059631684130425}
+{"model": "neural_ode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.40282648808420024}
+{"model": "neural_ode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.39336908230356593}
+{"model": "neural_ode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.3947575368504656}
+{"model": "neural_ode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.3953417769848563}
+runs/full_joint_bs16_20260927_042919/neural_ode-raw-seed7.pt
+{"normalized_rmse": 0.6252558111353445, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 1.945793228840207}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.487565234232584}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.47596508129377274}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.43861996830738503}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.4731436177469079}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.4447924758266578}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.4381659308615617}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.4404113869647393}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4396442289375858}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.4376382414326001}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.44135672630032696}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.4452310218589479}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.443523756812347}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.44604429235883336}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.44998820690816826}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.4413101303645478}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.4452008875048505}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4415711963078426}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.44388460480633746}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.4485942357840933}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.44415627285256826}
+runs/full_joint_bs16_20260927_042919/neural_ode-forecast_only-seed7.pt
+{"normalized_rmse": 0.6568306077469585, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0433954692921743}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.48478817639183025}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.4748266846215653}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.47796088272792514}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.4444356822812516}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.44274297863235557}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.43981984002492636}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.44418752802163125}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4469688428873642}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.44253495705154183}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.4477582671152309}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.44448807224031106}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.4449032981963601}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.4436724003140903}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.4446098461931485}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.4424979612160364}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.44772092984322326}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.45349720620443584}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4474875482630435}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.4490052706526833}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4470622516079173}
+runs/full_joint_bs16_20260927_042919/neural_ode-climate_manifold-seed7.pt
+{"normalized_rmse": 0.6561201022800085, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.046762691086089}
+{"model": "climode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5759472722028726}
+{"model": "climode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5507851121654747}
+{"model": "climode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5386508028544285}
+{"model": "climode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5260186657011793}
+{"model": "climode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5218781158540727}
+{"model": "climode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5151282793807106}
+{"model": "climode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5137535247336181}
+{"model": "climode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5120715774262553}
+{"model": "climode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5135698724447112}
+{"model": "climode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5102125831513113}
+{"model": "climode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5106737645625917}
+{"model": "climode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.509175821538581}
+{"model": "climode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5089681639185112}
+{"model": "climode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5083650210302215}
+{"model": "climode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.508731470811643}
+{"model": "climode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5093222245824477}
+{"model": "climode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.5093121302815947}
+{"model": "climode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5079552501373884}
+{"model": "climode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5077775260341988}
+{"model": "climode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5084313706787587}
+runs/full_joint_bs16_20260927_042919/climode-raw-seed7.pt
+{"normalized_rmse": 0.7091935914258773, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.267226902125232}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5003789178235472}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.47707287986581753}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.4471281669913418}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.44069514676687493}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.446986092930932}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.4246580308292013}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.4251484520050446}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.42756206869058216}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.42673844065962613}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.4245409911827477}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.424208434165715}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.4220607864017378}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.4218755779835749}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.42505810746041095}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.4244510789466517}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.4189558995741721}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4258964706272539}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4280625940730297}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.4251252300789195}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4239522492813754}
+runs/full_joint_bs16_20260927_042919/climode-forecast_only-seed7.pt
+{"normalized_rmse": 0.6472486604254039, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0628162521110425}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.49789585440150524}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.477579870338936}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.44436653384208075}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.4342259557198767}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.4294656359162589}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.42208901141281924}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.4203612881447072}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4299176866445623}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.4208016404831859}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.42247229159502164}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.4221227456662831}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.42454396767197355}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.4284962635077335}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.4241193986453218}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.42446847339868166}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.426786038853273}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4256723809726194}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4275330011518728}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.4242986534801015}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4246841692618253}
+runs/full_joint_bs16_20260927_042919/climode-climate_manifold-seed7.pt
+{"normalized_rmse": 0.6458799644803358, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0713297354999316}
+{"model": "neural_ode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.45881390517717535}
+{"model": "neural_ode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.44238093466067596}
+{"model": "neural_ode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.43040196751172}
+{"model": "neural_ode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.4353709038556133}
+{"model": "neural_ode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.4328175495153301}
+{"model": "neural_ode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.4347410456570148}
+{"model": "neural_ode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.4348266027180157}
+{"model": "neural_ode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.4388012805799435}
+{"model": "neural_ode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.4413947458404078}
+{"model": "neural_ode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.44483872772662025}
+{"model": "neural_ode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.4397243481948192}
+{"model": "neural_ode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.4273170479660445}
+{"model": "neural_ode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.4074077585217615}
+{"model": "neural_ode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.4096619762997759}
+{"model": "neural_ode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.4077644882752636}
+{"model": "neural_ode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.41108804905259566}
+{"model": "neural_ode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.40327428430177054}
+{"model": "neural_ode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.3988492600584348}
+{"model": "neural_ode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.4051553270872003}
+{"model": "neural_ode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.40485193471926717}
+runs/full_joint_bs16_20260927_042919/neural_ode-raw-seed19.pt
+{"normalized_rmse": 0.6296437072824903, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 1.949713061951158}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.48381588645598417}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.47759610467436503}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.44108486056441243}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.4361451479638526}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.4347722511177323}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.43844569635852493}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.44373830622655797}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4383998664549106}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.4416790577653019}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.4421922758179092}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.4451662174130938}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.45736423305885926}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.44908779094871776}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.44776515369183895}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.4425284010793835}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.44298990912525155}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4468312411696957}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4441555355168357}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.44312353270075794}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4429012686061436}
+runs/full_joint_bs16_20260927_042919/neural_ode-forecast_only-seed19.pt
+{"normalized_rmse": 0.657272171366939, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.051783128646617}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.48126040341889637}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.4777587341990049}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.43826145645440134}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.43673057719483815}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.44044534060034796}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.4383107102318034}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.44138423281361705}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4400547745395682}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.44372353328245995}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.4441779708620332}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.44378373055203996}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.4416475894146407}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.44154679373525796}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.439107538470003}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.438417439201012}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.44006254823858915}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4449715371873694}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.44483379591959377}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.44646828370437597}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4469776911713606}
+runs/full_joint_bs16_20260927_042919/neural_ode-climate_manifold-seed19.pt
+{"normalized_rmse": 0.655622943146485, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0685392164401972}
+{"model": "climode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5745284118956322}
+{"model": "climode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5515195135649824}
+{"model": "climode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5365936186364292}
+{"model": "climode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5266870323000278}
+{"model": "climode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5191290414771919}
+{"model": "climode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5156921053118}
+{"model": "climode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5136994088958869}
+{"model": "climode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5107271182340476}
+{"model": "climode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5116155323171631}
+{"model": "climode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5090061106683336}
+{"model": "climode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5094147037219668}
+{"model": "climode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.507634213235013}
+{"model": "climode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5080185263658984}
+{"model": "climode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5082243220828051}
+{"model": "climode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.5075002294795837}
+{"model": "climode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5083751458612049}
+{"model": "climode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.5073410444058504}
+{"model": "climode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5081368825698783}
+{"model": "climode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5061483900111478}
+{"model": "climode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5071917612364358}
+runs/full_joint_bs16_20260927_042919/climode-raw-seed19.pt
+{"normalized_rmse": 0.7082066920110774, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.278986043387531}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.49947618197116855}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.48023726620297563}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.45763553130297746}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.4447377069749569}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.4357596096295309}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.42999677892681004}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.42567650492214754}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4276814020383256}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.4254892146326495}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.4282293636062355}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.4271600556362254}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.4267461181083937}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.42971999396455124}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.4290999333007049}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.425625357822959}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.4306668373202279}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.42416402839343964}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4274843977229617}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.42678357934407346}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4253066213895433}
+runs/full_joint_bs16_20260927_042919/climode-forecast_only-seed19.pt
+{"normalized_rmse": 0.6484701541307704, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0627785985714064}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.4972179793494866}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.47700615371366245}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.4442923135070093}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.433454904070817}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.42483562458858315}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.4257966457398551}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.42040327333133637}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4205629491840058}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.42106562610886944}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.42278447129066277}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.4236541926255878}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.42236504883112846}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.42383456728286756}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.4251286156907975}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.42357798887176284}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.4296294385635244}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.42477497414978505}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4245945893882609}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.4224654623451136}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4244844448914272}
+runs/full_joint_bs16_20260927_042919/climode-climate_manifold-seed19.pt
+{"normalized_rmse": 0.6452194147008076, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0857724088070606}
+{"model": "neural_ode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.4604410641899647}
+{"model": "neural_ode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.43673436447169867}
+{"model": "neural_ode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.43494169441926983}
+{"model": "neural_ode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.4302183301854126}
+{"model": "neural_ode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.4346271575139963}
+{"model": "neural_ode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.4357336497083755}
+{"model": "neural_ode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.4358383118255608}
+{"model": "neural_ode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.43845323059924096}
+{"model": "neural_ode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.4192501437728306}
+{"model": "neural_ode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.4167712707387959}
+{"model": "neural_ode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.4032422188743878}
+{"model": "neural_ode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.39998499764134837}
+{"model": "neural_ode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.40078868237027204}
+{"model": "neural_ode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.4043516636632036}
+{"model": "neural_ode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.3989587355106171}
+{"model": "neural_ode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.3982903475123211}
+{"model": "neural_ode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.39684234837898935}
+{"model": "neural_ode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.39213771574125944}
+{"model": "neural_ode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.39939559210189896}
+{"model": "neural_ode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.3962618231659952}
+runs/full_joint_bs16_20260927_042919/neural_ode-raw-seed43.pt
+{"normalized_rmse": 0.6237933317286398, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 1.9419056069628569}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.48009974210556444}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.4740110695872502}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.4356703164461791}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.4400200978408267}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.4368511741119001}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.4369101991946078}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.4407698447141729}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.43631374872831025}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.43843927129729754}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.437384750695218}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.43917361304490027}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.43869168317737633}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.44456936969592237}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.44351412853550387}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.443497035556697}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.44647587505439484}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4374178503095026}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4392069653881719}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.44297535412658634}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4447598871619899}
+runs/full_joint_bs16_20260927_042919/neural_ode-forecast_only-seed43.pt
+{"normalized_rmse": 0.6574724477650049, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1103235220206025}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.47741193314639113}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.4737644206804583}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.43356614691508677}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.43418118355767976}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.43614116358333566}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.43564656876852276}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.43766434097947904}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.43365275673627324}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.43898105722474856}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.440554107432134}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.4369134459747347}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.43819083014897153}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.4476060262567234}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.4438147202034886}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.4356695172940214}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.4412587016698031}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4402333863322938}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4388016071672709}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.4407714292090392}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.43950912289267074}
+runs/full_joint_bs16_20260927_042919/neural_ode-climate_manifold-seed43.pt
+{"normalized_rmse": 0.6510310909267659, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.07005106925369}
+{"model": "climode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5725828473846988}
+{"model": "climode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5499206431472335}
+{"model": "climode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5362632627567336}
+{"model": "climode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5274150976671932}
+{"model": "climode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5214649398119685}
+{"model": "climode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5173996209417718}
+{"model": "climode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5169308037558246}
+{"model": "climode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5139659291840416}
+{"model": "climode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5138664090213722}
+{"model": "climode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5112679677938908}
+{"model": "climode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5111591371512965}
+{"model": "climode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.51014062433329}
+{"model": "climode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5102481338624685}
+{"model": "climode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5102420190270651}
+{"model": "climode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.509991841905275}
+{"model": "climode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5100250552844668}
+{"model": "climode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.5094855498821441}
+{"model": "climode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5107717684080515}
+{"model": "climode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5095590889510601}
+{"model": "climode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5085414677451915}
+runs/full_joint_bs16_20260927_042919/climode-raw-seed43.pt
+{"normalized_rmse": 0.7084439819474415, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.2814721699202156}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.49695449210218956}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.4655439535606637}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.44286545559106993}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.4300941474241867}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.4314774268398654}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.4248052108885181}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.4243292302186248}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4232602861904546}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.42224398465183777}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.4217688428894361}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.42087000091416926}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.42366281219826324}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.42592225318063903}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.4300618295608306}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.42439446182164775}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.4233750309163035}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4268640188557588}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4226218701788935}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.4262932674150561}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.42863428334640846}
+runs/full_joint_bs16_20260927_042919/climode-forecast_only-seed43.pt
+{"normalized_rmse": 0.6449984003021564, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.062950966813794}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.4949281714452549}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.4609305853980555}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.44017789754608944}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.4302874173280212}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.4238634238990193}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.4218737363172568}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.4190425924883545}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.4185777627453893}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.4198040660226152}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.4205916007284206}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.4195708586532201}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.4200576967543509}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.42108027241436446}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.4247484355266987}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.42137692240620656}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.42112179486629814}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.4238036845152317}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.4217246855171075}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.42640175638484684}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.4226514652933804}
+runs/full_joint_bs16_20260927_042919/climode-climate_manifold-seed43.pt
+{"normalized_rmse": 0.6437676920689965, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0657448601835573}
+{
+  "neural_ode/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6262309500488249,
+    "sample_std_normalized_rmse": 0.0030446503010544005,
+    "scored_runs": 3
+  },
+  "neural_ode/climate_manifold/latent/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6571917422929675,
+    "sample_std_normalized_rmse": 0.0003283919596251009,
+    "scored_runs": 3
+  },
+  "neural_ode/climate_manifold/latent/none/joint/full/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6542580454510865,
+    "sample_std_normalized_rmse": 0.002805658287734993,
+    "scored_runs": 3
+  },
+  "climode/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.708614755128132,
+    "sample_std_normalized_rmse": 0.0005151361210063629,
+    "scored_runs": 3
+  },
+  "climode/climate_manifold/latent/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6469057382861102,
+    "sample_std_normalized_rmse": 0.0017610977703799568,
+    "scored_runs": 3
+  },
+  "climode/climate_manifold/latent/none/joint/full/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6449556904167133,
+    "sample_std_normalized_rmse": 0.0010805491929764355,
+    "scored_runs": 3
+  }
+}

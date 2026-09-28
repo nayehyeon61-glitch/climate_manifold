@@ -1,0 +1,116 @@
+{
+  "reference": "Aalto-QuML/ClimODE utils.evaluation_rmsd_mm / evaluation_acc_mm",
+  "compared_against": "climate_manifold.downstream.climode_metrics.ClimODEMetrics",
+  "note": "One stored validation case per run; aggregate scores cover all validation origins.",
+  "runs": [
+    {
+      "run": "climode-climate_manifold-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.8952234544228447e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-climate_manifold-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.866019447795202e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-climate_manifold-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.3334972886504534e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-forecast_only-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.034202974019411e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "climode-forecast_only-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.566682051566732e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-forecast_only-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.322807060402204e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-raw-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.0230772693473426e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "climode-raw-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 1.9969569435685554e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-raw-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.124105989086265e-16,
+      "max_abs_acc_difference": 5.551115123125783e-16
+    },
+    {
+      "run": "neural_ode-climate_manifold-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.365815050593266e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-climate_manifold-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.206572704023046e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "neural_ode-climate_manifold-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.980465756520754e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-forecast_only-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.2455549060941183e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-forecast_only-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.5789030127343586e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-forecast_only-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.2683886755361065e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-raw-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.8020581387523747e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-raw-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.252938047837587e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-raw-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.956551261020598e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    }
+  ],
+  "passed": true
+}
