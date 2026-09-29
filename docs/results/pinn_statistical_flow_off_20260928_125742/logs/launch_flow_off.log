@@ -1,0 +1,1146 @@
+2026-09-28T08:22:39Z waiting for PID 20522
+GPU: NVIDIA GeForce RTX 4090
+2026-09-28T12:57:42Z starting /workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742 (commit b6e9a3a)
+{"model": "mlp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5928555318309024}
+{"model": "mlp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5549808352316892}
+{"model": "mlp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5481777429127421}
+{"model": "mlp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5429342367576555}
+{"model": "mlp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5497191560812322}
+{"model": "mlp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5741566172193061}
+{"model": "mlp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.607937357422668}
+{"model": "mlp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.6249369279362252}
+{"model": "mlp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.6101949718817408}
+{"model": "mlp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.6342569072890191}
+{"model": "mlp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.630944678614197}
+{"model": "mlp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.6242337567573567}
+{"model": "mlp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.6297052410467798}
+{"model": "mlp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.6400202114621345}
+{"model": "mlp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.6410632427352161}
+{"model": "mlp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.6395554544052395}
+{"model": "mlp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.6503842846220135}
+{"model": "mlp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.6448494641650917}
+{"model": "mlp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.6445824725244133}
+{"model": "mlp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.6510206358967625}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-seed7.pt
+{"normalized_rmse": 0.72339349676247, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.201228699404276}
+{"model": "mlp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5933162742996699}
+{"model": "mlp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5564800869527123}
+{"model": "mlp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5451848201727535}
+{"model": "mlp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5434191970695259}
+{"model": "mlp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.545968259846454}
+{"model": "mlp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5462465371620217}
+{"model": "mlp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5544790207810879}
+{"model": "mlp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.566967102133578}
+{"model": "mlp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5586041445514548}
+{"model": "mlp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5959470864333429}
+{"model": "mlp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.6327982957372194}
+{"model": "mlp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.6299214448463478}
+{"model": "mlp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.6427306251078655}
+{"model": "mlp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.6552196660271464}
+{"model": "mlp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.6359483373784596}
+{"model": "mlp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.649419153371238}
+{"model": "mlp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.6491368378221006}
+{"model": "mlp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.6566240785995212}
+{"model": "mlp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.6496271698042769}
+{"model": "mlp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.6462718075370305}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-kl_entropy-seed7.pt
+{"normalized_rmse": 0.724722059504403, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.214917181048361}
+{"model": "mlp", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5604840356889635}
+{"model": "mlp", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5366466261437033}
+{"model": "mlp", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5321582401660006}
+{"model": "mlp", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5326862847397082}
+{"model": "mlp", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5269312391338542}
+{"model": "mlp", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5302370628023328}
+{"model": "mlp", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5403146851425389}
+{"model": "mlp", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5578441322227545}
+{"model": "mlp", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5538930789070589}
+{"model": "mlp", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5623334045645855}
+{"model": "mlp", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5682952875420167}
+{"model": "mlp", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5939396810169002}
+{"model": "mlp", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.6372470614725797}
+{"model": "mlp", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.6947850429362066}
+{"model": "mlp", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.6779583909363499}
+{"model": "mlp", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.661051904973875}
+{"model": "mlp", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.6736110182920487}
+{"model": "mlp", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.6638711404588891}
+{"model": "mlp", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.6656247244437233}
+{"model": "mlp", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.6837979683555728}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-raw-seed7.pt
+{"normalized_rmse": 0.7176347824175116, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1322714282251964}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.593334685109263}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5550526355609241}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5446140665669557}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5419570193242362}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5424375619045229}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5526579851886618}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.561104695833228}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5661501289924893}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5588214630485336}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5691656165098812}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5703699262423207}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.569103830667503}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5799617657038951}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5784722186615561}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5773329334416166}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5874696309726652}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5932166725208249}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5849714811008391}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5922922334894632}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5956342030689592}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-seed7.pt
+{"normalized_rmse": 0.7233144658857051, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.197232043388359}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5936965201290841}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5557589737181428}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5462753039198079}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5411547187465527}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5461910389675387}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5516578762099166}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5588537263477408}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5613228591827083}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5577361216563236}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5731245277801242}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5679439124196806}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5689717972384357}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5786370650141562}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5774231075636184}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5790547575938535}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5854426683581827}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5825430713074591}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5834137134830006}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5853325792591835}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5782923112955082}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-kl_entropy-seed7.pt
+{"normalized_rmse": 0.7242350449244132, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.2140628351179608}
+{"model": "neural_ode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.563591421179294}
+{"model": "neural_ode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5412129622675167}
+{"model": "neural_ode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5339208496840735}
+{"model": "neural_ode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5348278936400008}
+{"model": "neural_ode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5325537230276487}
+{"model": "neural_ode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5363073344844074}
+{"model": "neural_ode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5447662917682276}
+{"model": "neural_ode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5609921876846309}
+{"model": "neural_ode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5558114641821732}
+{"model": "neural_ode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5731134568028274}
+{"model": "neural_ode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5616321161068286}
+{"model": "neural_ode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.588310253408623}
+{"model": "neural_ode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.603036069220312}
+{"model": "neural_ode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.6173558750382243}
+{"model": "neural_ode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.6136591087729305}
+{"model": "neural_ode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.6018543226788403}
+{"model": "neural_ode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.6211933465662716}
+{"model": "neural_ode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.6140604913612433}
+{"model": "neural_ode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.628766941178132}
+{"model": "neural_ode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.6262612910173994}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-raw-seed7.pt
+{"normalized_rmse": 0.7228786460921116, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1243206083399286}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5976744582746721}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5694255573516865}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5596885566324638}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5452751754505704}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5423485552101232}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5407884267497577}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5477156524271415}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.546423537574038}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5392186527620855}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5491995378592168}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5491719664427415}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.549686056201751}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5613241416268778}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5501499197933308}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5503628676986211}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5529991754711958}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.53769512767272}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5382333352160846}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.528466865212594}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5228465041582424}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-seed7.pt
+{"normalized_rmse": 0.713260456346552, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.15331353903888}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5990181014565007}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5712242912883541}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5560670734509466}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5430048548525579}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5387860692197077}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5330758329731128}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5379992747261497}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5410210717615821}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5412921553102283}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5478678880535605}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.547338165786632}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5448737201506345}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.542615493818532}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5503663053530704}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.541729769930338}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5381984651768615}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.532821642544182}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5431186415547805}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5294702421727441}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5309773363994554}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-kl_entropy-seed7.pt
+{"normalized_rmse": 0.7159532311018013, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1311691663869925}
+{"model": "climode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.6297257594735903}
+{"model": "climode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.6215781431234382}
+{"model": "climode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.6105689080042531}
+{"model": "climode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.6083093534857601}
+{"model": "climode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.6037115669975716}
+{"model": "climode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5981918782637902}
+{"model": "climode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5978359317144967}
+{"model": "climode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5945456699575611}
+{"model": "climode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5938822257654749}
+{"model": "climode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5897365546347373}
+{"model": "climode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5926470564647621}
+{"model": "climode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5896403615767813}
+{"model": "climode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5931855088857644}
+{"model": "climode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5977758446422669}
+{"model": "climode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.588195737399378}
+{"model": "climode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5905195638556293}
+{"model": "climode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.5891335140465179}
+{"model": "climode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5893688429293372}
+{"model": "climode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.591520865456082}
+{"model": "climode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5920217186779124}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-raw-seed7.pt
+{"normalized_rmse": 0.7592370367748239, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.4188910930852687}
+{"model": "convlstm", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5773732839730605}
+{"model": "convlstm", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.521468215077851}
+{"model": "convlstm", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5051558067212388}
+{"model": "convlstm", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.496638030304806}
+{"model": "convlstm", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5083996086595025}
+{"model": "convlstm", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5088920536981034}
+{"model": "convlstm", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5142398822972378}
+{"model": "convlstm", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5150474809270696}
+{"model": "convlstm", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5144966120426797}
+{"model": "convlstm", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5286061851017375}
+{"model": "convlstm", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5318534183864811}
+{"model": "convlstm", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5380522607246128}
+{"model": "convlstm", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5310552372905238}
+{"model": "convlstm", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.537794404987751}
+{"model": "convlstm", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5392571581180557}
+{"model": "convlstm", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5439132708107111}
+{"model": "convlstm", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5465538508538511}
+{"model": "convlstm", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5528438139626584}
+{"model": "convlstm", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5502054520584029}
+{"model": "convlstm", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.552007729034158}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-seed7.pt
+{"normalized_rmse": 0.6938980169074187, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1889779108997596}
+{"model": "convlstm", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5800772912904186}
+{"model": "convlstm", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5234000133244257}
+{"model": "convlstm", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5088786677338174}
+{"model": "convlstm", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.496593004246024}
+{"model": "convlstm", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5029220160649304}
+{"model": "convlstm", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5028810555112981}
+{"model": "convlstm", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5131810225914639}
+{"model": "convlstm", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5171887502924117}
+{"model": "convlstm", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5113851251635413}
+{"model": "convlstm", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5241641052095609}
+{"model": "convlstm", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5196765801374752}
+{"model": "convlstm", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.525787032262454}
+{"model": "convlstm", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5243366344800013}
+{"model": "convlstm", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.530694213316921}
+{"model": "convlstm", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.543862349973432}
+{"model": "convlstm", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5286927970341101}
+{"model": "convlstm", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5384142094767441}
+{"model": "convlstm", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5435383619766574}
+{"model": "convlstm", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5504935288610567}
+{"model": "convlstm", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5447785217499098}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-kl_entropy-seed7.pt
+{"normalized_rmse": 0.6956464275672823, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.201623338480618}
+{"model": "convlstm", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5436231056546984}
+{"model": "convlstm", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.4774478865440354}
+{"model": "convlstm", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.45231473238144837}
+{"model": "convlstm", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.45004274187130316}
+{"model": "convlstm", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.4512070681432354}
+{"model": "convlstm", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.463053297747224}
+{"model": "convlstm", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.45167249697998296}
+{"model": "convlstm", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.4499919440583131}
+{"model": "convlstm", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.4606866991036443}
+{"model": "convlstm", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.4663804605206609}
+{"model": "convlstm", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.46678698108223454}
+{"model": "convlstm", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.46806460290354013}
+{"model": "convlstm", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.4737746509686773}
+{"model": "convlstm", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.48897828885055467}
+{"model": "convlstm", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.4760457274653915}
+{"model": "convlstm", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.49061103136820483}
+{"model": "convlstm", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.4954167289047942}
+{"model": "convlstm", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.4959743590635945}
+{"model": "convlstm", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.499655787746867}
+{"model": "convlstm", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.4990640592741271}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-raw-seed7.pt
+{"normalized_rmse": 0.6668837757953865, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0167236800776926}
+{"model": "simvp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6223283410827772}
+{"model": "simvp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5537805286046066}
+{"model": "simvp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.566521242695314}
+{"model": "simvp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5521474723504675}
+{"model": "simvp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5550468773291893}
+{"model": "simvp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5604080955942925}
+{"model": "simvp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5748041893894984}
+{"model": "simvp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5735001003485367}
+{"model": "simvp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5791212841585108}
+{"model": "simvp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.581230214340152}
+{"model": "simvp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.58838211213379}
+{"model": "simvp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5899461466247742}
+{"model": "simvp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5878029027517002}
+{"model": "simvp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5918421759653756}
+{"model": "simvp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5895775439470289}
+{"model": "simvp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5956987555036073}
+{"model": "simvp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5851117173075223}
+{"model": "simvp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5971955249820221}
+{"model": "simvp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5985774871514324}
+{"model": "simvp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5976640332032217}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-seed7.pt
+{"normalized_rmse": 0.7262919760973895, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.339314597225923}
+{"model": "simvp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6377030975918353}
+{"model": "simvp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.566392927568675}
+{"model": "simvp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5560140630138237}
+{"model": "simvp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5381169243986011}
+{"model": "simvp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5389839547139761}
+{"model": "simvp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5500233088760472}
+{"model": "simvp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5478541761145694}
+{"model": "simvp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.561551040154144}
+{"model": "simvp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5643457953165391}
+{"model": "simvp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.560226496785917}
+{"model": "simvp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5677735955845116}
+{"model": "simvp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5667458559245967}
+{"model": "simvp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5662885250096388}
+{"model": "simvp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5713884895443161}
+{"model": "simvp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5772589507816107}
+{"model": "simvp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5753451200492482}
+{"model": "simvp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5801088533474013}
+{"model": "simvp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5800978297365331}
+{"model": "simvp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5783594111677056}
+{"model": "simvp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5874427247258949}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-kl_entropy-seed7.pt
+{"normalized_rmse": 0.7175282355703405, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.366924229788439}
+{"model": "simvp", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5972698398113855}
+{"model": "simvp", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5544628679223538}
+{"model": "simvp", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5458175609471377}
+{"model": "simvp", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.521741199856022}
+{"model": "simvp", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5169483012270716}
+{"model": "simvp", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.53033380624006}
+{"model": "simvp", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5423325486811698}
+{"model": "simvp", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5441165916215633}
+{"model": "simvp", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5361597419389451}
+{"model": "simvp", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5474499555066209}
+{"model": "simvp", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5435392187273246}
+{"model": "simvp", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5499774109954616}
+{"model": "simvp", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5617126435683556}
+{"model": "simvp", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.557549773249185}
+{"model": "simvp", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.561101678055351}
+{"model": "simvp", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5630399850686996}
+{"model": "simvp", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.5662133694450514}
+{"model": "simvp", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5726804972752569}
+{"model": "simvp", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5715294823296019}
+{"model": "simvp", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5710039972805705}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-raw-seed7.pt
+{"normalized_rmse": 0.7090233735275536, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.244066702717066}
+{"model": "mlp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5928383898674611}
+{"model": "mlp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5601922013762635}
+{"model": "mlp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5405924605779322}
+{"model": "mlp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5444032044087375}
+{"model": "mlp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5483850296232637}
+{"model": "mlp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5548485795505751}
+{"model": "mlp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5504851447387642}
+{"model": "mlp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5618507693626733}
+{"model": "mlp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5941461238570993}
+{"model": "mlp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5960399664853462}
+{"model": "mlp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.6134388729344454}
+{"model": "mlp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.6291223880002708}
+{"model": "mlp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.6227198810480695}
+{"model": "mlp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.6231671842936478}
+{"model": "mlp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.6172522584446181}
+{"model": "mlp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.621856267687939}
+{"model": "mlp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.6274043963738116}
+{"model": "mlp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.6448506583732344}
+{"model": "mlp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.6308065473051276}
+{"model": "mlp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.6241340279125895}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-seed19.pt
+{"normalized_rmse": 0.7235511251152007, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.2713627412058117}
+{"model": "mlp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5956728833105477}
+{"model": "mlp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5637457132037299}
+{"model": "mlp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5399060185493474}
+{"model": "mlp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5457525647260693}
+{"model": "mlp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5938758594001654}
+{"model": "mlp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.6115511794054009}
+{"model": "mlp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.6026962623850021}
+{"model": "mlp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.6142236329756762}
+{"model": "mlp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.6142503483213853}
+{"model": "mlp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.6452469809880275}
+{"model": "mlp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.6329065188859957}
+{"model": "mlp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.6301950317523023}
+{"model": "mlp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.6343727488783678}
+{"model": "mlp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.6354482915011649}
+{"model": "mlp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.6302982876962582}
+{"model": "mlp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.6409394447945521}
+{"model": "mlp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.6353917491300024}
+{"model": "mlp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.645791815185426}
+{"model": "mlp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.6417473687569603}
+{"model": "mlp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.6403345703625407}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-kl_entropy-seed19.pt
+{"normalized_rmse": 0.7238732508441222, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.261967042350348}
+{"model": "mlp", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5616851788207756}
+{"model": "mlp", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5399441934357124}
+{"model": "mlp", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5168316612829879}
+{"model": "mlp", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.514816778165457}
+{"model": "mlp", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5095056787945321}
+{"model": "mlp", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5160555346610428}
+{"model": "mlp", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5142069531484249}
+{"model": "mlp", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5343412639825819}
+{"model": "mlp", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5400226009284891}
+{"model": "mlp", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5521878872080901}
+{"model": "mlp", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5641517555305713}
+{"model": "mlp", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5899857860554307}
+{"model": "mlp", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.6009506411727693}
+{"model": "mlp", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.612042186529162}
+{"model": "mlp", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.6219778572349645}
+{"model": "mlp", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.6509300394052184}
+{"model": "mlp", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.6308484666701052}
+{"model": "mlp", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.6876581323313018}
+{"model": "mlp", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.7097642209442245}
+{"model": "mlp", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.7146534249658669}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-raw-seed19.pt
+{"normalized_rmse": 0.7036091246318449, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.141406899275054}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5917041365184711}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5602861988076088}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5398979500143851}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5423379371223643}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5431555839319193}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5476597309943538}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5515603332842862}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5556886080553323}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5590646269203592}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5650247283308225}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5637930132288141}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5655587603384098}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5663117855522871}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5678105704080318}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5742160439189093}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5773563508902817}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5801553328076545}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5827748454417868}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5822250719155044}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5814668848185183}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-seed19.pt
+{"normalized_rmse": 0.7240752323412197, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.273170381202113}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5967164097781115}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5628320667680226}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5379705153717288}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5376505394323395}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5406026630573852}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5517807183987892}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.552460467029736}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5594915862470223}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5659164549884386}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5605195216806216}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5718753452687814}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5698980296217141}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5796957176145643}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5880896202813839}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5829217770102662}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5940857296207559}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.627877986400904}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.6192735367854738}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.6052965942595546}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.6140827929414573}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-kl_entropy-seed19.pt
+{"normalized_rmse": 0.7180092498237411, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.201803656345433}
+{"model": "neural_ode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.562334676583608}
+{"model": "neural_ode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5426831098110504}
+{"model": "neural_ode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5176976451175748}
+{"model": "neural_ode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5205162725823309}
+{"model": "neural_ode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.515708607828058}
+{"model": "neural_ode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5203046440624919}
+{"model": "neural_ode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5197770788189123}
+{"model": "neural_ode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5392901972974964}
+{"model": "neural_ode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5446147628610125}
+{"model": "neural_ode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5507605695301437}
+{"model": "neural_ode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.560128175184905}
+{"model": "neural_ode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5767918474622855}
+{"model": "neural_ode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.594567252580355}
+{"model": "neural_ode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5955061427540652}
+{"model": "neural_ode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.6023707380010752}
+{"model": "neural_ode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.6145818219891972}
+{"model": "neural_ode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.6296965738213107}
+{"model": "neural_ode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.6435423506983333}
+{"model": "neural_ode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.6261264573787404}
+{"model": "neural_ode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.6618161014126583}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-raw-seed19.pt
+{"normalized_rmse": 0.7078007499295667, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1344939279272594}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.605549085502842}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5762426394624552}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5557141943122951}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5456172396323828}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5417677405442575}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5367842715502692}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5391672339729483}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5340820015307766}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5337964428921617}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5413218335507034}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5398860058932552}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5428269672831957}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5468981995782018}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5446012737784247}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5433102439338263}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5540934222808205}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5545111176934381}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5629930487150475}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5469408408846088}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5379407426628021}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-seed19.pt
+{"normalized_rmse": 0.722629299304252, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1915329987534444}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6014265271496259}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5737372271914899}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5524852863584937}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5427654300201378}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5418327147818639}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5334301311404684}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5356667013449361}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5343900406390844}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5383593571503352}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5351182660524685}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5390299013585645}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.540512191101021}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5492312837160737}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5654131102320208}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5483709662132843}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5511416397771606}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5615486635605796}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5661584453890985}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5464762658522911}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5461681028509321}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-kl_entropy-seed19.pt
+{"normalized_rmse": 0.718997061454445, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.196819310510973}
+{"model": "climode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.6520916475089331}
+{"model": "climode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.6410467114738638}
+{"model": "climode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.6257125995156128}
+{"model": "climode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.6150806722230029}
+{"model": "climode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.6134008240941511}
+{"model": "climode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.6025267892312943}
+{"model": "climode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.6032060850104753}
+{"model": "climode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5967613677712599}
+{"model": "climode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5994153183675991}
+{"model": "climode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5961225956716163}
+{"model": "climode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5915513964811356}
+{"model": "climode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5901895536367129}
+{"model": "climode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5908235146821074}
+{"model": "climode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5936834809897971}
+{"model": "climode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.5917346561362988}
+{"model": "climode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5975880724093457}
+{"model": "climode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.5916433356258504}
+{"model": "climode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5938162961537998}
+{"model": "climode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5957968500177216}
+{"model": "climode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5941907112287176}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-raw-seed19.pt
+{"normalized_rmse": 0.7635025581061037, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.425537721495897}
+{"model": "convlstm", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5837845556031918}
+{"model": "convlstm", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5245905906830752}
+{"model": "convlstm", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5050776735306994}
+{"model": "convlstm", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5056329068499977}
+{"model": "convlstm", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5002836780705229}
+{"model": "convlstm", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5096488936847909}
+{"model": "convlstm", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5180870256798651}
+{"model": "convlstm", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5227910147646987}
+{"model": "convlstm", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5292754182344154}
+{"model": "convlstm", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5342185098786469}
+{"model": "convlstm", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5351693834566496}
+{"model": "convlstm", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5375661962536956}
+{"model": "convlstm", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5471690087868385}
+{"model": "convlstm", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5485262025445133}
+{"model": "convlstm", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5506857796766912}
+{"model": "convlstm", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5505349262887836}
+{"model": "convlstm", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5583883051787644}
+{"model": "convlstm", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.55630160329913}
+{"model": "convlstm", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5548915602408434}
+{"model": "convlstm", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5644194124164992}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-seed19.pt
+{"normalized_rmse": 0.6941459614628472, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.186606384295556}
+{"model": "convlstm", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5916465554853809}
+{"model": "convlstm", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5266955567025715}
+{"model": "convlstm", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5111919269437875}
+{"model": "convlstm", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5023474542586975}
+{"model": "convlstm", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.49531561687720893}
+{"model": "convlstm", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5098272545029455}
+{"model": "convlstm", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5089365626922578}
+{"model": "convlstm", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5159074335874865}
+{"model": "convlstm", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5122140661467466}
+{"model": "convlstm", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5202934874554551}
+{"model": "convlstm", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5210955254403055}
+{"model": "convlstm", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5178387554879424}
+{"model": "convlstm", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.527283355272617}
+{"model": "convlstm", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5314790436523495}
+{"model": "convlstm", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5378104443408086}
+{"model": "convlstm", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5309178358172887}
+{"model": "convlstm", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5302885282779979}
+{"model": "convlstm", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5378904611967664}
+{"model": "convlstm", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5384338799160545}
+{"model": "convlstm", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5428344018105772}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-kl_entropy-seed19.pt
+{"normalized_rmse": 0.6901991670215007, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.160567104351972}
+{"model": "convlstm", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.523235363312094}
+{"model": "convlstm", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5157616261218135}
+{"model": "convlstm", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.4876433330645882}
+{"model": "convlstm", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.4673494018982572}
+{"model": "convlstm", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.4623513885021814}
+{"model": "convlstm", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.4592473500883927}
+{"model": "convlstm", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.45371106663584254}
+{"model": "convlstm", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.46090420876619026}
+{"model": "convlstm", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.44705749521237365}
+{"model": "convlstm", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.45581394879688025}
+{"model": "convlstm", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.4667870427643543}
+{"model": "convlstm", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.4743800150804193}
+{"model": "convlstm", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.47658126677548174}
+{"model": "convlstm", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.4823797649983671}
+{"model": "convlstm", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.48983675619193057}
+{"model": "convlstm", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.47998115106831635}
+{"model": "convlstm", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.4840685083083478}
+{"model": "convlstm", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.4962287207897776}
+{"model": "convlstm", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.48881445834543014}
+{"model": "convlstm", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.48016857092371457}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-raw-seed19.pt
+{"normalized_rmse": 0.6747166323615678, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.001706447093807}
+{"model": "simvp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6345183240445696}
+{"model": "simvp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5747133323448239}
+{"model": "simvp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5447807767545315}
+{"model": "simvp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5447730057139814}
+{"model": "simvp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5613981637211354}
+{"model": "simvp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5595640161644824}
+{"model": "simvp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5608350285559099}
+{"model": "simvp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.571100866160012}
+{"model": "simvp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.570530834004604}
+{"model": "simvp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5751854890652935}
+{"model": "simvp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5773496686732361}
+{"model": "simvp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5843093450380671}
+{"model": "simvp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.578545512657504}
+{"model": "simvp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5873161945657283}
+{"model": "simvp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5894817654775274}
+{"model": "simvp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5881281041071593}
+{"model": "simvp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.6019146535333119}
+{"model": "simvp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.6071763190479786}
+{"model": "simvp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.6049443989501102}
+{"model": "simvp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.6028997326229613}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-seed19.pt
+{"normalized_rmse": 0.7240274282222027, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.3160309547777347}
+{"model": "simvp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6258364785155718}
+{"model": "simvp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5715835973034945}
+{"model": "simvp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5433420583473564}
+{"model": "simvp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5386886267305478}
+{"model": "simvp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5371875456984052}
+{"model": "simvp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5391509582787866}
+{"model": "simvp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5475321835891376}
+{"model": "simvp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5642981001557204}
+{"model": "simvp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5685432490211627}
+{"model": "simvp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5728978578884187}
+{"model": "simvp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.578056039390153}
+{"model": "simvp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5816853375036001}
+{"model": "simvp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5840030914628158}
+{"model": "simvp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5873477753577577}
+{"model": "simvp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5967471792217444}
+{"model": "simvp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5912784606180566}
+{"model": "simvp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5995387351860414}
+{"model": "simvp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5997038186729634}
+{"model": "simvp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5964437241185603}
+{"model": "simvp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.6114178861955273}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-kl_entropy-seed19.pt
+{"normalized_rmse": 0.7196485445074863, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.274714617995081}
+{"model": "simvp", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.58957937711092}
+{"model": "simvp", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5433054845142727}
+{"model": "simvp", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5228262161422894}
+{"model": "simvp", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5311432282507647}
+{"model": "simvp", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5263195962129286}
+{"model": "simvp", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5360921898193384}
+{"model": "simvp", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5304646567171215}
+{"model": "simvp", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5333330307170012}
+{"model": "simvp", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5399089122830839}
+{"model": "simvp", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5457009551114154}
+{"model": "simvp", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5468739165401579}
+{"model": "simvp", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5579123921569612}
+{"model": "simvp", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5450663979818008}
+{"model": "simvp", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5531769909332913}
+{"model": "simvp", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.5517455535847575}
+{"model": "simvp", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5493885781450719}
+{"model": "simvp", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.5584002435585089}
+{"model": "simvp", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5596176985703192}
+{"model": "simvp", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5556913519842392}
+{"model": "simvp", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.559740777817969}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-raw-seed19.pt
+{"normalized_rmse": 0.7036842480351924, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.2901556168197645}
+{"model": "mlp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5988148126765349}
+{"model": "mlp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5568434834027018}
+{"model": "mlp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5439901212171305}
+{"model": "mlp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5373406063090108}
+{"model": "mlp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5736658080600211}
+{"model": "mlp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5907852503132306}
+{"model": "mlp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.6220595217174149}
+{"model": "mlp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.6291865815983375}
+{"model": "mlp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.6175478069047964}
+{"model": "mlp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.627867073311703}
+{"model": "mlp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.63696940664405}
+{"model": "mlp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.6353646961757288}
+{"model": "mlp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.648186522669363}
+{"model": "mlp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.6435806100812702}
+{"model": "mlp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.6409208468611249}
+{"model": "mlp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.6432629476179793}
+{"model": "mlp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.6447107195098741}
+{"model": "mlp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.6534148026328577}
+{"model": "mlp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.6499652098793494}
+{"model": "mlp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.655307673078375}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-seed43.pt
+{"normalized_rmse": 0.71876876784628, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.2148019947527504}
+{"model": "mlp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.597976000287838}
+{"model": "mlp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5546878079195591}
+{"model": "mlp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5466361142534418}
+{"model": "mlp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5395087619395915}
+{"model": "mlp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5437152151523585}
+{"model": "mlp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.588181559350554}
+{"model": "mlp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.6052331924438477}
+{"model": "mlp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.6124246704412202}
+{"model": "mlp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.6163626005743242}
+{"model": "mlp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.6271475416021505}
+{"model": "mlp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.6399490223638005}
+{"model": "mlp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.6311179005903285}
+{"model": "mlp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.6292436264918029}
+{"model": "mlp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.6331932876348798}
+{"model": "mlp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.6367466115830667}
+{"model": "mlp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.6473896586547484}
+{"model": "mlp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.645060154119523}
+{"model": "mlp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.6445664003472515}
+{"model": "mlp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.6427396657500128}
+{"model": "mlp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.6412444288437509}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-kl_entropy-seed43.pt
+{"normalized_rmse": 0.7216435935834566, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.2439387886718136}
+{"model": "mlp", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5692404729180766}
+{"model": "mlp", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.544524397913494}
+{"model": "mlp", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5265820740293641}
+{"model": "mlp", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5159699907396532}
+{"model": "mlp", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5356716217499118}
+{"model": "mlp", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5518886187835036}
+{"model": "mlp", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5402861526861541}
+{"model": "mlp", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.551454911780448}
+{"model": "mlp", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5943048014689156}
+{"model": "mlp", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.6114112734794617}
+{"model": "mlp", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.6477554068063753}
+{"model": "mlp", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.6564899788005573}
+{"model": "mlp", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.6578450854891305}
+{"model": "mlp", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.7003831716091461}
+{"model": "mlp", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.7091712005842472}
+{"model": "mlp", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.6980595198118792}
+{"model": "mlp", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.7118965956194773}
+{"model": "mlp", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.7179714280389561}
+{"model": "mlp", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.7449983535157411}
+{"model": "mlp", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.7258223857263195}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/mlp-raw-seed43.pt
+{"normalized_rmse": 0.713658291805598, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1969520300207113}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.597774358907731}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5555355232327005}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5398210988902925}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5372614242580303}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5412427721065864}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5559673815474613}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5600193907401709}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5621547136923206}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5630906562690348}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5751773762612289}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5745627938265734}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5719905723788137}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.57621172648419}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5759019991441976}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5819797045226635}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5808454508714954}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5843797000490969}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5881053615734453}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5891522181200286}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5894460390275875}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-seed43.pt
+{"normalized_rmse": 0.7190994881322459, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.213724492072053}
+{"model": "neural_ode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6005216329269989}
+{"model": "neural_ode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5535755953710191}
+{"model": "neural_ode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.542387856050136}
+{"model": "neural_ode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5392124603758596}
+{"model": "neural_ode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5469491137297888}
+{"model": "neural_ode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5490702672451924}
+{"model": "neural_ode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5463076373998959}
+{"model": "neural_ode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5577573550366932}
+{"model": "neural_ode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5623844679166458}
+{"model": "neural_ode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5655121235188725}
+{"model": "neural_ode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5634023752275982}
+{"model": "neural_ode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5623964750419249}
+{"model": "neural_ode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5714876868576756}
+{"model": "neural_ode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5735627604679161}
+{"model": "neural_ode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5756698263613141}
+{"model": "neural_ode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.576906623646938}
+{"model": "neural_ode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5867007963255482}
+{"model": "neural_ode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5742008528177578}
+{"model": "neural_ode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.589148894688929}
+{"model": "neural_ode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5754405551687998}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-kl_entropy-seed43.pt
+{"normalized_rmse": 0.7201844951434353, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.2300996085963876}
+{"model": "neural_ode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5686754538985713}
+{"model": "neural_ode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.544948176361611}
+{"model": "neural_ode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5300018071221761}
+{"model": "neural_ode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5174749777646421}
+{"model": "neural_ode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5351074854683967}
+{"model": "neural_ode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.551989985358428}
+{"model": "neural_ode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5436331776309528}
+{"model": "neural_ode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5523367342084684}
+{"model": "neural_ode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5544974122512779}
+{"model": "neural_ode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5678907463607982}
+{"model": "neural_ode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.572157444005079}
+{"model": "neural_ode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5975964935106923}
+{"model": "neural_ode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5977746686403591}
+{"model": "neural_ode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.6257760707567551}
+{"model": "neural_ode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.6101848865341022}
+{"model": "neural_ode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.6111666526933436}
+{"model": "neural_ode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.6382779113391204}
+{"model": "neural_ode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.6227522018744465}
+{"model": "neural_ode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.6760532212348038}
+{"model": "neural_ode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.6405006440117936}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/neural_ode-raw-seed43.pt
+{"normalized_rmse": 0.7146960086276876, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.198566265392362}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.608078817602044}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5744185678859174}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5534529871813698}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5435485844376423}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5444586212039749}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5447288385966582}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5447042287529195}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.53916092449268}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5462922434238728}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.549503113078225}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5498548978786203}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5514282194380524}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5437859506057091}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5319507116373954}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5273327524142272}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5291823199719984}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5178831293706809}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5199342954748031}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.524069850662362}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5172328201839075}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-seed43.pt
+{"normalized_rmse": 0.7086517661445446, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1205758787683466}
+{"model": "climode", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6070684080492559}
+{"model": "climode", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5700863573336632}
+{"model": "climode", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5532237437137029}
+{"model": "climode", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.543035002942321}
+{"model": "climode", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5397784465921545}
+{"model": "climode", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5465225524473251}
+{"model": "climode", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5380702186824402}
+{"model": "climode", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5390944856352377}
+{"model": "climode", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5402416871301121}
+{"model": "climode", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5437715710040432}
+{"model": "climode", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5474048524301768}
+{"model": "climode", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5354422158237041}
+{"model": "climode", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5314032659029024}
+{"model": "climode", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.514798829159658}
+{"model": "climode", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5153865801744135}
+{"model": "climode", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5195864782738293}
+{"model": "climode", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.514155057446585}
+{"model": "climode", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5150225106225419}
+{"model": "climode", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.515242279104709}
+{"model": "climode", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5110538567502538}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-kl_entropy-seed43.pt
+{"normalized_rmse": 0.7021995665086082, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1180414100664744}
+{"model": "climode", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.6437903541424731}
+{"model": "climode", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.6313773904312096}
+{"model": "climode", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.6201139096222601}
+{"model": "climode", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.6105066776577813}
+{"model": "climode", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.612031466531814}
+{"model": "climode", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.6076227804251648}
+{"model": "climode", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.6044252372059985}
+{"model": "climode", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.5994380160278543}
+{"model": "climode", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.6001852503747541}
+{"model": "climode", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.5961587324795161}
+{"model": "climode", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5954930587413193}
+{"model": "climode", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.5927532363602719}
+{"model": "climode", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.594125750173634}
+{"model": "climode", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5931576807689304}
+{"model": "climode", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.5926764257658268}
+{"model": "climode", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5911083218413765}
+{"model": "climode", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.595964638981378}
+{"model": "climode", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5925993966965621}
+{"model": "climode", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5917322421104131}
+{"model": "climode", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5928494728563403}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/climode-raw-seed43.pt
+{"normalized_rmse": 0.7622289056576954, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.411890488879956}
+{"model": "convlstm", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.592745349283303}
+{"model": "convlstm", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5238285226740311}
+{"model": "convlstm", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5138440600517282}
+{"model": "convlstm", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5053021906295505}
+{"model": "convlstm", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5036600833081172}
+{"model": "convlstm", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5080595952854108}
+{"model": "convlstm", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5108731523892726}
+{"model": "convlstm", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5170120342678293}
+{"model": "convlstm", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5198624610372067}
+{"model": "convlstm", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5262365784632993}
+{"model": "convlstm", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5310674750910663}
+{"model": "convlstm", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5320149792691148}
+{"model": "convlstm", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5401932773934571}
+{"model": "convlstm", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5472718734856039}
+{"model": "convlstm", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.544144413317111}
+{"model": "convlstm", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5393063887594922}
+{"model": "convlstm", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5501144533677095}
+{"model": "convlstm", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5468163621742915}
+{"model": "convlstm", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5423204379087769}
+{"model": "convlstm", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5460375662236764}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-seed43.pt
+{"normalized_rmse": 0.6964081497158825, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1622802544649082}
+{"model": "convlstm", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.5985792462061265}
+{"model": "convlstm", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5313040694583051}
+{"model": "convlstm", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5275314328259539}
+{"model": "convlstm", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5157177267721246}
+{"model": "convlstm", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5114289464001722}
+{"model": "convlstm", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5332176860974316}
+{"model": "convlstm", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5195243057944777}
+{"model": "convlstm", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5337573124050943}
+{"model": "convlstm", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5460167907565567}
+{"model": "convlstm", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5461816412641068}
+{"model": "convlstm", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5531776423161172}
+{"model": "convlstm", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5500593205821831}
+{"model": "convlstm", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5669264314443591}
+{"model": "convlstm", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5567542500746718}
+{"model": "convlstm", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5575302068347109}
+{"model": "convlstm", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5670550556237254}
+{"model": "convlstm", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5650178333803426}
+{"model": "convlstm", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5679454736232153}
+{"model": "convlstm", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5631262967492842}
+{"model": "convlstm", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5583129771459843}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-kl_entropy-seed43.pt
+{"normalized_rmse": 0.697578161175917, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.1449603294261688}
+{"model": "convlstm", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5347422597828322}
+{"model": "convlstm", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.4852842427554088}
+{"model": "convlstm", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.4731159943364872}
+{"model": "convlstm", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.45916262034831995}
+{"model": "convlstm", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.4527534650985732}
+{"model": "convlstm", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.46335316248266417}
+{"model": "convlstm", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.46429349880556947}
+{"model": "convlstm", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.4636664545430279}
+{"model": "convlstm", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.46125487497853085}
+{"model": "convlstm", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.4804109055053145}
+{"model": "convlstm", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.46784104963974654}
+{"model": "convlstm", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.4789251096272801}
+{"model": "convlstm", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.4861278652162757}
+{"model": "convlstm", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.4853918687245692}
+{"model": "convlstm", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.4893820545670349}
+{"model": "convlstm", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5003663493351036}
+{"model": "convlstm", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.49487387922477966}
+{"model": "convlstm", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.49563944362415563}
+{"model": "convlstm", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5100663123022015}
+{"model": "convlstm", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5070544699601196}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/convlstm-raw-seed43.pt
+{"normalized_rmse": 0.6636419980829851, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.0062105443340914}
+{"model": "simvp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6203501795634571}
+{"model": "simvp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5751707171608136}
+{"model": "simvp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5519668401722975}
+{"model": "simvp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5421006449124055}
+{"model": "simvp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5493872375693762}
+{"model": "simvp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5525309670107447}
+{"model": "simvp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.5508317637655067}
+{"model": "simvp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5556381480775405}
+{"model": "simvp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.5689494405107051}
+{"model": "simvp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.566993619099316}
+{"model": "simvp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.5652415029449608}
+{"model": "simvp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5719866494262174}
+{"model": "simvp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5751197270114159}
+{"model": "simvp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5789926800739932}
+{"model": "simvp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5717127609464454}
+{"model": "simvp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.5778957560790657}
+{"model": "simvp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5822270265550215}
+{"model": "simvp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.580936139451838}
+{"model": "simvp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5737642101159718}
+{"model": "simvp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5825867408128745}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-seed43.pt
+{"normalized_rmse": 0.7195070402680827, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.399566744684438}
+{"model": "simvp", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.6248369193500137}
+{"model": "simvp", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.5741923176441507}
+{"model": "simvp", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.5515585863544914}
+{"model": "simvp", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.5426891686722958}
+{"model": "simvp", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.5499629904486532}
+{"model": "simvp", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.5601591305814315}
+{"model": "simvp", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.561447229939873}
+{"model": "simvp", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.5622938822279714}
+{"model": "simvp", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.572870332705204}
+{"model": "simvp", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.5680522764968026}
+{"model": "simvp", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.577417615173132}
+{"model": "simvp", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.5748731309621204}
+{"model": "simvp", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.5807765885450994}
+{"model": "simvp", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.5790457398039307}
+{"model": "simvp", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.5781989100616997}
+{"model": "simvp", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.58140837685388}
+{"model": "simvp", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.5879951257669427}
+{"model": "simvp", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.5899682101641318}
+{"model": "simvp", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.5843743913829402}
+{"model": "simvp", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.5895170532403035}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-kl_entropy-seed43.pt
+{"normalized_rmse": 0.7231273527931206, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.4254582421630344}
+{"model": "simvp", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5865442702978736}
+{"model": "simvp", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.5442577683578124}
+{"model": "simvp", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.5317173928815603}
+{"model": "simvp", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.5239370843756788}
+{"model": "simvp", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.5198713393341301}
+{"model": "simvp", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.5163522388771913}
+{"model": "simvp", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.5281630647953018}
+{"model": "simvp", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.541319857305447}
+{"model": "simvp", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.5334235182733137}
+{"model": "simvp", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.537832289329802}
+{"model": "simvp", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.5426303173577075}
+{"model": "simvp", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.540731109367124}
+{"model": "simvp", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.5426860864926956}
+{"model": "simvp", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.5408068445472209}
+{"model": "simvp", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.5410363247337148}
+{"model": "simvp", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.5477214108477376}
+{"model": "simvp", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.5558428590213089}
+{"model": "simvp", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.5510976920411916}
+{"model": "simvp", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.5507929490924033}
+{"model": "simvp", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.5611001818201237}
+/workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742/simvp-raw-seed43.pt
+{"normalized_rmse": 0.708047128705882, "persistence_normalized_rmse": 0.9570846451587312, "wind_speed_rmse_mps": 2.2109210841655527}
+{
+  "mlp/climate_manifold/latent/none/joint/full/fresh/pinn_statistical": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7219044632413169,
+    "sample_std_normalized_rmse": 0.002716735335331355,
+    "scored_runs": 3
+  },
+  "mlp/climate_manifold/latent/none/joint/full/fresh/pinn_statistical:kl_entropy": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7234129679773273,
+    "sample_std_normalized_rmse": 0.001590010485721971,
+    "scored_runs": 3
+  },
+  "mlp/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7116340662849848,
+    "sample_std_normalized_rmse": 0.007228615759527156,
+    "scored_runs": 3
+  },
+  "neural_ode/climate_manifold/latent/none/joint/full/fresh/pinn_statistical": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7221630621197237,
+    "sample_std_normalized_rmse": 0.002680262222716568,
+    "scored_runs": 3
+  },
+  "neural_ode/climate_manifold/latent/none/joint/full/fresh/pinn_statistical:kl_entropy": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7208095966305299,
+    "sample_std_normalized_rmse": 0.0031596194487253943,
+    "scored_runs": 3
+  },
+  "neural_ode/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7151251348831219,
+    "sample_std_normalized_rmse": 0.007548102422427065,
+    "scored_runs": 3
+  },
+  "climode/climate_manifold/latent/none/joint/full/fresh/pinn_statistical": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7148471739317829,
+    "sample_std_normalized_rmse": 0.007122577681509741,
+    "scored_runs": 3
+  },
+  "climode/climate_manifold/latent/none/joint/full/fresh/pinn_statistical:kl_entropy": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7123832863549514,
+    "sample_std_normalized_rmse": 0.008949711628623793,
+    "scored_runs": 3
+  },
+  "climode/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7616561668462077,
+    "sample_std_normalized_rmse": 0.0021896781422252438,
+    "scored_runs": 3
+  },
+  "convlstm/climate_manifold/latent/none/joint/full/fresh/pinn_statistical": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6948173760287162,
+    "sample_std_normalized_rmse": 0.0013832171985907649,
+    "scored_runs": 3
+  },
+  "convlstm/climate_manifold/latent/none/joint/full/fresh/pinn_statistical:kl_entropy": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6944745852549,
+    "sample_std_normalized_rmse": 0.003826525772361187,
+    "scored_runs": 3
+  },
+  "convlstm/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6684141354133132,
+    "sample_std_normalized_rmse": 0.005693714211411126,
+    "scored_runs": 3
+  },
+  "simvp/climate_manifold/latent/none/joint/full/fresh/pinn_statistical": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7232754815292249,
+    "sample_std_normalized_rmse": 0.0034544039172863137,
+    "scored_runs": 3
+  },
+  "simvp/climate_manifold/latent/none/joint/full/fresh/pinn_statistical:kl_entropy": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.720101377623649,
+    "sample_std_normalized_rmse": 0.002826892603536325,
+    "scored_runs": 3
+  },
+  "simvp/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.7069182500895427,
+    "sample_std_normalized_rmse": 0.0028429457352571277,
+    "scored_runs": 3
+  }
+}
+2026-09-29T00:23:59Z FLOW_OFF_DONE /workspace/climate_manifold-pairwise/runs/pinn_statistical_flow_off_20260928_125742

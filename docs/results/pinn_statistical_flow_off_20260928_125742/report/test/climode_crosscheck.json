@@ -1,0 +1,278 @@
+{
+  "reference": "Aalto-QuML/ClimODE utils.evaluation_rmsd_mm / evaluation_acc_mm",
+  "compared_against": "climate_manifold.downstream.climode_metrics.ClimODEMetrics",
+  "note": "One stored validation case per run; aggregate scores cover all validation origins.",
+  "runs": [
+    {
+      "run": "climode-pinn_statistical-kl_entropy-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.721987452991576e-16,
+      "max_abs_acc_difference": 5.551115123125783e-16
+    },
+    {
+      "run": "climode-pinn_statistical-kl_entropy-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.7117289949731924e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-pinn_statistical-kl_entropy-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.768430530024802e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-pinn_statistical-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.833681935730137e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-pinn_statistical-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.1839993659042552e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-pinn_statistical-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.655490865912662e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "climode-raw-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.095563245872259e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "climode-raw-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.9638031525506416e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "climode-raw-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.681694735854636e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "convlstm-pinn_statistical-kl_entropy-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.843875608589128e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "convlstm-pinn_statistical-kl_entropy-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.0465628574228955e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "convlstm-pinn_statistical-kl_entropy-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.0568717555095156e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "convlstm-pinn_statistical-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.014725383538055e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "convlstm-pinn_statistical-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.6830257414790644e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "convlstm-pinn_statistical-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.208100161780893e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "convlstm-raw-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.016873034981715e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "convlstm-raw-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.108609309305344e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "convlstm-raw-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.060356523119111e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "mlp-pinn_statistical-kl_entropy-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.2556511910910854e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "mlp-pinn_statistical-kl_entropy-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.098563171414574e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "mlp-pinn_statistical-kl_entropy-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.7659663303012273e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "mlp-pinn_statistical-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.3021199422591814e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "mlp-pinn_statistical-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.918765702361794e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "mlp-pinn_statistical-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.6953573790396775e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "mlp-raw-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.0829575412913555e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "mlp-raw-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.624194178512294e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "mlp-raw-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.00979770560028e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "neural_ode-pinn_statistical-kl_entropy-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.3468300415863537e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-pinn_statistical-kl_entropy-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.0580877199859706e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-pinn_statistical-kl_entropy-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.671551591316824e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "neural_ode-pinn_statistical-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.504086582155057e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-pinn_statistical-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.122623234491429e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-pinn_statistical-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.995188157877301e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-raw-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.2043330292062743e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-raw-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.8482848409737067e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "neural_ode-raw-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.097241753112939e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "simvp-pinn_statistical-kl_entropy-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.0752232283175456e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "simvp-pinn_statistical-kl_entropy-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.9709664130884463e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "simvp-pinn_statistical-kl_entropy-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.005341777405718e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "simvp-pinn_statistical-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.0045420626124833e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "simvp-pinn_statistical-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.072394603594021e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "simvp-pinn_statistical-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 2.8211605062806725e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "simvp-raw-seed19",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.2320728167430134e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    },
+    {
+      "run": "simvp-raw-seed43",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.786682914614494e-16,
+      "max_abs_acc_difference": 3.3306690738754696e-16
+    },
+    {
+      "run": "simvp-raw-seed7",
+      "origin_time": "1971-12-18T12:00:00.000000000",
+      "max_relative_rmse_difference": 3.117679152304516e-16,
+      "max_abs_acc_difference": 4.440892098500626e-16
+    }
+  ],
+  "passed": true
+}

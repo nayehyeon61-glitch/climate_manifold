@@ -1,0 +1,95 @@
+2026-09-28T23:54:58Z waiting for sweep runner 77709
+2026-09-29T00:24:58Z sweep finished: 45 validation reports
+2026-09-29T00:24:58Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-kl_entropy-seed19
+{"normalized_rmse": 0.7307944089327756, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.225224358011919}
+2026-09-29T00:32:43Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-kl_entropy-seed43
+{"normalized_rmse": 0.7106391271352527, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1415593187954647}
+2026-09-29T00:40:30Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-kl_entropy-seed7
+{"normalized_rmse": 0.7264527038976755, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1539242522757314}
+2026-09-29T00:48:20Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-seed19
+{"normalized_rmse": 0.7329110430270397, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.220124457604492}
+2026-09-29T00:56:26Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-seed43
+{"normalized_rmse": 0.7162090795517062, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1409287383971827}
+2026-09-29T01:04:32Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-pinn_statistical-seed7
+{"normalized_rmse": 0.7210496951002203, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.169116545239949}
+2026-09-29T01:12:07Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-raw-seed19
+{"normalized_rmse": 0.7779193531171014, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.4663594175571553}
+2026-09-29T01:19:46Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-raw-seed43
+{"normalized_rmse": 0.7753950206289275, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.452505457209245}
+2026-09-29T01:27:32Z test: runs/pinn_statistical_flow_off_20260928_125742/climode-raw-seed7
+{"normalized_rmse": 0.7734796098839984, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.460426708167343}
+2026-09-29T01:35:43Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-kl_entropy-seed19
+{"normalized_rmse": 0.6990317164399074, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1880734057915845}
+2026-09-29T01:38:04Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-kl_entropy-seed43
+{"normalized_rmse": 0.7059087169475947, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1906930372791416}
+2026-09-29T01:40:25Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-kl_entropy-seed7
+{"normalized_rmse": 0.7043454524981813, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2183399216965762}
+2026-09-29T01:42:41Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-seed19
+{"normalized_rmse": 0.7042484634189142, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2191497684106465}
+2026-09-29T01:45:06Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-seed43
+{"normalized_rmse": 0.7044729322052146, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.203480977301541}
+2026-09-29T01:47:26Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-pinn_statistical-seed7
+{"normalized_rmse": 0.7037176563491022, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.210529655081892}
+2026-09-29T01:49:55Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-raw-seed19
+{"normalized_rmse": 0.6803763721371716, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.0279024411410327}
+2026-09-29T01:51:26Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-raw-seed43
+{"normalized_rmse": 0.6681551529890356, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.0294340899665118}
+2026-09-29T01:52:43Z test: runs/pinn_statistical_flow_off_20260928_125742/convlstm-raw-seed7
+{"normalized_rmse": 0.6726165005335352, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.029421987387969}
+2026-09-29T01:54:03Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-kl_entropy-seed19
+{"normalized_rmse": 0.7353890636386332, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.300746294466728}
+2026-09-29T01:56:55Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-kl_entropy-seed43
+{"normalized_rmse": 0.7312188747609084, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.278668321623324}
+2026-09-29T01:59:43Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-kl_entropy-seed7
+{"normalized_rmse": 0.7352420276766437, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.239493842024393}
+2026-09-29T02:02:13Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-seed19
+{"normalized_rmse": 0.7339356966135251, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.3062068682498174}
+2026-09-29T02:04:43Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-seed43
+{"normalized_rmse": 0.7294281163961782, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.255113794326309}
+2026-09-29T02:07:32Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-pinn_statistical-seed7
+{"normalized_rmse": 0.7339442026166424, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2214201393356006}
+2026-09-29T02:10:05Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-raw-seed19
+{"normalized_rmse": 0.715885189868856, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1787217744681575}
+2026-09-29T02:11:22Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-raw-seed43
+{"normalized_rmse": 0.7228462410344464, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2293635848671345}
+2026-09-29T02:12:45Z test: runs/pinn_statistical_flow_off_20260928_125742/mlp-raw-seed7
+{"normalized_rmse": 0.7306442514998314, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1644714228381443}
+2026-09-29T02:14:12Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-kl_entropy-seed19
+{"normalized_rmse": 0.7308487710793582, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2444012117596506}
+2026-09-29T02:16:48Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-kl_entropy-seed43
+{"normalized_rmse": 0.7310423945485685, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.268597271690715}
+2026-09-29T02:19:44Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-kl_entropy-seed7
+{"normalized_rmse": 0.7338815944792783, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2449567242539405}
+2026-09-29T02:22:45Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-seed19
+{"normalized_rmse": 0.7360193276961017, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.316269229982575}
+2026-09-29T02:26:00Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-seed43
+{"normalized_rmse": 0.7281180896253256, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2427357898741964}
+2026-09-29T02:29:01Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-pinn_statistical-seed7
+{"normalized_rmse": 0.7340763192316392, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2200218793999773}
+2026-09-29T02:31:40Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-raw-seed19
+{"normalized_rmse": 0.7205468626294484, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1734217001177427}
+2026-09-29T02:33:23Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-raw-seed43
+{"normalized_rmse": 0.7231339634239209, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2253341726068956}
+2026-09-29T02:35:26Z test: runs/pinn_statistical_flow_off_20260928_125742/neural_ode-raw-seed7
+{"normalized_rmse": 0.7351743942845244, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.1601910327707685}
+2026-09-29T02:37:22Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-kl_entropy-seed19
+{"normalized_rmse": 0.7369710507335091, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.3320356518791634}
+2026-09-29T02:39:22Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-kl_entropy-seed43
+{"normalized_rmse": 0.7378642450816814, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.4881414109254494}
+2026-09-29T02:41:34Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-kl_entropy-seed7
+{"normalized_rmse": 0.7353019620611304, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.41908213848272}
+2026-09-29T02:43:32Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-seed19
+{"normalized_rmse": 0.73990469867843, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.3797693571106504}
+2026-09-29T02:45:25Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-seed43
+{"normalized_rmse": 0.7348328928461292, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.4665793281445296}
+2026-09-29T02:47:24Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-pinn_statistical-seed7
+{"normalized_rmse": 0.7421047163934621, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.3976157766389905}
+2026-09-29T02:49:20Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-raw-seed19
+{"normalized_rmse": 0.7221733328038, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.334604827371745}
+2026-09-29T02:50:34Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-raw-seed43
+{"normalized_rmse": 0.7209720690519383, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.242301882775679}
+2026-09-29T02:51:48Z test: runs/pinn_statistical_flow_off_20260928_125742/simvp-raw-seed7
+{"normalized_rmse": 0.7286465281872129, "persistence_normalized_rmse": 0.9746963504702134, "wind_speed_rmse_mps": 2.2848862938083663}
+{"split": "validation", "runs": 45, "groups": 15, "crosscheck_passed": true, "output": "runs/pinn_statistical_flow_off_20260928_125742/report/validation"}
+{"split": "test", "runs": 45, "groups": 15, "crosscheck_passed": true, "output": "runs/pinn_statistical_flow_off_20260928_125742/report/test"}
+2026-09-29T02:54:08Z POST_SWEEP_DONE
