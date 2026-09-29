@@ -6,7 +6,7 @@ read -r -a families <<< "${MODELS:-neural_ode climode}"
 spatial_sequence=0
 for family in "${families[@]}"; do
   case "$family" in
-    convlstm|simvp)
+    convlstm|simvp|fourcastnet|climax)
       spatial_sequence=1
       [[ "${TRAINING_MODE:-joint}" == joint ]] || { echo "$family requires TRAINING_MODE=joint" >&2; exit 2; }
       [[ "${LATENT_LAYOUT:-spatial}" == spatial ]] || { echo "$family requires LATENT_LAYOUT=spatial" >&2; exit 2; }
@@ -28,7 +28,8 @@ read -r -a seeds <<< "${SEEDS:-7 19 43}"
 [[ ${#families[@]} -gt 0 && ${#seeds[@]} -gt 0 ]] || { echo 'MODELS and SEEDS must be nonempty' >&2; exit 2; }
 for family in "${families[@]}"; do
   case "$family" in
-    mlp|neural_ode|climode|convlstm|simvp) ;;
+    mlp|neural_ode|climode|convlstm|simvp|fourcastnet|climax) ;;
+    graphcast|graphcast_official) echo 'GraphCast uses scripts/run_graphcast_comparison.sh with its official JAX runtime' >&2; exit 2;;
     *) echo "Unsupported primary model: $family" >&2; exit 2;;
   esac
 done
@@ -81,6 +82,7 @@ for seed in "${seeds[@]}"; do
         --climode-step-hours "${CLIMODE_STEP_HOURS:-1}" \
         --latent-max-speed "${LATENT_MAX_SPEED:-2}" --latent-max-acceleration "${LATENT_MAX_ACCELERATION:-1}" \
         --hidden-dim "${HIDDEN_DIM:-128}" --horizon-steps "${HORIZON_STEPS:-20}" \
+        --weather-depth "${WEATHER_DEPTH:-4}" --weather-patch-size "${WEATHER_PATCH_SIZE:-2}" \
         --window-stride "${WINDOW_STRIDE:-4}" --max-windows "${MAX_WINDOWS:-0}" \
         --seed "$seed" --device "${DEVICE:-cpu}"
       "$PYTHON" -m climate_manifold.downstream.evaluate --checkpoint "$prefix.pt" \

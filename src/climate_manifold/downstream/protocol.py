@@ -18,7 +18,7 @@ def experiment_contract(config):
                      and latent_layout == 'spatial' and training_mode == 'joint')
     matched_raw = (bridge == 'raw' and cfg.get('raw_backend', 'legacy') == 'matched'
                    and latent_layout == 'spatial' and training_mode == 'joint')
-    sequence = cfg['model'] in ('convlstm', 'simvp') and _sequence_supported(cfg)
+    sequence = cfg['model'] in ('convlstm', 'simvp', 'fourcastnet', 'climax') and _sequence_supported(cfg)
     primary = ((cfg['model'] in ('mlp', 'neural_ode', 'persistence') or latent_climode or matched_raw or sequence)
                and bridge in ('raw', 'latent') and cfg['anchor'] == 'none')
     return {
@@ -45,12 +45,12 @@ def validate_experiment(config, requested):
     if requested not in ('primary', 'auxiliary'):
         raise ValueError('Experiment must be primary or auxiliary')
     cfg = vars(config) if not isinstance(config, dict) else config
-    if cfg['model'] in ('convlstm', 'simvp') and not _sequence_supported(cfg):
-        raise ValueError('ConvLSTM/SimVP require joint spatial latent or matched raw forecasting, anchor=none')
+    if cfg['model'] in ('convlstm', 'simvp', 'fourcastnet', 'climax') and not _sequence_supported(cfg):
+        raise ValueError('Spatial sequence/weather models require joint spatial latent or matched raw forecasting, anchor=none')
     contract = experiment_contract(config)
     if requested == 'primary' and contract['suite'] != 'primary':
         raise ValueError('Primary experiments require raw or encoder -> latent model -> decoder, '
-                         'anchor=none and MLP/Neural ODE or joint spatial latent/matched-raw ClimODE/ConvLSTM/SimVP '
+                         'anchor=none and MLP/Neural ODE or joint spatial latent/matched-raw ClimODE/ConvLSTM/SimVP/FourCastNet/ClimaX '
                          '(raw persistence is allowed). Use --experiment auxiliary for legacy raw '
                          'or decoded ClimODE, decoded grids or residual anchoring.')
     return {**contract, 'suite': requested}

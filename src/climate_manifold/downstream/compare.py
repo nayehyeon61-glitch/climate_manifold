@@ -3,6 +3,7 @@ import argparse
 import csv
 import json
 import math
+import re
 from itertools import combinations
 from pathlib import Path
 import numpy as np
@@ -178,6 +179,55 @@ def _validate_family_inputs(group):
             raise ValueError('Cannot pool different implementation versions as same-family raw seeds')
 
 
+def _validate_weather_provenance(group):
+    """Keep pinned weather cores and common capacity fixed across raw/E/F/D arms.
+
+    State channels, variable names and spatial resolution deliberately differ
+    between these arms. This check does not imply equal parameter counts or
+    reproduction of a published pretrained benchmark. Older model families
+    retain their existing report contract.
+    """
+    if not group or group[0]['config']['model'] not in ('fourcastnet', 'climax'):
+        return
+    family = group[0]['config']['model']
+    text_fields = ('family', 'implementation', 'upstream_source', 'upstream_commit',
+                   'implementation_variant')
+    architecture = {'depth': ('weather_depth', 4),
+                    'patch_size': ('weather_patch_size', 2),
+                    'hidden_dim': ('hidden_dim', 128)}
+    first = None
+    for row in group:
+        provenance = row.get('predictor_provenance')
+        if not isinstance(provenance, dict):
+            raise ValueError(f'{family} comparisons require predictor_provenance')
+        for key in text_fields:
+            if not isinstance(provenance.get(key), str) or not provenance[key].strip():
+                raise ValueError('Invalid predictor_provenance.'+key)
+        if provenance['family'] != family:
+            raise ValueError('predictor_provenance.family differs from model')
+        if provenance['implementation'] != row.get('implementation'):
+            raise ValueError('predictor_provenance.implementation differs from report')
+        if re.fullmatch(r'[0-9a-fA-F]{40}', provenance['upstream_commit']) is None:
+            raise ValueError('predictor_provenance.upstream_commit must pin a full commit SHA')
+        for key, (config_key, default) in architecture.items():
+            value = provenance.get(key)
+            configured = row['config'].get(config_key, default)
+            if (isinstance(value, bool) or not isinstance(value, int) or value < 1
+                    or isinstance(configured, bool) or not isinstance(configured, int)
+                    or configured < 1):
+                raise ValueError('Invalid predictor_provenance.'+key)
+            if value != configured:
+                raise ValueError('predictor_provenance.'+key+' differs from '+config_key)
+        if not isinstance(provenance.get('pretrained'), bool):
+            raise ValueError('Invalid predictor_provenance.pretrained')
+        common = {key: provenance[key] for key in (*text_fields, *architecture, 'pretrained')}
+        if first is not None:
+            for key, value in common.items():
+                if value != first[key]:
+                    raise ValueError('Unfair comparison: mismatched predictor_provenance.'+key)
+        first = common
+
+
 def _validate_transport(group):
     """Check declared grid-index scaling; it is not exact geographic equivalence."""
     transport=[row for row in group if row['config']['model']=='climode' and
@@ -301,6 +351,7 @@ def compare(reports,output,climode_reference_reports=None):
     # remain part of training_contract.
     for family in {row['config']['model'] for row in data}:
         group=[row for row in data if row['config']['model']==family]
+        _validate_weather_provenance(group)
         _validate_constraint_pairs(group)
         _validate_family_inputs(group)
         _validate_transport(group)

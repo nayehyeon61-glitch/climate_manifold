@@ -11,6 +11,11 @@ SEQUENCE_IMPLEMENTATIONS = {
     'convlstm': 'convlstm_time_conditioned_adaptation_v1',
     'simvp': 'simvp_gsta_lead_conditioned_adaptation_v1',
 }
+WEATHER_IMPLEMENTATIONS = {
+    'fourcastnet': 'fourcastnet_afno_context_adaptation_v1',
+    'climax': 'climax_variable_token_adaptation_v1',
+}
+SPATIAL_IMPLEMENTATIONS = {**SEQUENCE_IMPLEMENTATIONS, **WEATHER_IMPLEMENTATIONS}
 
 
 @dataclass(frozen=True)
@@ -33,9 +38,11 @@ class PredictorConfig:
     # Historical raw checkpoints used global MLPs or the original ClimODE
     # backend. Keep that layout unless a new matched spatial control is chosen.
     raw_backend: str = 'legacy'
+    weather_depth: int = 4
+    weather_patch_size: int = 2
 
     def __post_init__(self):
-        if self.model not in ('mlp','neural_ode','climode','persistence',*SEQUENCE_IMPLEMENTATIONS):
+        if self.model not in ('mlp','neural_ode','climode','persistence',*SPATIAL_IMPLEMENTATIONS):
             raise ValueError('Unknown downstream model')
         if self.bridge not in ManifoldBridge.MODES or self.anchor not in ('none','origin'):
             raise ValueError('Invalid bridge/anchor')
@@ -47,14 +54,14 @@ class PredictorConfig:
             raise ValueError('Latent layout must be global or spatial')
         if self.raw_backend not in ('legacy', 'matched'):
             raise ValueError('Raw backend must be legacy or matched')
-        if self.model in SEQUENCE_IMPLEMENTATIONS:
+        if self.model in SPATIAL_IMPLEMENTATIONS:
             if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
                     or self.bridge not in ('raw', 'latent')
                     or self.bridge == 'raw' and self.raw_backend != 'matched'):
-                raise ValueError('ConvLSTM/SimVP require joint spatial latent or matched raw forecasting')
+                raise ValueError('Spatial sequence/weather models require joint spatial latent or matched raw forecasting')
         if self.raw_backend == 'matched' and self.bridge == 'raw':
             if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
-                    or self.model not in ('mlp', 'neural_ode', 'climode', *SEQUENCE_IMPLEMENTATIONS)):
+                    or self.model not in ('mlp', 'neural_ode', 'climode', *SPATIAL_IMPLEMENTATIONS)):
                 raise ValueError('Matched raw controls require a supported joint spatial predictor')
         if self.training_mode == 'joint' and (self.model == 'persistence' or self.anchor != 'none'):
             raise ValueError('Joint training requires a trainable predictor and anchor=none')
@@ -71,6 +78,9 @@ class PredictorConfig:
                 raise ValueError('Latent ClimODE requires joint encoder/predictor/decoder training')
         if min(self.hidden_dim,self.ode_substeps,self.velocity_iterations) < 1:
             raise ValueError('Model widths/integration counts must be positive')
+        if any(isinstance(v, bool) or not isinstance(v, int) or v < 1
+               for v in (self.weather_depth, self.weather_patch_size)):
+            raise ValueError('Weather depth and patch size must be positive integers')
         if not math.isfinite(self.climode_step_hours) or not 0 < self.climode_step_hours <= 6:
             raise ValueError('ClimODE step_hours must be in (0,6]')
         if any(not math.isfinite(v) or v<=0 for v in (self.latent_max_speed,self.latent_max_acceleration)):
@@ -138,6 +148,23 @@ class ForecastPipeline(nn.Module):
             else:
                 self.predictor = HistoryPredictor(dimension,manifold.config.history_steps,config.hidden_dim,
                     info_dim if config.condition_information and config.bridge=='raw' else 0, config.model, config.ode_substeps)
+        elif config.model in WEATHER_IMPLEMENTATIONS:
+            if config.model == 'fourcastnet':
+                from .fourcastnet import FourCastNetPredictor
+                constructor = FourCastNetPredictor
+                extra = {'forecast_step_hours': selected.config.step_hours}
+            else:
+                from .climax import ClimaXPredictor
+                constructor = ClimaXPredictor
+                extra = {'variable_names': ([v['name'] for v in schema['variables']]
+                                            if matched_raw else None)}
+            self.predictor = constructor(
+                selected.config.grid if matched_raw else selected.config.latent_grid,
+                selected.config.history_steps, hidden=config.hidden_dim,
+                history_dt_hours=selected.config.history_stride*selected.config.step_hours,
+                periodic_lon=periodic_lon if matched_raw else selected.core.physics.periodic_lon,
+                information_channels=information_channels, depth=config.weather_depth,
+                patch_size=config.weather_patch_size, **extra)
         elif config.model in SEQUENCE_IMPLEMENTATIONS:
             if config.model == 'convlstm':
                 from .convlstm import ConvLSTMPredictor

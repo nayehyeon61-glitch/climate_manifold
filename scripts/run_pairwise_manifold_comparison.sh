@@ -30,7 +30,8 @@ read -r -a levels <<< "${PINN_LEVELS:-500 850}"
 }
 for family in "${families[@]}"; do
   case "$family" in
-    neural_ode|climode|mlp|convlstm|simvp) ;;
+    neural_ode|climode|mlp|convlstm|simvp|fourcastnet|climax) ;;
+    graphcast|graphcast_official) echo 'GraphCast uses its official JAX runtime: scripts/run_graphcast_comparison.sh (raw external baseline)' >&2; exit 2;;
     *) echo "Unsupported pairwise model: $family" >&2; exit 2;;
   esac
 done
@@ -225,6 +226,7 @@ for seed in "${seeds[@]}"; do
         --climode-step-hours "${CLIMODE_STEP_HOURS:-1}" \
         --latent-max-speed "${LATENT_MAX_SPEED:-2}" --latent-max-acceleration "${LATENT_MAX_ACCELERATION:-1}" \
         --hidden-dim "${HIDDEN_DIM:-128}" --horizon-steps "${HORIZON_STEPS:-20}" \
+        --weather-depth "${WEATHER_DEPTH:-4}" --weather-patch-size "${WEATHER_PATCH_SIZE:-2}" \
         --window-stride "${WINDOW_STRIDE:-4}" --max-windows "${MAX_WINDOWS:-0}" \
         --seed "$seed" --device "${DEVICE:-cpu}"
       "$PYTHON" -m climate_manifold.downstream.evaluate --checkpoint "$prefix.pt" \

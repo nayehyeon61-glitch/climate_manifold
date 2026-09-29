@@ -21,9 +21,16 @@ D_rec는 D를 복사해 초기화하지만 파라미터를 공유하지 않습�
 직접 예측 비교군을 포함해 기본 **2개 예측기 × 4개 실험군 = seed당 8회**를 실행합니다.
 기본 batch는 **16**, seed는 `7 19 43`입니다. `SEEDS=7`이면 총 8회,
 `PAIRS=pinn_statistical SEEDS=7`이면 직접 예측 비교군을 포함해 총 4회입니다.
-선택 예측기는 `mlp neural_ode climode convlstm simvp`이며, 기본 2종은 그대로 유지합니다.
-5종 모두에서 PINN+Statistical과 Raw를 비교하면 seed당 **10회**입니다.
+선택 예측기는 `mlp neural_ode climode convlstm simvp fourcastnet climax`이며, 기본 2종은 그대로 유지합니다.
+7종 모두에서 PINN+Statistical(W2)과 Raw를 비교하면 seed당 **14회**입니다.
+W2와 KL-entropy를 모두 선택하면 공통 Raw를 포함해 seed당 **21회**입니다.
 ConvLSTM·SimVP-gSTA는 시간 조건을 반영한 joint spatial adaptation입니다.
+FourCastNet(AFNO)·ClimaX는 **공식 backbone 코드를 포함**하고, 현재 격자·변수에 맞춰 처음부터 학습합니다.
+논문의 사전학습 모델·원본 해상도·학습 규모를 재현한 결과로 해석하지 않습니다.
+GraphCast는 **공식 JAX 구현을 사용하는 별도 Raw 비교군**이며 E→F→D 연결을 지원하지 않습니다.
+[새 기상모델 비교군과 실행 명령어](docs/WEATHER_BASELINES.md)를 참고하세요.
+기존 `climode`의 기본 matched 경로는 공식 ClimODE 자체가 아닌 **수정 transport 모델**입니다.
+공식 vendored ClimODE는 별도의 legacy raw/decoded 경로입니다.
 기존 `run_model_comparison.sh`는 이전의 예측 궤적 제약 실험을 재현합니다.
 
 | 구성 | 포함 내용 |
@@ -47,7 +54,7 @@ Python 3.10 이상, Linux/macOS 환경을 권장합니다. CUDA 학습은 사용
 PyTorch를 먼저 설치하세요. 아래 명령은 저장소 루트에서 실행합니다.
 
 ```bash
-git clone --branch feature/split-manifold-pairwise-constraints https://github.com/nayehyeon61-glitch/climate_manifold.git
+git clone --branch feature/official-weather-baselines https://github.com/nayehyeon61-glitch/climate_manifold.git
 cd climate_manifold
 python -m venv .venv
 source .venv/bin/activate
