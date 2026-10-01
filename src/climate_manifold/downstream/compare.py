@@ -144,7 +144,7 @@ def _validate_constraint_pairs(group):
         decoder = constraint_decoder_from_payload(row)
         contract = normalize_constraint_contract(row.get('constraint_contract'))
         if (set(contract.get('groups', [])) != SUPPORTED_CONSTRAINT_GROUPS[pair]
-                or contract.get('observed_pair') != 'origin-6h,origin'
+                or contract.get('observed_pair') != f"origin-{(row.get('representation_config') or {}).get('step_hours',6)}h,origin"
                 or contract.get('pinn_tendency_supervision') is not False):
             raise ValueError('Invalid reconstruction constraint_contract')
         common = {key:value for key,value in contract.items() if key not in ('groups','pair')}

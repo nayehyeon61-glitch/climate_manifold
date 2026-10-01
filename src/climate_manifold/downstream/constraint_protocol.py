@@ -39,14 +39,14 @@ def _validate_scope_flags(contract, decoder, *, require_all):
             raise ValueError('Invalid reconstruction constraint_contract: inconsistent '+name)
 
 
-def make_constraint_contract(pair, groups, decoder):
+def make_constraint_contract(pair, groups, decoder, *, step_hours=6):
     """Build the current observed-pair contract with an explicit decoder scope."""
     decoder = _validate_decoder(decoder)
     return {
         'version': CONSTRAINT_CONTRACT_VERSION,
         'pair': pair,
         'groups': sorted(groups) if isinstance(groups, (set, frozenset)) else list(groups),
-        'observed_pair': 'origin-6h,origin',
+        'observed_pair': f'origin-{step_hours}h,origin',
         'decoder': decoder,
         **_decoder_scope(decoder),
         'reconstruction': _RECONSTRUCTION[decoder],

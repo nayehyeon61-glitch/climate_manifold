@@ -183,6 +183,10 @@ def load_predictor(path,device='cpu'):
     # Historical split checkpoints retain their original surface + information
     # objective; absence of the new field must not relabel an old experiment.
     constraint_decoder=constraint_decoder_from_payload(p)
+    if p.get('constraint_contract') is not None:
+        step=p['a_metadata']['config']['step_hours']
+        if p['constraint_contract'].get('observed_pair') != f'origin-{step}h,origin':
+            raise ValueError('Checkpoint observed constraint interval differs from its archive step')
     statistical_config_from_payload(p)
     statistical_flow_config_from_payload(p)
     conditional_config=conditional_flow_config_from_payload(p)
@@ -313,11 +317,20 @@ def initialize_manifold(args):
         config = ManifoldConfig(state_dim=states.shape[1], grid=field_grid(schema),
             history_steps=args.history_steps, history_stride=args.history_stride,
             manifold_dim=args.manifold_dim, hidden_dim=args.manifold_hidden_dim,
-            context_dim=args.context_dim, horizon_steps=20, step_hours=6,
+            context_dim=args.context_dim,
+            horizon_steps=(args.horizon_steps if schema['forecast_step_hours']==24 else 20),
+            step_hours=schema['forecast_step_hours'],
             representation_kind=args.latent_layout or 'spatial',latent_channels=args.latent_channels,
             spatial_downsample=args.spatial_downsample,spatial_hidden_dim=args.spatial_hidden_dim,
             spatial_variable_conditioning=getattr(args,'spatial_variable_conditioning',False))
         mode = args.mode or ('enriched' if args.information else 'surface')
+    if config.step_hours == 24:
+        if (args.model != 'transformer' or args.training_mode != 'joint' or pretrained
+                or config.representation_kind != 'spatial' or args.bridge not in ('raw','latent','guided')
+                or pair not in (None,'statistical') or args.pinn
+                or getattr(args,'statistical_flow_weight',0.) or getattr(args,'conditional_flow_weight',0.)
+                or pair is None and args.regularization != 'none'):
+            raise ValueError('Daily support requires a fresh joint spatial Transformer with statistical-only or forecast-only objectives; PINN/flow are unsupported')
     if args.horizon_steps > config.horizon_steps:
         raise ValueError('Horizon exceeds the representation data contract')
     if pair and config.history_span_steps < 2:
@@ -539,7 +552,7 @@ def train(args):
     constraint_path=('observed_reconstruction' if split_constraints else
                      'forecast_trajectory' if config.training_mode=='joint' and config.bridge=='latent' else None)
     constraint_contract=(make_constraint_contract(args.constraint_pair,args.constraint_pair.split('_'),
-                         constraint_decoder) if split_constraints else None)
+                         constraint_decoder,step_hours=a.config.step_hours) if split_constraints else None)
     auxiliary_modules=() if model.bridge.manifold is None else (
         model.bridge.manifold.info_head,model.bridge.manifold.pinn,model.reconstruction_decoder,model.conditional_flow)
     auxiliary_ids={id(parameter) for module in auxiliary_modules if module is not None
@@ -607,10 +620,10 @@ def train(args):
             'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal'),
         'objective_semantics':({'forecast':('raw + statistically supervised encoder guide -> Transformer -> physical field; future MSE plus physical-time tendency; manifold forecast decoder unused'
             if config.bridge=='guided' else 'E -> predictor -> D; future field MSE or Gaussian NLL plus physical-time tendency'),
-            'reconstruction':('shared E -> information decoder only on observed origin-6h,origin; surface decoder and predictor bypassed'
+            'reconstruction':(f'shared E -> information decoder only on observed origin-{a.config.step_hours}h,origin; surface decoder and predictor bypassed'
                 if information_only else
-                'shared E -> independent field reconstruction decoder and information decoder on observed origin-6h,origin; forecast D and predictor bypassed'
-                if separate_decoder else 'shared E -> surface and information decoders on observed origin-6h,origin; predictor bypassed'),
+                f'shared E -> independent field reconstruction decoder and information decoder on observed origin-{a.config.step_hours}h,origin; forecast D and predictor bypassed'
+                if separate_decoder else f'shared E -> surface and information decoders on observed origin-{a.config.step_hours}h,origin; predictor bypassed'),
             'statistical':('positive/negative spatial measures relative to training-normalized zero: cellwise JS plus mass MSE on observed reconstructions; not ensemble uncertainty'
                 if statistical_config and statistical_config['kind']=='signed_measure' else
                 ('KL(observed||reconstructed) = cross entropy - observed entropy; area-weighted fixed soft histogram on normalized observed fields; '

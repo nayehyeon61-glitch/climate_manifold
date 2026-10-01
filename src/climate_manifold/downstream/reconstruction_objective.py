@@ -2,7 +2,7 @@
 
 The forecasting branch trains E--F--D separately. This objective never invokes
 F, consumes its predictions, or reads future targets. Its two observed frames
-are origin minus six hours and origin, each encoded with co-located information.
+are origin minus one archive step and origin, with co-located information.
 PINN temporal derivatives therefore describe reconstructed observations, not a
 forecast trajectory. All pairs retain a common pointwise reconstruction anchor;
 the optional constraint families are selected in pairs or statistics alone.
@@ -57,8 +57,8 @@ def _observed_pair(batch, manifold):
             or information.device != states.device or information.dtype != states.dtype):
         raise ValueError('constraint_information must be matching finite floating [batch, 2, information_dim]')
     if (not isinstance(dt, torch.Tensor) or dt.shape != (states.shape[0], 1)
-            or not torch.isfinite(dt).all() or not bool((dt == 6).all())):
-        raise ValueError('constraint_dt_hours must be [batch, 1] consecutive 6h observed intervals')
+            or not torch.isfinite(dt).all() or not bool((dt == manifold.config.step_hours).all())):
+        raise ValueError(f'constraint_dt_hours must be [batch, 1] consecutive {manifold.config.step_hours}h observed intervals')
     return states.detach(), information.detach(), dt.detach().to(states)[:, 0]
 
 

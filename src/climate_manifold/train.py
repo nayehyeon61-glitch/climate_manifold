@@ -64,8 +64,10 @@ def load_checkpoint(path,device='cpu'):
 
 def data_contract(archive,information_path,mode,config,parent=None):
     states,times,schema=load_archive(archive)
-    if [v['name'] for v in schema['variables']]!=['msl','t2m','u10','v10'] or schema['forecast_step_hours']!=6:
-        raise ValueError('This profile requires canonical msl/t2m/u10/v10 and exact6h')
+    step = schema['forecast_step_hours']
+    if ([v['name'] for v in schema['variables']]!=['msl','t2m','u10','v10']
+            or step not in (6,24) or step != config.step_hours):
+        raise ValueError('This profile requires canonical msl/t2m/u10/v10 and matching exact 6h or 24h configuration')
     info=meta=None
     if mode=='enriched':
         if not information_path:raise ValueError('Enriched mode requires --information; missing fields cannot be fabricated')
@@ -88,11 +90,11 @@ def data_contract(archive,information_path,mode,config,parent=None):
             im,isc,its=info.statistics(end)
         elif info is not None:
             im,isc=fit_information(info,meta,end,schema)
-            sh=meta['shape'];d=np.diff(info[:end],axis=0).reshape(-1,*sh)/6
+            sh=meta['shape'];d=np.diff(info[:end],axis=0).reshape(-1,*sh)/step
             w=area_weights(schema)
             avg=(d*w).sum((-2,-1)).mean(0)
             var=((d-avg[None,:,None,None])**2*w).sum((-2,-1)).mean(0)
-            channel=np.maximum(np.sqrt(var),np.maximum(isc.reshape(sh).mean((-2,-1))*1e-3/6,1e-8))
+            channel=np.maximum(np.sqrt(var),np.maximum(isc.reshape(sh).mean((-2,-1))*1e-3/step,1e-8))
             its=np.broadcast_to(channel[:,None,None],sh).copy().reshape(-1).astype(np.float32)
     validate_split(split,config.horizon_steps,len(states)-config.history_span_steps-config.horizon_steps+1)
     end=split['train'][-1]+config.history_span_steps+config.horizon_steps
