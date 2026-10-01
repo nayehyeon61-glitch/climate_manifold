@@ -8,12 +8,12 @@ from contextlib import nullcontext
 
 
 class ManifoldBridge(nn.Module):
-    MODES = ('raw', 'latent', 'decoded')
+    MODES = ('raw', 'latent', 'decoded', 'guided')
 
     def __init__(self, manifold, mode='latent', anchor='none', training_mode='frozen'):
         super().__init__()
         if mode not in self.MODES or anchor not in ('none', 'origin'):
-            raise ValueError('Expected raw/latent/decoded bridge and none/origin anchor')
+            raise ValueError('Expected raw/latent/decoded/guided bridge and none/origin anchor')
         if training_mode not in ('joint', 'frozen'):
             raise ValueError('Training mode must be joint or frozen')
         if training_mode == 'joint' and anchor != 'none':
@@ -21,7 +21,7 @@ class ManifoldBridge(nn.Module):
         if training_mode == 'frozen' and not bool(manifold.core.manifold_ready):
             raise ValueError('Downstream experiments require a sealed, trained representation checkpoint')
         self.mode, self.anchor, self.training_mode = mode, anchor, training_mode
-        self.dimension = manifold.config.manifold_dim if mode == 'latent' else manifold.config.state_dim
+        self.dimension = manifold.config.manifold_dim if mode in ('latent', 'guided') else manifold.config.state_dim
         # Raw baselines do not instantiate unused A parameters.
         self.manifold = manifold if mode != 'raw' else None
         if self.manifold is not None:
@@ -32,7 +32,7 @@ class ManifoldBridge(nn.Module):
                 ae = manifold.core.manifold
                 modules = [ae.encoder, ae.decoder]
                 modules += [getattr(manifold, name, None)
-                            for name in ('information', 'info_head', 'pinn')]
+                            for name in ('information', 'info_head', 'pinn', 'latent_fusion')]
                 for module in modules:
                     if module is not None:
                         module.requires_grad_(True)
@@ -55,11 +55,11 @@ class ManifoldBridge(nn.Module):
         context = torch.no_grad() if self.training_mode == 'frozen' else nullcontext()
         with context:
             q = self.manifold.encode(history, info)
-            return q if self.mode == 'latent' else self.manifold.core.decode(q)
+            return q if self.mode in ('latent', 'guided') else self.manifold.core.decode(q)
 
     def decode(self, features):
         # In frozen mode weights stay fixed but gradients still reach the predictor.
-        return self.manifold.core.decode(features) if self.mode == 'latent' else features
+        return self.manifold.core.decode(features) if self.mode in ('latent', 'guided') else features
 
     def to_fields(self, prediction, origin, encoded_origin):
         fields = self.decode(prediction)

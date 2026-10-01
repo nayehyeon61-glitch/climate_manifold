@@ -22,6 +22,9 @@ CONSTRAINT_GROUPS = {
     'statistical_static': {'statistical', 'static'},
 }
 
+# Preserve the historical three-pair suite; a statistical-only arm is opt-in.
+SUPPORTED_CONSTRAINT_GROUPS = {**CONSTRAINT_GROUPS, 'statistical': {'statistical'}}
+
 
 def _regime(report):
     """Missing metadata identifies the original frozen-representation protocol."""
@@ -38,11 +41,15 @@ def _regime(report):
 
 def _arm(row):
     if row.get('constraint_pair'):
-        name=row['constraint_pair'] + (':kl_entropy' if row.get('statistical_loss') == 'kl_entropy' else '')
+        name=row['constraint_pair'] + (':'+row['statistical_loss'] if row.get('statistical_loss') not in (None, 'w2') else '')
+        if row.get('bridge') == 'guided':
+            name = 'guided:'+row['guide_mode']+':'+name
         flow=row.get('statistical_flow_config')
         conditional=row.get('conditional_flow_config')
         return (name + (':flow='+format(flow['weight'],'.12g') if flow else '')
                 + (':cfm='+format(conditional['weight'],'.12g') if conditional else ''))
+    if row.get('bridge') == 'guided':
+        return 'guided:'+row['guide_mode']+':'+row['regularization']
     if row['representation']=='raw':
         return 'raw'
     if (row['representation']=='climate_manifold' and row['training_mode']=='joint'
@@ -52,7 +59,7 @@ def _arm(row):
 
 
 def _validate_constraint_pairs(group):
-    """Allow reconstruction pairs with direct raw controls, never legacy latent losses."""
+    """Allow raw and validated guided forecast-only controls with observed constraints."""
     split = [row for row in group if row.get('constraint_pair') is not None]
     if not split:
         return
@@ -60,6 +67,26 @@ def _validate_constraint_pairs(group):
         if row.get('constraint_pair') is not None:
             continue
         cfg = row['config']
+        if cfg.get('bridge') == 'guided':
+            if (cfg.get('model') != 'transformer' or cfg.get('training_mode') != 'joint'
+                    or cfg.get('latent_layout') != 'spatial' or cfg.get('anchor') != 'none'
+                    or row.get('initialization') != 'fresh' or row.get('regularization') != 'none'):
+                raise ValueError('Guided forecast-only controls require fresh joint spatial Transformer and regularization=none')
+            if any(row.get(key) is not None for key in (
+                    'constraint_path','constraint_contract','constraint_decoder','split_objective_weights')):
+                raise ValueError('Guided forecast-only controls must not declare a constraint objective')
+            weights = row.get('objective_weights')
+            if (not isinstance(weights, dict) or not weights
+                    or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                           or not math.isfinite(value) or value != 0 for value in weights.values())):
+                raise ValueError('Guided forecast-only controls require zero effective objective_weights')
+            for candidate in split:
+                if candidate['config']['bridge'] != 'guided':
+                    continue
+                for key in ('forecast_parameters','implementation','conditioning'):
+                    if row.get(key) is None or row.get(key) != candidate.get(key):
+                        raise ValueError('Unfair guided constraint comparison: mismatched '+key)
+            continue
         if (cfg.get('bridge') != 'raw' or cfg.get('raw_backend') != 'matched'
                 or cfg.get('training_mode') != 'joint' or cfg.get('anchor') != 'none'
                 or row.get('initialization') != 'fresh' or row.get('regularization') != 'none'):
@@ -108,15 +135,15 @@ def _validate_constraint_pairs(group):
             raise ValueError('Unfair comparison: mismatched pinn_config')
     for row in split:
         pair = row['constraint_pair']
-        if pair not in CONSTRAINT_GROUPS:
+        if pair not in SUPPORTED_CONSTRAINT_GROUPS:
             raise ValueError('Unknown constraint_pair: '+str(pair))
         if row.get('constraint_path') != 'observed_reconstruction':
             raise ValueError('Split experiments require constraint_path=observed_reconstruction')
-        if row['config'].get('bridge') != 'latent' or row['config'].get('training_mode') != 'joint':
-            raise ValueError('Split experiments require jointly trained latent forecasts')
+        if row['config'].get('bridge') not in ('latent', 'guided') or row['config'].get('training_mode') != 'joint':
+            raise ValueError('Split experiments require jointly trained latent or guided forecasts')
         decoder = constraint_decoder_from_payload(row)
         contract = normalize_constraint_contract(row.get('constraint_contract'))
-        if (set(contract.get('groups', [])) != CONSTRAINT_GROUPS[pair]
+        if (set(contract.get('groups', [])) != SUPPORTED_CONSTRAINT_GROUPS[pair]
                 or contract.get('observed_pair') != 'origin-6h,origin'
                 or contract.get('pinn_tendency_supervision') is not False):
             raise ValueError('Invalid reconstruction constraint_contract')
@@ -126,7 +153,8 @@ def _validate_constraint_pairs(group):
         if common_contract is not None and common != common_contract:
             raise ValueError('Unfair comparison: mismatched constraint_contract')
         common_contract = common
-        if row.get('forecast_parameters') is None or row['forecast_parameters'] != first.get('forecast_parameters'):
+        route_first = next(r for r in split if r['config']['bridge'] == row['config']['bridge'])
+        if row.get('forecast_parameters') is None or row['forecast_parameters'] != route_first.get('forecast_parameters'):
             raise ValueError('Unfair comparison: mismatched forecast_parameters')
         weights = row.get('split_objective_weights')
         if not isinstance(weights,dict) or set(weights) != {'reconstruction','pinn','statistical','static'}:
@@ -134,7 +162,7 @@ def _validate_constraint_pairs(group):
         for name, weight in weights.items():
             if isinstance(weight,bool) or not isinstance(weight,(int,float)) or not math.isfinite(weight) or weight < 0:
                 raise ValueError('Invalid split_objective_weights.'+name)
-            active = name=='reconstruction' or name in CONSTRAINT_GROUPS[pair]
+            active = name=='reconstruction' or name in SUPPORTED_CONSTRAINT_GROUPS[pair]
             if active and weight <= 0:
                 raise ValueError('Active constraint needs positive split_objective_weights.'+name)
             if not active and weight != 0:
@@ -146,6 +174,8 @@ def _validate_constraint_pairs(group):
         # Enabling an observed CFM head adds auxiliary parameters. Only compare
         # repeated seeds with the same head presence as capacity-identical.
         same_pair = [r for r in split if r['constraint_pair']==pair
+                     and r['config']['bridge']==row['config']['bridge']
+                     and r['config'].get('guide_mode', 'learned')==row['config'].get('guide_mode', 'learned')
                      and bool(r.get('conditional_flow_config'))==bool(row.get('conditional_flow_config'))]
         for name in ('total_parameters','trainable_parameters','constraint_parameters','implementation'):
             if row.get(name) != same_pair[0].get(name):
@@ -153,7 +183,7 @@ def _validate_constraint_pairs(group):
 
 
 def _comparison_training_contract(row, raw_and_split):
-    """Only the validated auxiliary-route label may differ in direct raw comparisons."""
+    """Only the validated auxiliary-route label differs for raw/guided controls."""
     contract = row.get('training_contract')
     if not raw_and_split:
         return contract
@@ -177,6 +207,41 @@ def _validate_family_inputs(group):
             raise ValueError('Cannot pool different raw_backend implementations as same-family seeds')
         if row.get('implementation')!=raw[0].get('implementation'):
             raise ValueError('Cannot pool different implementation versions as same-family raw seeds')
+
+
+def _validate_guides(group):
+    """A statistical guide is field forecasting, with independently audited inputs."""
+    if not group or group[0]['config']['model'] != 'transformer':
+        return
+    first = group[0]
+    for row in group:
+        cfg = row['config']
+        for key, default in (('hidden_dim', 128), ('transformer_heads', 4),
+                             ('weather_depth', 4), ('weather_patch_size', 2)):
+            if cfg.get(key, default) != first['config'].get(key, default):
+                raise ValueError('Unfair comparison: mismatched '+key)
+        contract = row.get('guide_contract')
+        if cfg['bridge'] != 'guided':
+            if contract is not None:
+                raise ValueError('guide_contract requires bridge=guided')
+            continue
+        mode = cfg.get('guide_mode', 'learned')
+        expected = {
+            'version': 'climate_manifold.statistical_guide.v1', 'mode': mode,
+            'raw_input': True,
+            'guide_input': 'observed_history_encoded_with_origin_information',
+            'fusion': 'joint_raw_guide_token_self_attention',
+            'forecast_output': 'physical_fields', 'forecast_decoder_used': False,
+            'forecast_gradient_to_encoder': mode == 'learned', 'stochastic_sampling': False,
+        }
+        if mode not in ('learned', 'zero') or contract != expected:
+            raise ValueError('Invalid guide_contract')
+        if row.get('representation_config') is None:
+            raise ValueError('Guided comparison requires representation_config')
+    representations = [row for row in group if row['config']['bridge'] in ('latent','guided')]
+    if representations and any(row.get('representation_config') != representations[0].get('representation_config')
+                               for row in representations):
+        raise ValueError('Unfair comparison: mismatched representation_config')
 
 
 def _validate_weather_provenance(group):
@@ -312,7 +377,7 @@ def _direct_effects(pairs):
                      'Raw inputs and spatial latent inputs can differ in channel count, resolution and total parameters; this is a whole-model comparison.',
                      'Matched transport bounds use declared grid-index scaling; pooled grids are not asserted to have exactly equal geographic displacement.',
                      'Forecast-only versus full E/F/D controls isolate added regularization; raw comparisons do not.',
-                     'Positive physical RMSE/CRPS skill or ACC difference favors the E/F/D candidate.']}
+                     'Positive physical RMSE/CRPS skill or ACC difference favors the named latent or guided candidate.']}
 
 
 def _constraint_field_effects(identity, candidate, baseline):
@@ -333,7 +398,7 @@ def _constraint_field_effects(identity, candidate, baseline):
 
 def compare(reports,output,climode_reference_reports=None):
     output=Path(output)
-    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv')) or output.exists():
+    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv','.guide-effects.csv','.route-effects.csv')) or output.exists():
         raise FileExistsError('Choose a new comparison path')
     data=[json.loads(Path(path).read_text()) for path in reports]
     if not data:raise ValueError('At least one evaluation report is required')
@@ -352,12 +417,15 @@ def compare(reports,output,climode_reference_reports=None):
     for family in {row['config']['model'] for row in data}:
         group=[row for row in data if row['config']['model']==family]
         _validate_weather_provenance(group)
+        _validate_guides(group)
         _validate_constraint_pairs(group)
         _validate_family_inputs(group)
         _validate_transport(group)
         first=group[0]
         raw_and_split=(any(row.get('constraint_pair') for row in group)
-                       and any(row['config']['bridge']=='raw' for row in group))
+                       and any(row['config']['bridge']=='raw'
+                               or row['config']['bridge']=='guided' and not row.get('constraint_pair')
+                               for row in group))
         training_contract=_comparison_training_contract(first,raw_and_split)
         if len({_regime(row)['training_mode'] for row in group}) != 1:
             raise ValueError('Unfair comparison: mixed frozen and joint training_mode within '+family)
@@ -394,7 +462,9 @@ def compare(reports,output,climode_reference_reports=None):
         rows.append(dict(model=cfg['model'],bridge=cfg['bridge'],anchor=cfg['anchor'],seed=report['seed'],
             representation=contract['representation'],prediction_space=contract['prediction_space'],
             **_regime(report), representation_sha256=report.get('representation_sha256'),
-            latent_layout=cfg.get('latent_layout','global') if cfg['bridge']=='latent' else None,
+            latent_layout=cfg.get('latent_layout','global') if cfg['bridge'] in ('latent','guided') else None,
+            guide_mode=cfg.get('guide_mode','learned') if cfg['bridge']=='guided' else None,
+            guide_contract=report.get('guide_contract'),
             latent_shape=report.get('latent_shape'),implementation=report.get('implementation'),
             predictor_provenance=report.get('predictor_provenance'),
             raw_backend=cfg.get('raw_backend','legacy') if cfg['bridge']=='raw' else None,
@@ -417,8 +487,10 @@ def compare(reports,output,climode_reference_reports=None):
     groups={}
     for row in rows:
         key='/'.join(row[k] for k in ('model','representation','bridge','anchor','training_mode','regularization','initialization'))
-        if row['constraint_pair']:
+        if row['constraint_pair'] or row['bridge']=='guided':
             key += '/'+row['candidate_arm']
+        if groups.get(key) and row['guide_contract'] != groups[key][0]['guide_contract']:
+            raise ValueError('Cannot pool different guide_contract as seeds within '+key)
         if groups.get(key) and row['conditional_flow_config']!=groups[key][0]['conditional_flow_config']:
             raise ValueError('Cannot pool different conditional_flow_config as seeds within '+key)
         if groups.get(key) and row['statistical_flow_config']!=groups[key][0]['statistical_flow_config']:
@@ -437,10 +509,10 @@ def compare(reports,output,climode_reference_reports=None):
                       'scored_runs':len(scores)} if scores else {'seeds':[x['seed'] for x in group],
                       'mean_normalized_rmse':None,'sample_std_normalized_rmse':None,'scored_runs':0}
     ranking_allowed=same_cases and all(r['finite_forecast_fraction']==1 for r in rows)
-    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[]
+    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[];guide_physical=[];route_physical=[]
     if ranking_allowed and contracts[0]['suite']=='primary':
         indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization']):r
-                 for r in rows if not r['constraint_pair']}
+                 for r in rows if not r['constraint_pair'] and r['bridge'] != 'guided'}
         source={id(row):report for row,report in zip(rows,data)}
         for row in rows:
             if row['representation']!='climate_manifold':continue
@@ -475,15 +547,67 @@ def compare(reports,output,climode_reference_reports=None):
                 paired.append({**identity,
                                'rmse_reduction':error-ours,
                                'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
+        # Hold the guided forecasting path fixed when adding observed encoder
+        # constraints. Auxiliary decoder parameters can differ and stay explicit.
+        guide_controls={(row['model'],row['seed'],row['guide_mode']):row for row in rows
+                        if row['bridge']=='guided' and not row['constraint_pair']
+                        and row['regularization']=='none'}
+        for candidate in rows:
+            if candidate['bridge']!='guided' or not candidate['constraint_pair']:
+                continue
+            baseline=guide_controls.get((candidate['model'],candidate['seed'],candidate['guide_mode']))
+            if baseline is None:
+                continue
+            identity={'model':candidate['model'],'seed':candidate['seed'],
+                'control':baseline['candidate_arm'],'candidate_arm':candidate['candidate_arm'],
+                'training_mode':'joint', 'constraint_pair':candidate['constraint_pair'],
+                'pair_key':candidate['model']+'/'+candidate['candidate_arm']+'/vs_'+baseline['candidate_arm'],
+                'interpretation':'add_observed_encoder_constraints',
+                'baseline_parameters':baseline['total_parameters'],
+                'candidate_parameters':candidate['total_parameters'],
+                'forecast_parameters':candidate['forecast_parameters']}
+            error,ours=baseline['normalized_rmse'],candidate['normalized_rmse']
+            if error is not None and ours is not None:
+                paired.append({**identity,'rmse_reduction':error-ours,
+                    'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
+            guide_physical.extend(_constraint_field_effects(
+                identity,source[id(candidate)],source[id(baseline)]))
         for family,seed in sorted({(r['model'],r['seed']) for r in rows if r['constraint_pair']}):
             variants = sorted(
                 (r for r in rows if r['model']==family and r['seed']==seed and r['constraint_pair']),
-                key=lambda r:(list(CONSTRAINT_GROUPS).index(r['constraint_pair']),
+                key=lambda r:(list(SUPPORTED_CONSTRAINT_GROUPS).index(r['constraint_pair']),
+                              r['bridge']!='latent', r.get('guide_mode')!='zero',
                               r['statistical_loss']=='kl_entropy',
                               (r['statistical_flow_config'] or {}).get('weight',0.),
                               (r['conditional_flow_config'] or {}).get('weight',0.)))
             for baseline,candidate in combinations(variants,2):
                 baseline_arm,candidate_arm=baseline['candidate_arm'],candidate['candidate_arm']
+                if baseline['bridge'] != candidate['bridge']:
+                    if (baseline['constraint_pair'] != candidate['constraint_pair']
+                            or baseline['statistical_loss_config'] != candidate['statistical_loss_config']
+                            or baseline['statistical_flow_config'] != candidate['statistical_flow_config']
+                            or baseline['conditional_flow_config'] != candidate['conditional_flow_config']):
+                        continue
+                    identity={'model':family,'seed':seed,'control':baseline_arm,
+                        'candidate_arm':candidate_arm,'training_mode':'joint',
+                        'pair_key':family+'/'+candidate_arm+'/vs_'+baseline_arm,
+                        'interpretation':'forecasting_route_and_capacity',
+                        'baseline_bridge':baseline['bridge'],'candidate_bridge':candidate['bridge'],
+                        'baseline_parameters':baseline['total_parameters'],
+                        'candidate_parameters':candidate['total_parameters']}
+                    error,ours=baseline['normalized_rmse'],candidate['normalized_rmse']
+                    if error is not None and ours is not None:
+                        paired.append({**identity,'rmse_reduction':error-ours,
+                            'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
+                    route_physical.extend(_constraint_field_effects(
+                        identity,source[id(candidate)],source[id(baseline)]))
+                    continue
+                guide_effect = baseline.get('guide_mode') != candidate.get('guide_mode')
+                if guide_effect and (baseline['constraint_pair'] != candidate['constraint_pair']
+                        or baseline['statistical_loss_config'] != candidate['statistical_loss_config']
+                        or baseline['statistical_flow_config'] != candidate['statistical_flow_config']
+                        or baseline['conditional_flow_config'] != candidate['conditional_flow_config']):
+                    continue
                 same_pair=baseline['constraint_pair']==candidate['constraint_pair']
                 base_kind,new_kind=baseline['statistical_loss'],candidate['statistical_loss']
                 base_flow,new_flow=baseline['statistical_flow_config'],candidate['statistical_flow_config']
@@ -504,8 +628,12 @@ def compare(reports,output,climode_reference_reports=None):
                     'candidate_arm':candidate_arm,'training_mode':'joint',
                     'pair_key':family+'/'+candidate_arm+'/vs_'+baseline_arm}
                 conditional_effect = same_pair and base_kind==new_kind and base_cond!=new_cond
-                flow_effect = same_pair and base_kind==new_kind and not conditional_effect
-                if conditional_effect:
+                flow_effect = same_pair and base_kind==new_kind and base_flow!=new_flow and not conditional_effect
+                if guide_effect:
+                    identity.update(interpretation='change_guide_input',
+                        baseline_guide_mode=baseline['guide_mode'], candidate_guide_mode=candidate['guide_mode'],
+                        baseline_parameters=baseline['total_parameters'], candidate_parameters=candidate['total_parameters'])
+                elif conditional_effect:
                     identity.update(interpretation='change_observed_conditional_flow',
                         constraint_pair=candidate['constraint_pair'],statistical_loss=new_kind,
                         baseline_conditional_flow_weight=(base_cond or {}).get('weight',0.),
@@ -524,8 +652,10 @@ def compare(reports,output,climode_reference_reports=None):
                         statistical_flow_weight=(new_flow or {}).get('weight',0.),
                         conditional_flow_weight=(new_cond or {}).get('weight',0.))
                 else:
-                    base_groups=CONSTRAINT_GROUPS[baseline['constraint_pair']]
-                    candidate_groups=CONSTRAINT_GROUPS[candidate['constraint_pair']]
+                    base_groups=SUPPORTED_CONSTRAINT_GROUPS[baseline['constraint_pair']]
+                    candidate_groups=SUPPORTED_CONSTRAINT_GROUPS[candidate['constraint_pair']]
+                    if len(base_groups) != 2 or len(candidate_groups) != 2:
+                        continue  # Single-group ablations are not pair replacements.
                     identity.update(interpretation='replace_one_constraint_group_with_one_fixed',
                         fixed_group=next(iter(base_groups & candidate_groups)),
                         removed_group=next(iter(base_groups-candidate_groups)),
@@ -534,7 +664,7 @@ def compare(reports,output,climode_reference_reports=None):
                 if error is not None and ours is not None:
                     paired.append({**identity,'rmse_reduction':error-ours,
                         'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
-                destination=conditional_physical if conditional_effect else flow_physical if flow_effect else statistical_physical if same_pair else constraint_physical
+                destination=guide_physical if guide_effect else conditional_physical if conditional_effect else flow_physical if flow_effect else statistical_physical if same_pair else constraint_physical
                 destination.extend(_constraint_field_effects(
                     identity,source[id(candidate)],source[id(baseline)]))
         for row in paired:
@@ -550,6 +680,7 @@ def compare(reports,output,climode_reference_reports=None):
         'statistical_loss_effects':statistical_physical,
         'statistical_flow_effects':flow_physical,
         'conditional_flow_effects':conditional_physical,
+        'guide_effects':guide_physical,'route_effects':route_physical,
         'direct_comparison':_direct_effects(direct_pairs),
         'same_successful_origins':same_cases,'ranking_allowed':ranking_allowed,
         'notes':['Inspect per-variable and per-lead physical scores in the original reports.',
@@ -562,6 +693,10 @@ def compare(reports,output,climode_reference_reports=None):
                  'Flow ablations hold the base W2/KL objective fixed; flow also supplies future dynamic-information supervision through auxiliary decoders, so its effects include that added supervision.',
                  'Observed conditional-flow ablations add a separate auxiliary network and future-information supervision; their effects include capacity and supervision changes, not direct gradient to the forecast predictor.',
                  'PINN pairs may add auxiliary closure parameters; forecast and constraint parameter counts are reported separately.',
+                 'Guided forecasts predict physical fields from raw observations and encoded observed-history guidance; they have no latent forecast trajectory.',
+                 'Guided versus raw or latent comparisons change routes and parameter counts; matched Transformer width/depth does not imply equal capacity.',
+                 'Guided forecast-only versus constrained guide holds the forecasting path fixed; the effect includes observed reconstruction/statistical supervision and any added auxiliary decoder capacity, not the statistical loss alone.',
+                 'Zero-guide ablations replace guide tokens by zero but retain the same information-route supervision; they do not constitute stochastic encoder experiments.',
                  'Raw-versus-latent and plain-AE comparisons change representation or supervision and are whole-model comparisons, not causal evidence for physical constraints.',
                  'Latent coordinate errors are within-representation diagnostics, never cross-encoder rankings.',
                  'Enriched A supplies extra dynamic information to decoded ClimODE; use surface A to isolate representation alone.']}
@@ -579,10 +714,12 @@ def compare(reports,output,climode_reference_reports=None):
     write_table(output.with_suffix('.statistical-effects.csv'),result['statistical_loss_effects'])
     write_table(output.with_suffix('.flow-effects.csv'),result['statistical_flow_effects'])
     write_table(output.with_suffix('.conditional-flow-effects.csv'),result['conditional_flow_effects'])
+    write_table(output.with_suffix('.guide-effects.csv'),result['guide_effects'])
+    write_table(output.with_suffix('.route-effects.csv'),result['route_effects'])
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
         for row in rows:
-            structured = ('conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
+            structured = ('guide_contract','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
             writer.writerow({**row,**{key:json.dumps(row[key],sort_keys=True) for key in structured}})
     return result
 

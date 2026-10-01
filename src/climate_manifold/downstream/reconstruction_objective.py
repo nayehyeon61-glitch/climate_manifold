@@ -5,7 +5,7 @@ F, consumes its predictions, or reads future targets. Its two observed frames
 are origin minus six hours and origin, each encoded with co-located information.
 PINN temporal derivatives therefore describe reconstructed observations, not a
 forecast trajectory. All pairs retain a common pointwise reconstruction anchor;
-the three optional constraint families are selected exactly two at a time.
+the optional constraint families are selected in pairs or statistics alone.
 By default a dedicated surface reconstruction decoder and the information
 decoder are used. The forecast decoder is never shared by that default route.
 The previous information-only and shared-decoder routes remain selectable.
@@ -21,7 +21,7 @@ from .constraint_protocol import CONSTRAINT_DECODERS
 from .statistical_objective import make_statistical_config, validate_statistical_config, spatial_statistical_loss
 
 
-PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static')
+PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static', 'statistical')
 DECODER_MODES = CONSTRAINT_DECODERS
 
 
@@ -74,8 +74,11 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
     reconstruction and statistical losses use dynamic information alone. The surface
     decoder is not invoked and its reported losses are zero; its forecasting
     path remains trainable. ``surface_and_information`` restores the legacy
-    equal average of surface and dynamic-information terms. W2/KL losses are
-    spatial marginals, neither ensemble CRPS nor temporal distribution losses.
+    equal average of surface and dynamic-information terms. Guided raw forecasts
+    only allow the two independent auxiliary-decoder modes; their forecast
+    output head is never used by this objective. W2/KL losses are spatial
+    marginals; signed_measure retains spatial support and signed magnitudes.
+    None of these are ensemble CRPS or temporal distribution losses.
     All modes exclude static information from these terms. ``static`` compares
     both reconstructed endpoints to origin terrain. PINN contributes physical
     residuals and closure regularization without duplicated tendency loss.
@@ -91,8 +94,10 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
     manifold = getattr(bridge, 'manifold', None)
     if manifold is None or not hasattr(manifold, 'temporal'):
         raise ValueError('Split constraints require a trainable ClimateManifold representation')
-    if bridge.mode != 'latent' or bridge.anchor != 'none':
-        raise ValueError('Split constraints require an unanchored latent bridge')
+    if bridge.mode not in ('latent', 'guided') or bridge.anchor != 'none':
+        raise ValueError('Split constraints require an unanchored latent bridge or guided bridge')
+    if bridge.mode == 'guided' and decoder_mode == 'surface_and_information':
+        raise ValueError('Guided constraints require information_only or a separate reconstruction decoder')
     if manifold.info_head is None or manifold.info_metadata is None:
         raise ValueError('Split constraints require enriched inputs and an information decoder')
     if weights.pinn and manifold.pinn is None:
@@ -146,7 +151,9 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
         'physics', 'information', 'static', 'information_spatial_quantile',
         'reconstruction_surface', 'statistical_surface', 'statistical_information', 'pinn_total',
         'statistical_total', 'statistical_kl_entropy', 'statistical_target_entropy',
-        'statistical_reconstructed_entropy', 'statistical_cross_entropy')}
+        'statistical_reconstructed_entropy', 'statistical_cross_entropy',
+        'statistical_signed_measure', 'statistical_signed_spatial_js',
+        'statistical_signed_mass_mse')}
     values['reconstruction_information'] = mse(decoded[:, :, ~static], info_target[:, :, ~static])
     values['reconstruction'] = values['reconstruction_information']
     if surface is not None:
@@ -168,9 +175,13 @@ def reconstruction_constraint_losses(pipeline, batch, weights, constraint_pair, 
         if statistical_config['kind'] == 'w2':
             # Preserve the old W2 metric; never put KL values in a quantile column.
             values['information_spatial_quantile'] = values['statistical_total']
-        else:
+        elif statistical_config['kind'] == 'kl_entropy':
             values['statistical_kl_entropy'] = values['statistical_total']
             for key in ('target_entropy', 'reconstructed_entropy', 'cross_entropy'):
+                values['statistical_'+key] = combined_scores[key]
+        else:
+            values['statistical_signed_measure'] = values['statistical_total']
+            for key in ('signed_spatial_js', 'signed_mass_mse'):
                 values['statistical_'+key] = combined_scores[key]
     if weights.static:
         # Endpoint 1 is the observed origin, never a future label.

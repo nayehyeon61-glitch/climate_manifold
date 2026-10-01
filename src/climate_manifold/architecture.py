@@ -25,6 +25,9 @@ class ManifoldConfig:
     latent_channels: int = 32
     spatial_downsample: int = 2
     spatial_hidden_dim: int = 64
+    # Opt-in variable-specific encoders / information decoders. Omission keeps
+    # legacy convolutional checkpoint keys and the additive information path.
+    spatial_variable_conditioning: bool = False
 
     def __post_init__(self):
         object.__setattr__(self, 'grid', tuple(self.grid))
@@ -34,6 +37,10 @@ class ManifoldConfig:
             raise ValueError('grid must be (variables, lat, lon) and multiply to state_dim')
         if self.representation_kind not in ('global', 'spatial'):
             raise ValueError('representation_kind must be global or spatial')
+        if not isinstance(self.spatial_variable_conditioning, bool):
+            raise ValueError('spatial_variable_conditioning must be a boolean')
+        if self.spatial_variable_conditioning and self.representation_kind != 'spatial':
+            raise ValueError('spatial_variable_conditioning requires a spatial representation')
         names = ('history_steps', 'history_stride', 'horizon_steps', 'step_hours',
                  'manifold_dim', 'hidden_dim', 'context_dim', 'latent_channels',
                  'spatial_downsample', 'spatial_hidden_dim')

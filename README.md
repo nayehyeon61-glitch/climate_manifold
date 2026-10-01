@@ -4,6 +4,15 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
+**추가 경로: Raw + 통계 latent guide → Transformer → 미래 기상장.**
+`--model transformer --bridge guided`는 원자료와 encoder의 공간 latent를 함께 입력합니다.
+예측용 manifold decoder는 잠그고, 별도 관측 복원·정보 decoder가 공유 encoder에 통계 제약을 줍니다.
+encoder와 Transformer는 동시에 학습합니다. 이 guide는 통계 손실로 학습하는 결정론적 표현이며
+확률적 latent sampling을 뜻하지 않습니다. W2/KL-entropy/signed-measure 선택과 변수별 encoder를 지원합니다.
+[구조·비교군·학습 명령](docs/statistical_guide_transformer.md)을 참고하세요.
+`scripts/run_guided_transformer_comparison.sh`는 Raw / E→Transformer→D / Raw+guide를 비교하고,
+`INCLUDE_ZERO_GUIDE=1`로 같은 guide token 구조에 값을 0으로 넣는 대조군을 추가합니다.
+
 **이 브랜치의 새 실험:** 예측 `E → F → D`와 관측 복원 `E → D_rec`, `E → D_I`의 제약 경로를
 분리하고 **PINN+Statistical / PINN+Static / Statistical+Static**을 비교합니다.
 기본 `CONSTRAINT_DECODER=separate_surface_and_information`에서는 **별도 장복원 decoder D_rec**가

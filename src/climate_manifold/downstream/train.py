@@ -16,7 +16,8 @@ from ..model import ClimateManifold
 from ..train import load_checkpoint as load_a, data_contract, write_json, source_commit
 from ..physical_information import digest, information_digest
 from ..temporal_supervision import TemporalWindowDataset, TemporalObjective
-from .pipeline import ForecastPipeline, PredictorConfig, SEQUENCE_IMPLEMENTATIONS, WEATHER_IMPLEMENTATIONS, SPATIAL_IMPLEMENTATIONS
+from .pipeline import (ForecastPipeline, PredictorConfig, SEQUENCE_IMPLEMENTATIONS,
+                       WEATHER_IMPLEMENTATIONS, SPATIAL_IMPLEMENTATIONS, TRANSFORMER_IMPLEMENTATION)
 from .protocol import validate_experiment
 from .constraint_protocol import CONSTRAINT_DECODERS, make_constraint_contract, constraint_decoder_from_payload
 from .statistical_objective import STATISTICAL_LOSSES, statistical_config_from_args, statistical_config_from_payload
@@ -27,12 +28,34 @@ from .conditional_flow import (conditional_flow_config_from_args, conditional_fl
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
-CONSTRAINT_PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static')
+CONSTRAINT_PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static', 'statistical')
+
+
+def guide_contract(config):
+    if config.bridge != 'guided':
+        return None
+    return {'version': 'climate_manifold.statistical_guide.v1',
+            'mode': config.guide_mode, 'raw_input': True,
+            'guide_input': 'observed_history_encoded_with_origin_information',
+            'fusion': 'joint_raw_guide_token_self_attention',
+            'forecast_output': 'physical_fields', 'forecast_decoder_used': False,
+            'forecast_gradient_to_encoder': config.guide_mode == 'learned',
+            'stochastic_sampling': False}
 
 
 def sequence_predictor_provenance(model):
     """Record the local forecast adaptations separately from original benchmarks."""
     family = model.config.model
+    if family == 'transformer':
+        return {'family': family, 'implementation': TRANSFORMER_IMPLEMENTATION,
+                'implementation_variant': model.predictor.implementation_variant,
+                'history_steps': model.a_config.history_steps,
+                'history_dt_hours': model.a_config.history_stride*model.a_config.step_hours,
+                'hidden_dim': model.config.hidden_dim, 'depth': model.config.weather_depth,
+                'patch_size': model.config.weather_patch_size,
+                'num_heads': model.config.transformer_heads, 'uncertainty': 'deterministic',
+                'prediction_mode': 'direct_per_lead',
+                'reference_equivalence': 'local Transformer, not a published weather-model reproduction'}
     if family not in SPATIAL_IMPLEMENTATIONS:
         return None
     predictor = model.predictor
@@ -164,6 +187,8 @@ def load_predictor(path,device='cpu'):
     statistical_flow_config_from_payload(p)
     conditional_config=conditional_flow_config_from_payload(p)
     config=PredictorConfig(**p['config'])
+    if p.get('guide_contract') != guide_contract(config):
+        raise ValueError('Checkpoint guide_contract disagrees with its predictor config')
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
         raise ValueError('Frozen checkpoints require a sealed A')
     representation=None
@@ -204,6 +229,15 @@ def prepare_constraint_pair(args):
     statistical_config_from_args(args, pair)
     statistical_flow_config_from_args(args, pair)
     conditional_flow_config_from_args(args, pair)
+    if args.bridge == 'guided':
+        if (args.model != 'transformer' or args.training_mode != 'joint'
+                or args.latent_layout == 'global' or args.anchor != 'none'):
+            raise ValueError('Guided forecasting requires a joint spatial Transformer with anchor=none')
+        if (getattr(args, 'statistical_flow_weight', 0.)
+                or getattr(args, 'conditional_flow_weight', 0.)):
+            raise ValueError('Guided forecasting keeps both distribution flow objectives disabled')
+        if pair is None and args.regularization != 'none':
+            raise ValueError('Guided forecasting requires observed --constraint-pair or --regularization none')
     if pair is None:
         if getattr(args,'constraint_decoder',None) is not None:
             raise ValueError('--constraint-decoder requires --constraint-pair')
@@ -214,10 +248,12 @@ def prepare_constraint_pair(args):
     if decoder not in CONSTRAINT_DECODERS:
         raise ValueError('Unknown --constraint-decoder')
     args.constraint_decoder=decoder
-    if (args.training_mode!='joint' or args.bridge!='latent'
+    if (args.training_mode!='joint' or args.bridge not in ('latent', 'guided')
             or args.representation!='climate_manifold' or args.anchor!='none'
             or args.regularization!='full'):
-        raise ValueError('--constraint-pair requires joint latent climate_manifold, anchor=none and regularization=full')
+        raise ValueError('--constraint-pair requires joint latent or guided climate_manifold, anchor=none and regularization=full')
+    if args.bridge == 'guided' and decoder == 'surface_and_information':
+        raise ValueError('Guided forecasting requires an independent constraint decoder')
     if args.mode=='surface' or not args.information:
         raise ValueError('--constraint-pair requires enriched --information inputs')
     # These names describe the older forecast-trajectory objective. New names
@@ -234,7 +270,7 @@ def prepare_constraint_pair(args):
             args.pinn_weight=.1
         active['pinn']=args.pinn_weight
     elif args.pinn or (args.pinn_weight is not None and args.pinn_weight!=0):
-        raise ValueError('statistical_static excludes --pinn and positive --pinn-weight')
+        raise ValueError(pair+' excludes --pinn and positive --pinn-weight')
     if 'static' in groups:
         active['static']=args.static_weight
     if 'statistical' in groups:
@@ -265,7 +301,11 @@ def initialize_manifold(args):
             raise ValueError('Pretrained global A weights cannot initialize a spatial encoder; use --initialization fresh')
         if not pretrained:
             config=replace(config,representation_kind=layout,latent_channels=args.latent_channels,
-                spatial_downsample=args.spatial_downsample,spatial_hidden_dim=args.spatial_hidden_dim)
+                spatial_downsample=args.spatial_downsample,spatial_hidden_dim=args.spatial_hidden_dim,
+                spatial_variable_conditioning=getattr(args,'spatial_variable_conditioning',False))
+        elif (getattr(args,'spatial_variable_conditioning',False)
+              and not config.spatial_variable_conditioning):
+            raise ValueError('Pretrained A lacks variable conditioning; use --initialization fresh')
     else:
         if args.training_mode == 'frozen' or args.initialization == 'pretrained':
             raise ValueError('Frozen/pretrained mode requires --a-checkpoint')
@@ -275,7 +315,8 @@ def initialize_manifold(args):
             manifold_dim=args.manifold_dim, hidden_dim=args.manifold_hidden_dim,
             context_dim=args.context_dim, horizon_steps=20, step_hours=6,
             representation_kind=args.latent_layout or 'spatial',latent_channels=args.latent_channels,
-            spatial_downsample=args.spatial_downsample,spatial_hidden_dim=args.spatial_hidden_dim)
+            spatial_downsample=args.spatial_downsample,spatial_hidden_dim=args.spatial_hidden_dim,
+            spatial_variable_conditioning=getattr(args,'spatial_variable_conditioning',False))
         mode = args.mode or ('enriched' if args.information else 'surface')
     if args.horizon_steps > config.horizon_steps:
         raise ValueError('Horizon exceeds the representation data contract')
@@ -289,15 +330,15 @@ def initialize_manifold(args):
             raise ValueError('Pretrained initialization requires a sealed A checkpoint')
         if args.pinn and reference.pinn is None:
             raise ValueError('This pretrained A has no PINN; use fresh initialization with --pinn')
-        if pair=='statistical_static' and reference.pinn is not None:
-            raise ValueError('statistical_static cannot inherit a pretrained PINN; use --initialization fresh')
+        if pair in ('statistical_static','statistical') and reference.pinn is not None:
+            raise ValueError(pair+' cannot inherit a pretrained PINN; use --initialization fresh')
         model, metadata = reference, {k:v for k,v in parent.items() if k != 'model'}
         if args.bridge=='raw':
             model=RawFieldContract(config,data['schema'],data['mean'],data['scale'],
                                    data['information_metadata'],sealed=True)
     else:
         pc = parent.get('pinn_config') if parent else None
-        if pair=='statistical_static':
+        if pair in ('statistical_static','statistical'):
             pc=None
         if args.pinn:
             from ..hybrid_pinn import HybridPINNConfig
@@ -343,6 +384,13 @@ def objective_weights(args, model):
             static=args.static_weight if 'static' in groups else 0.,
             distribution=args.statistical_weight if 'statistical' in groups else 0.,
             pinn=args.pinn_weight if 'pinn' in groups else 0.)
+    if args.bridge == 'guided':
+        # Explicit forecast-only ablation. No unused reconstruction/physics
+        # objective is silently applied to a nonexistent latent forecast path.
+        if args.regularization != 'none':
+            raise ValueError('Guided objectives require observed constraints or regularization=none')
+        return JointObjectiveWeights(reconstruction=0., physics=0., information=0.,
+                                     static=0., distribution=0., pinn=0.)
     enabled = args.training_mode == 'joint' and args.bridge != 'raw'
     full = enabled and args.regularization == 'full'
     latent = args.bridge == 'latent'
@@ -393,7 +441,8 @@ def train(args):
         velocity_iterations=args.velocity_iterations,representation=args.representation,training_mode=args.training_mode,
         latent_layout=a.config.representation_kind,latent_max_speed=args.latent_max_speed,
         latent_max_acceleration=args.latent_max_acceleration,raw_backend=raw_backend,
-        weather_depth=args.weather_depth,weather_patch_size=args.weather_patch_size)
+        weather_depth=args.weather_depth,weather_patch_size=args.weather_patch_size,
+        transformer_heads=getattr(args,'transformer_heads',4), guide_mode=getattr(args,'guide_mode','learned'))
     experiment=validate_experiment(config,args.experiment)
     if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
         raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
@@ -507,7 +556,8 @@ def train(args):
                                    if representation_payload else None),
         'lead_hours':leads.cpu().tolist(),'options':vars(args),'best_epoch':best_epoch,'best_selection_state_mse':best,
         'selection_split':'calibration','training_seconds':time.perf_counter()-started,'source_commit':source_commit(),
-        'implementation':(SPATIAL_IMPLEMENTATIONS[args.model] if args.model in SPATIAL_IMPLEMENTATIONS
+        'implementation':(TRANSFORMER_IMPLEMENTATION if args.model=='transformer'
+            else SPATIAL_IMPLEMENTATIONS[args.model] if args.model in SPATIAL_IMPLEMENTATIONS
             else 'raw_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='raw' and raw_backend=='matched'
             else 'raw_spatial_'+args.model if args.bridge=='raw' and raw_backend=='matched'
             else 'latent_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='latent'
@@ -515,8 +565,9 @@ def train(args):
             else 'spatial_'+args.model if args.bridge=='latent' and a.config.representation_kind=='spatial'
             else 'local_'+args.model),
         'predictor_provenance':sequence_predictor_provenance(model),
+        'guide_contract':guide_contract(config),
         'constants_sha256':digest(args.constants) if constants is not None else None,
-        'latent_shape':list(a.config.latent_grid) if a.config.representation_kind=='spatial' and config.bridge=='latent' else None,
+        'latent_shape':list(a.config.latent_grid) if a.config.representation_kind=='spatial' and config.bridge in ('latent','guided') else None,
         'forecast_state_grid':list(a.config.grid if config.bridge!='latent' else a.config.latent_grid)
             if config.bridge!='latent' or a.config.representation_kind=='spatial' else None,
         'transport_contract':({'velocity_bound_cells_per_day':model.predictor.max_speed,
@@ -535,7 +586,7 @@ def train(args):
         'trainable_parameters':sum(x.numel() for x in parameters),'total_parameters':sum(x.numel() for x in model.parameters()),
         'forecast_parameters':forecast_parameters,'constraint_parameters':constraint_parameters,
         'conditioning':{'direct_origin_information':bool(config.condition_information and config.bridge=='raw'
-                            and (args.model in ('mlp','neural_ode',*SPATIAL_IMPLEMENTATIONS) or args.model=='climode' and raw_backend=='matched') and p['mode']=='enriched'),
+                            and (args.model in ('mlp','neural_ode','transformer',*SPATIAL_IMPLEMENTATIONS) or args.model=='climode' and raw_backend=='matched') and p['mode']=='enriched'),
                         'manifold_origin_information':bool(config.bridge!='raw' and p['mode']=='enriched'),
                         'climode_static_constants':constants is not None,
                         'observed_information_available':p['mode']=='enriched'},
@@ -554,12 +605,15 @@ def train(args):
         'representation_training':'jointly_trained' if config.training_mode=='joint' and config.bridge!='raw' else 'frozen' if config.bridge!='raw' else 'none',
         'latent_coordinates':('not_applicable' if config.bridge=='raw' else
             'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal'),
-        'objective_semantics':({'forecast':'E -> predictor -> D; future field MSE or Gaussian NLL plus physical-time tendency',
+        'objective_semantics':({'forecast':('raw + statistically supervised encoder guide -> Transformer -> physical field; future MSE plus physical-time tendency; manifold forecast decoder unused'
+            if config.bridge=='guided' else 'E -> predictor -> D; future field MSE or Gaussian NLL plus physical-time tendency'),
             'reconstruction':('shared E -> information decoder only on observed origin-6h,origin; surface decoder and predictor bypassed'
                 if information_only else
                 'shared E -> independent field reconstruction decoder and information decoder on observed origin-6h,origin; forecast D and predictor bypassed'
                 if separate_decoder else 'shared E -> surface and information decoders on observed origin-6h,origin; predictor bypassed'),
-            'statistical':(('KL(observed||reconstructed) = cross entropy - observed entropy; area-weighted fixed soft histogram on normalized observed fields; '
+            'statistical':('positive/negative spatial measures relative to training-normalized zero: cellwise JS plus mass MSE on observed reconstructions; not ensemble uncertainty'
+                if statistical_config and statistical_config['kind']=='signed_measure' else
+                ('KL(observed||reconstructed) = cross entropy - observed entropy; area-weighted fixed soft histogram on normalized observed fields; '
                 + ('dynamic information only' if information_only else 'mean of surface and dynamic-information losses'))
                 if statistical_config and statistical_config['kind']=='kl_entropy' else
                 'selected dynamic-information spatial marginal quantiles only; surface and sea-level-pressure W2 disabled; not ensemble CRPS'
@@ -600,11 +654,13 @@ def parser():
         help='Joint spatial default: matched spatial forecast core without E/D; legacy preserves former raw models')
     for name,value in dict(latent_channels=32,spatial_downsample=2,spatial_hidden_dim=64).items():
         p.add_argument('--'+name.replace('_','-'),type=int,default=value)
+    p.add_argument('--spatial-variable-conditioning',action='store_true',
+        help='Independent variable encoders, spatial fusion and variable-specific information decoder heads')
     p.add_argument('--mode',choices=['surface','enriched'],help='Default: enriched when --information is supplied')
     p.add_argument('--regularization',choices=['full','none'],default='full',
-        help='none keeps common forecast/tendency/reconstruction losses for matched joint controls')
+        help='none keeps common forecast/tendency losses; reconstruction remains for latent controls but is off for guided controls')
     p.add_argument('--constraint-pair',choices=CONSTRAINT_PAIRS,default=None,
-        help='Opt-in paired constraints on an observed reconstruction path, separate from forecasting')
+        help='Observed reconstruction constraints: two-family pairs or statistical alone')
     p.add_argument('--constraint-decoder',choices=CONSTRAINT_DECODERS,default=None,
         help='With --constraint-pair: separate_surface_and_information (default) uses an independent field decoder; information_only disables field reconstruction; surface_and_information shares forecast D')
     p.add_argument('--statistical-weight',type=float,default=.1,
@@ -622,7 +678,7 @@ def parser():
     p.add_argument('--statistical-flow-quantiles',type=int,default=None,
         help='Positive flow weight only: area-weighted quantile count (default 32)')
     p.add_argument('--statistical-loss',choices=STATISTICAL_LOSSES,default=None,
-        help='With statistical constraint pairs: w2 (default) or kl_entropy = KL(observed||reconstructed)')
+        help='Observed statistics: w2 value marginal, kl_entropy value histogram, or signed_measure spatial sign/mass')
     p.add_argument('--kl-bins',type=int,default=None,help='KL only: total bins including two open tails (default 64)')
     p.add_argument('--kl-range',type=float,default=None,help='KL only: boundaries span +/- this normalized value (default 6)')
     p.add_argument('--kl-bandwidth',type=float,default=None,help='KL only: sigmoid smoothing width in normalized units (default 0.2)')
@@ -635,13 +691,16 @@ def parser():
     p.add_argument('--pinn-levels',nargs='+',type=int,default=[500,850])
     p.add_argument('--pinn-weight',type=float,default=None,help='Default: enabled PINN config weight, otherwise zero')
     p.add_argument('--information');p.add_argument('--constants')
-    p.add_argument('--model',choices=['mlp','neural_ode','climode',*SPATIAL_IMPLEMENTATIONS,'persistence'],default='neural_ode')
-    p.add_argument('--weather-depth',type=int,default=4,help='FourCastNet/ClimaX backbone block count; custom-data models trained from scratch')
-    p.add_argument('--weather-patch-size',type=int,default=2,help='FourCastNet/ClimaX patch size; must divide both raw and latent spatial grids')
+    p.add_argument('--model',choices=['mlp','neural_ode','climode','transformer',*SPATIAL_IMPLEMENTATIONS,'persistence'],default='neural_ode')
+    p.add_argument('--transformer-heads',type=int,default=4)
+    p.add_argument('--guide-mode',choices=['learned','zero'],default='learned',
+        help='Guided Transformer: learned statistics guide or same-size zero-guide ablation; no random sampling')
+    p.add_argument('--weather-depth',type=int,default=4,help='FourCastNet/ClimaX/Transformer block count; custom-data models trained from scratch')
+    p.add_argument('--weather-patch-size',type=int,default=2,help='FourCastNet/ClimaX/Transformer patch size; Transformer pads partial patches')
     p.add_argument('--experiment',choices=['primary','auxiliary'],default='primary')
     p.add_argument('--representation',choices=['climate_manifold','plain_ae'],default='climate_manifold')
     p.add_argument('--ae-checkpoint')
-    p.add_argument('--bridge',choices=['raw','latent','decoded'],default='latent')
+    p.add_argument('--bridge',choices=['raw','latent','decoded','guided'],default='latent')
     p.add_argument('--anchor',choices=['none','origin'],default='none')
     for name,value in dict(epochs=20,batch_size=2,hidden_dim=128,ode_substeps=2,horizon_steps=20,
                            window_stride=4,max_windows=0,seed=7,velocity_iterations=20).items():

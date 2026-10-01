@@ -1,16 +1,25 @@
-"""Selectable spatial-marginal objectives, never predictive uncertainty scores."""
+"""Selectable field-statistics objectives, never predictive uncertainty scores.
+
+W2/KL compare value marginals. ``signed_measure`` instead compares positive and
+negative normalized-field mass at its original geographic locations.
+"""
 import math
 import torch
 
 from .joint_objective import spatial_quantile_loss
 
-STATISTICAL_LOSSES = ('w2', 'kl_entropy')
+STATISTICAL_LOSSES = ('w2', 'kl_entropy', 'signed_measure')
 
 
 def make_statistical_config(kind='w2', *, bins=64, value_range=6., bandwidth=.2):
     if kind == 'w2':
         return {'kind': 'w2', 'quantiles': 32,
                 'estimator': 'area_weighted_inverse_cdf_midpoints_v1'}
+    if kind == 'signed_measure':
+        return {'kind': kind, 'epsilon': 1e-6,
+                'zero_reference': 'normalized_field_zero',
+                'spatial_weight': 1., 'mass_weight': 1.,
+                'estimator': 'area_weighted_signed_spatial_js_and_mass_v1'}
     if kind != 'kl_entropy':
         raise ValueError('Unknown statistical_loss: '+str(kind))
     if isinstance(bins, bool) or not isinstance(bins, int) or not 3 <= bins <= 512:
@@ -119,4 +128,53 @@ def spatial_statistical_loss(prediction, target, area, config=None):
     config = make_statistical_config() if config is None else validate_statistical_config(config)
     if config['kind'] == 'w2':
         return {'loss': spatial_quantile_loss(prediction, target, area, quantiles=config['quantiles'])}
+    if config['kind'] == 'signed_measure':
+        return spatial_signed_measure(prediction, target, area, config)
     return spatial_kl_entropy(prediction, target, area, config)
+
+
+def spatial_signed_measure(prediction, target, area, config):
+    """Compare signed spatial patterns AND their area-weighted magnitude.
+
+    For each field, m_i^+ = a_i relu(x_i) and m_i^- = a_i relu(-x_i),
+    where geographic areas a sum to one. Signs refer to zero in the existing
+    normalized input coordinates (the training normalization reference), never
+    zero physical pressure. No per-example centering or sorting is performed.
+    Thus the spatial support and its positive/negative locations are preserved.
+
+    Each sign contributes a JS divergence of location probabilities and the
+    squared difference of total mass. Probabilities use an epsilon pseudomass
+    distributed according to area: (m_i + eps a_i)/(sum_i m_i + eps).
+    Empty signs therefore have a finite area prior; the separate mass term
+    distinguishes empty, weak and strong fields even after normalization.
+    """
+    config = validate_statistical_config(config)
+    if config['kind'] != 'signed_measure':
+        raise ValueError('Signed measure requires a signed_measure config')
+    if (prediction.shape != target.shape or prediction.ndim < 2 or area.ndim != 1
+            or prediction.shape[-1] != len(area)):
+        raise ValueError('Signed measure requires matching [..., cells] fields and cell areas')
+    if (not prediction.is_floating_point() or not target.is_floating_point()
+            or not torch.isfinite(prediction).all() or not torch.isfinite(target).all()
+            or not torch.isfinite(area).all() or not (area > 0).all()):
+        raise ValueError('Signed measure requires finite floating fields and positive areas')
+    dtype = torch.float64 if prediction.dtype == torch.float64 else torch.float32
+    predicted = prediction.to(dtype)
+    truth = target.detach().to(device=prediction.device, dtype=dtype)
+    weights = area.detach().to(predicted)
+    weights = weights / weights.sum()
+
+    def signed_parts(values):
+        mass = torch.stack((values.relu(), (-values).relu()), dim=-2) * weights
+        total = mass.sum(-1, keepdim=True)
+        probability = (mass + config['epsilon'] * weights) / (total + config['epsilon'])
+        return probability, total.squeeze(-1)
+
+    p, target_mass = signed_parts(truth)
+    q, predicted_mass = signed_parts(predicted)
+    midpoint = .5 * (p + q)
+    spatial_js = (.5 * (p * (p.log() - midpoint.log())
+                            + q * (q.log() - midpoint.log())).sum(-1)).clamp_min(0).mean()
+    mass_mse = (predicted_mass - target_mass).square().mean()
+    return {'loss': config['spatial_weight'] * spatial_js + config['mass_weight'] * mass_mse,
+            'signed_spatial_js': spatial_js, 'signed_mass_mse': mass_mse}

@@ -81,6 +81,9 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                         shape=tuple(p['latent_shape'])
                         values['latent_shape']=np.asarray(shape,dtype=np.int64)
                         values['predicted_latent_spatial']=prediction['predicted_latent'][0].cpu().numpy().reshape(len(leads),*shape)
+                if model.config.bridge == 'guided' and prediction.get('history_latent') is not None:
+                    values['guide_history_latent'] = prediction['history_latent'][0].cpu().numpy()
+                    values['guide_contract_json'] = json.dumps(p.get('guide_contract'), sort_keys=True)
                 np.savez_compressed(path,**values);saved=True
     if str(device).startswith('cuda'):torch.cuda.synchronize()
     report={'format':'climate_manifold.downstream_evaluation.v1','checkpoint_sha256':digest(checkpoint),
@@ -96,6 +99,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'forecast_state_grid':p.get('forecast_state_grid'),
             'transport_contract':p.get('transport_contract'),
             'predictor_provenance':p.get('predictor_provenance'),
+            'guide_contract':p.get('guide_contract'),
             'regularization':p.get('regularization','legacy'),
             'objective_weights':p.get('objective_weights',{}),
             'constraint_pair':p.get('constraint_pair'),

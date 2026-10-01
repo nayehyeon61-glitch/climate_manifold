@@ -16,6 +16,7 @@ WEATHER_IMPLEMENTATIONS = {
     'climax': 'climax_variable_token_adaptation_v1',
 }
 SPATIAL_IMPLEMENTATIONS = {**SEQUENCE_IMPLEMENTATIONS, **WEATHER_IMPLEMENTATIONS}
+TRANSFORMER_IMPLEMENTATION = 'raw_latent_guide_transformer_v1'
 
 
 @dataclass(frozen=True)
@@ -40,9 +41,11 @@ class PredictorConfig:
     raw_backend: str = 'legacy'
     weather_depth: int = 4
     weather_patch_size: int = 2
+    transformer_heads: int = 4
+    guide_mode: str = 'learned'
 
     def __post_init__(self):
-        if self.model not in ('mlp','neural_ode','climode','persistence',*SPATIAL_IMPLEMENTATIONS):
+        if self.model not in ('mlp','neural_ode','climode','persistence','transformer',*SPATIAL_IMPLEMENTATIONS):
             raise ValueError('Unknown downstream model')
         if self.bridge not in ManifoldBridge.MODES or self.anchor not in ('none','origin'):
             raise ValueError('Invalid bridge/anchor')
@@ -54,6 +57,24 @@ class PredictorConfig:
             raise ValueError('Latent layout must be global or spatial')
         if self.raw_backend not in ('legacy', 'matched'):
             raise ValueError('Raw backend must be legacy or matched')
+        if self.guide_mode not in ('learned', 'zero'):
+            raise ValueError('Guide mode must be learned or zero')
+        if self.guide_mode != 'learned' and self.bridge != 'guided':
+            raise ValueError('Guide ablations require bridge=guided')
+        if (isinstance(self.transformer_heads, bool) or not isinstance(self.transformer_heads, int)
+                or self.transformer_heads < 1):
+            raise ValueError('Transformer heads must be a positive integer')
+        if self.model == 'transformer':
+            if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
+                    or self.bridge not in ('raw', 'latent', 'guided')
+                    or self.bridge == 'raw' and self.raw_backend != 'matched'):
+                raise ValueError('Transformer requires joint spatial latent/guided or matched raw forecasting')
+            if self.hidden_dim % self.transformer_heads:
+                raise ValueError('Transformer hidden_dim must be divisible by transformer_heads')
+        if self.bridge == 'guided' and (self.model != 'transformer' or self.representation != 'climate_manifold'):
+            raise ValueError('Guided bridge requires the Transformer and climate_manifold representation')
+        if self.bridge == 'guided' and not self.condition_information:
+            raise ValueError('Guided bridge encodes origin information; disabling information conditioning is unsupported')
         if self.model in SPATIAL_IMPLEMENTATIONS:
             if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
                     or self.bridge not in ('raw', 'latent')
@@ -61,7 +82,7 @@ class PredictorConfig:
                 raise ValueError('Spatial sequence/weather models require joint spatial latent or matched raw forecasting')
         if self.raw_backend == 'matched' and self.bridge == 'raw':
             if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
-                    or self.model not in ('mlp', 'neural_ode', 'climode', *SPATIAL_IMPLEMENTATIONS)):
+                    or self.model not in ('mlp', 'neural_ode', 'climode', 'transformer', *SPATIAL_IMPLEMENTATIONS)):
                 raise ValueError('Matched raw controls require a supported joint spatial predictor')
         if self.training_mode == 'joint' and (self.model == 'persistence' or self.anchor != 'none'):
             raise ValueError('Joint training requires a trainable predictor and anchor=none')
@@ -95,7 +116,7 @@ class ForecastPipeline(nn.Module):
         if not isinstance(separate_reconstruction_decoder, bool):
             raise ValueError('separate_reconstruction_decoder must be a boolean')
         if separate_reconstruction_decoder and (
-                config.training_mode != 'joint' or config.bridge != 'latent'
+                config.training_mode != 'joint' or config.bridge not in ('latent', 'guided')
                 or config.anchor != 'none' or config.representation != 'climate_manifold'):
             raise ValueError('Separate reconstruction decoder requires a joint unanchored latent climate manifold')
         if conditional_flow_config is not None:
@@ -117,9 +138,14 @@ class ForecastPipeline(nn.Module):
             raise ValueError('Unexpected alternative representation')
         selected = representation if config.representation == 'plain_ae' else manifold
         actual_layout = getattr(selected.config, 'representation_kind', 'global')
-        if config.bridge == 'latent' and config.latent_layout != actual_layout:
+        if config.bridge in ('latent', 'guided') and config.latent_layout != actual_layout:
             raise ValueError('Predictor latent layout does not match the actual manifold representation')
         self.bridge = ManifoldBridge(selected, config.bridge, config.anchor, config.training_mode)
+        if config.bridge == 'guided':
+            # Forecasts are physical fields produced by the Transformer head.
+            # Preserve this dormant decoder for checkpoints, but never train it
+            # on duplicate reconstruction or use it in the guided forecast.
+            selected.core.manifold.decoder.requires_grad_(False)
         dimension = self.bridge.dimension
         info_dim = math.prod(manifold.info_metadata['shape']) if manifold.info_metadata else 0
         matched_raw = config.bridge == 'raw' and config.raw_backend == 'matched'
@@ -134,7 +160,18 @@ class ForecastPipeline(nn.Module):
                 if len(shape) != 3 or shape[1:] != tuple(manifold.config.grid[1:]):
                     raise ValueError('Raw origin information must share the source spatial grid')
                 information_channels = shape[0]
-        if config.model in ('mlp','neural_ode'):
+        if config.model == 'transformer':
+            from .guided_transformer import GuidedTransformerPredictor
+            self.predictor = GuidedTransformerPredictor(
+                selected.config.latent_grid if config.bridge == 'latent' else selected.config.grid,
+                guide_grid=selected.config.latent_grid if config.bridge == 'guided' else None,
+                history_steps=selected.config.history_steps, hidden=config.hidden_dim,
+                depth=config.weather_depth, patch_size=config.weather_patch_size,
+                heads=config.transformer_heads, guide_mode=config.guide_mode,
+                history_dt_hours=selected.config.history_stride*selected.config.step_hours,
+                periodic_lon=periodic_lon if matched_raw else selected.core.physics.periodic_lon,
+                information_channels=information_channels)
+        elif config.model in ('mlp','neural_ode'):
             if matched_raw:
                 from .spatial_baselines import SpatialHistoryPredictor
                 self.predictor = SpatialHistoryPredictor(manifold.config.grid,
@@ -208,6 +245,8 @@ class ForecastPipeline(nn.Module):
         from .observed_decoder import ObservedFieldDecoder
         self.reconstruction_decoder = (
             ObservedFieldDecoder(selected) if separate_reconstruction_decoder else None)
+        if self.reconstruction_decoder is not None and config.bridge == 'guided':
+            self.reconstruction_decoder.requires_grad_(True)
         # This independent auxiliary vector field sees only the observed pair.
         # Construct it last so enabling CFM preserves the forecast initialization
         # and omit its parameters entirely in existing/off checkpoints.
@@ -223,6 +262,13 @@ class ForecastPipeline(nn.Module):
                 or lead_hours[0] <= 0 or not (lead_hours[1:] > lead_hours[:-1]).all()):
             raise ValueError('Lead hours must be finite, positive and strictly increasing')
         features = self.bridge.encode_history(history,information)
+        if self.config.bridge == 'guided':
+            mean, std = self.predictor(history, lead_hours, origin_ns, guide_history=features)
+            if not torch.isfinite(mean).all():
+                raise FloatingPointError('Nonfinite guided downstream prediction')
+            return {'mean': mean, 'std': std, 'reconstructed_origin': None,
+                    'history_latent': features, 'predicted_latent': None,
+                    'origin_latent': features[:, -1]}
         if self.predictor is None:
             predicted = features[:,-1,None].expand(-1,len(lead_hours),-1);std=None
         else:

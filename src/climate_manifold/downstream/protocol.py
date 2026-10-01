@@ -5,7 +5,8 @@ def _sequence_supported(cfg):
     return (cfg.get('training_mode') == 'joint' and cfg.get('latent_layout') == 'spatial'
             and cfg.get('anchor') == 'none' and cfg.get('representation','climate_manifold') == 'climate_manifold'
             and (cfg['bridge'] == 'latent'
-                 or cfg['bridge'] == 'raw' and cfg.get('raw_backend') == 'matched'))
+                 or cfg['bridge'] == 'raw' and cfg.get('raw_backend') == 'matched'
+                 or cfg['bridge'] == 'guided' and cfg['model'] == 'transformer'))
 
 
 def experiment_contract(config):
@@ -18,20 +19,23 @@ def experiment_contract(config):
                      and latent_layout == 'spatial' and training_mode == 'joint')
     matched_raw = (bridge == 'raw' and cfg.get('raw_backend', 'legacy') == 'matched'
                    and latent_layout == 'spatial' and training_mode == 'joint')
-    sequence = cfg['model'] in ('convlstm', 'simvp', 'fourcastnet', 'climax') and _sequence_supported(cfg)
+    sequence = cfg['model'] in ('convlstm', 'simvp', 'fourcastnet', 'climax', 'transformer') and _sequence_supported(cfg)
+    guided = (bridge == 'guided' and cfg['model'] == 'transformer' and _sequence_supported(cfg))
     primary = ((cfg['model'] in ('mlp', 'neural_ode', 'persistence') or latent_climode or matched_raw or sequence)
-               and bridge in ('raw', 'latent') and cfg['anchor'] == 'none')
+               and bridge in ('raw', 'latent', 'guided') and cfg['anchor'] == 'none')
     return {
         'suite': 'primary' if primary else 'auxiliary',
         'representation': representation,
         'prediction_space': 'latent' if bridge == 'latent' else 'field',
         'path': ('encoder -> predictor -> decoder' if bridge == 'latent' else
+                 'raw observations + encoded statistical guide -> transformer -> fields' if guided else
                  'encoder -> decoder -> grid predictor' if bridge == 'decoded' else
                  'observations -> field predictor'),
         'training_mode': training_mode,
-        'latent_layout': latent_layout if bridge == 'latent' else None,
+        'latent_layout': latent_layout if bridge in ('latent', 'guided') else None,
         'raw_backend': cfg.get('raw_backend', 'legacy') if bridge == 'raw' else None,
-        'predictor_variant': ('raw_transport_climode' if matched_raw and cfg['model'] == 'climode' else
+        'predictor_variant': ('guided_transformer' if guided else
+                              'raw_transport_climode' if matched_raw and cfg['model'] == 'climode' else
                               'raw_spatial_' + cfg['model'] if matched_raw else
                               'latent_transport_climode' if latent_climode else
                               'spatial_' + cfg['model'] if bridge == 'latent' and latent_layout == 'spatial' else
@@ -45,8 +49,10 @@ def validate_experiment(config, requested):
     if requested not in ('primary', 'auxiliary'):
         raise ValueError('Experiment must be primary or auxiliary')
     cfg = vars(config) if not isinstance(config, dict) else config
-    if cfg['model'] in ('convlstm', 'simvp', 'fourcastnet', 'climax') and not _sequence_supported(cfg):
+    if cfg['model'] in ('convlstm', 'simvp', 'fourcastnet', 'climax', 'transformer') and not _sequence_supported(cfg):
         raise ValueError('Spatial sequence/weather models require joint spatial latent or matched raw forecasting, anchor=none')
+    if cfg['bridge'] == 'guided' and (cfg['model'] != 'transformer' or not _sequence_supported(cfg)):
+        raise ValueError('Guided forecasts require joint spatial climate_manifold transformer, anchor=none')
     contract = experiment_contract(config)
     if requested == 'primary' and contract['suite'] != 'primary':
         raise ValueError('Primary experiments require raw or encoder -> latent model -> decoder, '

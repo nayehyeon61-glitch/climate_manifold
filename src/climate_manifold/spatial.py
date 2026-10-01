@@ -104,13 +104,70 @@ class SpatialDecoder(nn.Module):
         return self.features(fields).reshape(*leading, math.prod(self.output_grid))
 
 
+class VariableSpatialEncoder(nn.Module):
+    """Independent variable encoders, fused at each latent geographic cell.
+
+    This is deterministic statistical conditioning: each channel has its own
+    learned feature extractor, while a pointwise learned fusion exposes their
+    joint information to the predictor. No latent noise is sampled here.
+    """
+    def __init__(self, input_grid, latent_grid, hidden_dim, factor, periodic_lon):
+        super().__init__()
+        self.input_grid, self.latent_grid = tuple(input_grid), tuple(latent_grid)
+        self.variable_encoders = nn.ModuleList([
+            SpatialEncoder((1, *self.input_grid[1:]), latent_grid, hidden_dim,
+                           factor, periodic_lon)
+            for _ in range(self.input_grid[0])
+        ])
+        self.fusion = nn.Conv2d(self.input_grid[0] * self.latent_grid[0],
+                                self.latent_grid[0], kernel_size=1)
+
+    def forward(self, states):
+        if states.ndim < 1 or states.shape[-1] != math.prod(self.input_grid):
+            raise ValueError('Variable spatial encoder requires the configured flattened field')
+        leading = states.shape[:-1]
+        fields = states.reshape(-1, *self.input_grid)
+        features = [
+            encoder(fields[:, index].flatten(1)).reshape(-1, *self.latent_grid)
+            for index, encoder in enumerate(self.variable_encoders)
+        ]
+        latent = self.fusion(torch.cat(features, dim=1))
+        return latent.reshape(*leading, math.prod(self.latent_grid))
+
+
+class VariableSpatialDecoder(nn.Module):
+    """Variable-specific field heads sharing only their latent input.
+
+    All variable heads receive the fused latent. Outputs preserve the metadata
+    channel order and the same flattened field API as ``SpatialDecoder``.
+    Surface and enriched-information routes instantiate independent heads. An
+    observed-field reconstruction route can clone the surface heads without
+    sharing their weights with the forecast decoder.
+    """
+    def __init__(self, latent_grid, output_grid, hidden_dim, factor, periodic_lon):
+        super().__init__()
+        self.latent_grid, self.output_grid = tuple(latent_grid), tuple(output_grid)
+        self.variable_decoders = nn.ModuleList([
+            SpatialDecoder(latent_grid, (1, *self.output_grid[1:]), hidden_dim,
+                           factor, periodic_lon)
+            for _ in range(self.output_grid[0])
+        ])
+
+    def forward(self, latent):
+        if latent.ndim < 1 or latent.shape[-1] != math.prod(self.latent_grid):
+            raise ValueError('Variable spatial decoder requires the configured flattened latent grid')
+        return torch.cat([decoder(latent) for decoder in self.variable_decoders], dim=-1)
+
+
 class SpatialManifoldAE(nn.Module):
     def __init__(self, config, periodic_lon):
         super().__init__()
         kwargs = dict(hidden_dim=config.spatial_hidden_dim, factor=config.spatial_downsample,
                       periodic_lon=periodic_lon)
-        self.encoder = SpatialEncoder(config.grid, config.latent_grid, **kwargs)
-        self.decoder = SpatialDecoder(config.latent_grid, config.grid, **kwargs)
+        encoder_cls = VariableSpatialEncoder if config.spatial_variable_conditioning else SpatialEncoder
+        decoder_cls = VariableSpatialDecoder if config.spatial_variable_conditioning else SpatialDecoder
+        self.encoder = encoder_cls(config.grid, config.latent_grid, **kwargs)
+        self.decoder = decoder_cls(config.latent_grid, config.grid, **kwargs)
 
     def encode(self, states):
         return self.encoder(states)
@@ -147,6 +204,7 @@ class SpatialClimateManifold(nn.Module):
         self.temporal = TemporalObjective(schema, mean, scale, statistics)
         self.info_metadata = info_metadata
         self.information = self.info_head = None
+        self.latent_fusion = None
         if info_metadata is not None:
             shape = tuple(info_metadata['shape'])
             if (len(shape) != 3 or any(isinstance(n, bool) or not isinstance(n, (int, np.integer)) or n < 1 for n in shape)
@@ -160,8 +218,14 @@ class SpatialClimateManifold(nn.Module):
                         raise ValueError('Information coordinates must match the source spatial grid')
             kwargs = dict(hidden_dim=config.spatial_hidden_dim, factor=config.spatial_downsample,
                           periodic_lon=self.core.physics.periodic_lon)
-            self.information = SpatialEncoder(shape, config.latent_grid, **kwargs)
-            self.info_head = SpatialDecoder(config.latent_grid, shape, **kwargs)
+            if config.spatial_variable_conditioning:
+                self.information = VariableSpatialEncoder(shape, config.latent_grid, **kwargs)
+                self.info_head = VariableSpatialDecoder(config.latent_grid, shape, **kwargs)
+                self.latent_fusion = nn.Conv2d(2 * config.latent_channels,
+                                               config.latent_channels, kernel_size=1)
+            else:
+                self.information = SpatialEncoder(shape, config.latent_grid, **kwargs)
+                self.info_head = SpatialDecoder(config.latent_grid, shape, **kwargs)
         self.pinn = None
         if pinn_config is not None:
             from .hybrid_pinn import HybridPINN, HybridPINNConfig
@@ -185,7 +249,14 @@ class SpatialClimateManifold(nn.Module):
         if self.information is not None:
             if information is None or information.shape[:-1] != states.shape[:-1]:
                 raise ValueError('Enriched representation requires matching observed origin information')
-            latent = latent + self.information(information)
+            information_latent = self.information(information)
+            if self.latent_fusion is None:
+                latent = latent + information_latent
+            else:
+                leading = latent.shape[:-1]
+                fields = torch.cat((latent.reshape(-1, *self.config.latent_grid),
+                                    information_latent.reshape(-1, *self.config.latent_grid)), dim=1)
+                latent = self.latent_fusion(fields).reshape(*leading, self.config.manifold_dim)
         elif information is not None:
             raise ValueError('Surface-only representation does not accept enriched information')
         return latent
