@@ -28,6 +28,24 @@ INCLUDE_ZERO_GUIDE="${INCLUDE_ZERO_GUIDE:-0}"
 [[ "$INCLUDE_ZERO_GUIDE" == 0 || "$INCLUDE_ZERO_GUIDE" == 1 ]] || { echo 'INCLUDE_ZERO_GUIDE must be 0 or 1' >&2; exit 2; }
 VARIABLE_CONDITIONING="${VARIABLE_CONDITIONING:-0}"
 [[ "$VARIABLE_CONDITIONING" == 0 || "$VARIABLE_CONDITIONING" == 1 ]] || { echo 'VARIABLE_CONDITIONING must be 0 or 1' >&2; exit 2; }
+EVALUATE_TEST="${EVALUATE_TEST:-0}"
+GPU_GUARD="${GPU_GUARD:-0}"
+for name in EVALUATE_TEST GPU_GUARD; do
+  [[ "${!name}" == 0 || "${!name}" == 1 ]] || { echo "$name must be 0 or 1" >&2; exit 2; }
+done
+if [[ "$GPU_GUARD" == 1 ]]; then
+  : "${GPU_LOCK_ROOT:?GPU_GUARD requires a GPU_LOCK_ROOT below /lustre/home/yehyeon}"
+fi
+run_model() {
+  if [[ "$GPU_GUARD" == 1 ]]; then
+    "$PYTHON" -m climate_manifold.gpu_guard --lock-root "$GPU_LOCK_ROOT" \
+      --max-utilization "${GPU_MAX_UTILIZATION:-10}" \
+      --max-memory-percent "${GPU_MAX_MEMORY_PERCENT:-10}" --min-free-gib "${GPU_MIN_FREE_GIB:-8}" \
+      -- "$PYTHON" -m "$@" --device cuda:0
+  else
+    "$PYTHON" -m "$@" --device "${DEVICE:-cpu}"
+  fi
+}
 # These mechanisms remain explicitly disabled in this experiment.
 for name in STATISTICAL_FLOW_WEIGHT CONDITIONAL_FLOW_WEIGHT; do
   [[ "${!name:-0}" == 0 ]] || { echo "$name must remain 0 in this runner" >&2; exit 2; }
@@ -57,6 +75,7 @@ arms=(raw latent guided)
 if [[ "$INCLUDE_ZERO_GUIDE" == 1 ]]; then arms+=(guided_zero); fi
 mkdir -p "$RUN"
 reports=()
+test_reports=()
 for seed in "${seeds[@]}"; do
   for arm in "${arms[@]}"; do
     prefix="$RUN/transformer-$arm-seed$seed"
@@ -66,14 +85,29 @@ for seed in "${seeds[@]}"; do
       guided) route=(--bridge guided --guide-mode learned "${statistical[@]}") ;;
       guided_zero) route=(--bridge guided --guide-mode zero "${statistical[@]}") ;;
     esac
-    "$PYTHON" -m climate_manifold.downstream.train "${setup[@]}" "${route[@]}" \
+    run_model climate_manifold.downstream.train "${setup[@]}" "${route[@]}" \
       --archive "$ARCHIVE" --information "$INFO" --output "$prefix.pt" \
-      --seed "$seed" --device "${DEVICE:-cpu}"
-    "$PYTHON" -m climate_manifold.downstream.evaluate --checkpoint "$prefix.pt" \
+      --seed "$seed"
+    run_model climate_manifold.downstream.evaluate --checkpoint "$prefix.pt" \
       --archive "$ARCHIVE" --information "$INFO" --split validation \
       --output "$prefix.validation.json" --forecast-output "$prefix.forecast.npz" \
-      --max-cases "${MAX_CASES:-0}" --origin-stride "${ORIGIN_STRIDE:-1}" --device "${DEVICE:-cpu}"
+      --max-cases "${MAX_CASES:-0}" --origin-stride "${ORIGIN_STRIDE:-1}"
     reports+=("$prefix.validation.json")
   done
 done
 "$PYTHON" -m climate_manifold.downstream.compare --reports "${reports[@]}" --output "$RUN/comparison.json"
+if [[ "$EVALUATE_TEST" == 1 ]]; then
+  # Every fit/checkpoint is fixed before test evaluation. Test scores never
+  # enter optimization, checkpoint selection, or validation comparisons.
+  for seed in "${seeds[@]}"; do
+    for arm in "${arms[@]}"; do
+      prefix="$RUN/transformer-$arm-seed$seed"
+      run_model climate_manifold.downstream.evaluate --checkpoint "$prefix.pt" \
+        --archive "$ARCHIVE" --information "$INFO" --split test \
+        --output "$prefix.test.json" --forecast-output "$prefix.test.forecast.npz" \
+        --max-cases "${MAX_CASES:-0}" --origin-stride "${ORIGIN_STRIDE:-1}"
+      test_reports+=("$prefix.test.json")
+    done
+  done
+  "$PYTHON" -m climate_manifold.downstream.compare --reports "${test_reports[@]}" --output "$RUN/comparison.test.json"
+fi

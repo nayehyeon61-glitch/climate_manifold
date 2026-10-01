@@ -81,6 +81,24 @@ def test_daily_rejects_writes_outside_root_and_missing_days(tmp_path):
         prepare(root,root/'daily'/'bad',start='2001-01-01',end='2001-01-02')
 
 
+def test_daily_separate_readonly_source_and_write_root(tmp_path):
+    root=daily_sources(tmp_path/'source',count=2)
+    work=tmp_path/'work';work.mkdir()
+    before={str(p.relative_to(root)):digest(p) for p in root.rglob('*.nc')}
+    kwargs=dict(start='2001-01-01',end='2001-01-02',target_lat_points=4,target_lon_points=8,write_root=work)
+    archive,info=prepare(root,work/'prepared',**kwargs)
+    assert archive.is_relative_to(work) and info.is_relative_to(work)
+    assert before=={str(p.relative_to(root)):digest(p) for p in root.rglob('*.nc')}
+    assert {p.name for p in root.iterdir()}=={'daily','era5_orography_0p25.nc'}
+    with pytest.raises(ValueError,match='inside'):
+        prepare(root,tmp_path/'elsewhere',**kwargs)
+    with pytest.raises(ValueError,match='read-only'):
+        prepare(root,root/'derived',**{**kwargs,'write_root':tmp_path})
+    (work/'prepared'/'monthly_cache'/'escaped').symlink_to(root/'daily',target_is_directory=True)
+    with pytest.raises(ValueError,match='inside'):
+        prepare(root,work/'prepared',**kwargs)
+
+
 def test_daily_rejects_timestamp_mismatch(tmp_path):
     root=daily_sources(tmp_path/'source',count=2)
     path=root/'daily'/'20010102.nc'
@@ -108,7 +126,7 @@ def _args(archive,info,output,bridge,mode='learned'):
 
 def test_daily_all_routes_train_reload_evaluate_compare(daily_prepared,tmp_path):
     _,archive,info,_=daily_prepared
-    reports=[]
+    reports=[];test_reports=[]
     for bridge,mode in [('raw','learned'),('latent','learned'),('guided','learned'),('guided','zero')]:
         name=bridge+'-'+mode
         args=_args(archive,info,tmp_path/(name+'.pt'),bridge,mode)
@@ -128,8 +146,16 @@ def test_daily_all_routes_train_reload_evaluate_compare(daily_prepared,tmp_path)
         report=evaluate(checkpoint,archive,path,information=info,max_cases=2)
         assert report['finite_forecast_fraction']==1.
         reports.append(path)
+        test_path=tmp_path/(name+'.test.json')
+        test_report=evaluate(checkpoint,archive,test_path,information=info,split='test',max_cases=2)
+        assert test_report['split']=='test'
+        assert not set(test_report['origin_times']) & set(report['origin_times'])
+        assert test_report['checkpoint_sha256']==report['checkpoint_sha256']
+        test_reports.append(test_path)
     result=compare(reports,tmp_path/'comparison.json')
     assert len(result['seed_summary'])==4 and result['ranking_allowed']
+    result_test=compare(test_reports,tmp_path/'comparison.test.json')
+    assert len(result_test['seed_summary'])==4 and result_test['ranking_allowed']
     bad=json.loads(reports[2].read_text())
     bad['constraint_contract']['observed_pair']='origin-6h,origin'
     altered=tmp_path/'bad.json';altered.write_text(json.dumps(bad))

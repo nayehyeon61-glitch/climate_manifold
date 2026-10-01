@@ -109,7 +109,8 @@ def _runner(tmp_path, **settings):
     calls=tmp_path/'calls.jsonl'
     env={key:value for key,value in os.environ.items() if key not in (
         'SEEDS','A_CHECKPOINT','BATCH_SIZE','CONSTRAINT_DECODER','STATISTICAL_LOSS',
-        'INCLUDE_ZERO_GUIDE','VARIABLE_CONDITIONING','STATISTICAL_FLOW_WEIGHT','CONDITIONAL_FLOW_WEIGHT')}
+        'INCLUDE_ZERO_GUIDE','VARIABLE_CONDITIONING','STATISTICAL_FLOW_WEIGHT','CONDITIONAL_FLOW_WEIGHT',
+        'EVALUATE_TEST','GPU_GUARD','GPU_LOCK_ROOT')}
     env.update(PYTHON=str(stub),CALLS=str(calls),ARCHIVE='surface archive.npz',
                INFO='physical information',RUN=str(tmp_path/'run'),**settings)
     script=Path(__file__).resolve().parents[1]/'scripts/run_guided_transformer_comparison.sh'
@@ -143,6 +144,32 @@ def test_runner_zero_guide_keeps_matching_supervision(tmp_path):
     guides=[r for r in train if r[r.index('--bridge')+1]=='guided']
     assert {r[r.index('--guide-mode')+1] for r in guides}=={'learned','zero'}
     assert all(r[r.index('--statistical-loss')+1]=='signed_measure' for r in guides)
+
+
+def test_runner_test_scores_are_separate_and_after_all_fits(tmp_path):
+    result, commands = _runner(tmp_path, SEEDS='7', INCLUDE_ZERO_GUIDE='1', EVALUATE_TEST='1')
+    assert result.returncode==0, result.stderr
+    fits=[i for i,r in enumerate(commands) if r[1]=='climate_manifold.downstream.train']
+    evaluations=[(i,r) for i,r in enumerate(commands) if r[1]=='climate_manifold.downstream.evaluate']
+    tests=[i for i,r in evaluations if r[r.index('--split')+1]=='test']
+    assert len(fits)==4 and len(evaluations)==8 and len(tests)==4
+    assert min(tests)>max(fits)
+    comparisons=[r for r in commands if r[1]=='climate_manifold.downstream.compare']
+    assert len(comparisons)==2
+    for r,split in zip(comparisons,['validation','test']):
+        assert all(path.endswith('.'+split+'.json') for path in r[r.index('--reports')+1:r.index('--output')])
+    assert comparisons[-1][-1].endswith('/comparison.test.json')
+
+
+def test_runner_guards_every_gpu_train_and_evaluation(tmp_path):
+    result, commands = _runner(tmp_path, SEEDS='7', EVALUATE_TEST='1',
+                               GPU_GUARD='1', GPU_LOCK_ROOT='/lustre/home/yehyeon/gpu_locks')
+    assert result.returncode==0, result.stderr
+    guarded=[r for r in commands if r[1]=='climate_manifold.gpu_guard']
+    assert len(guarded)==9  # three fits + three validation + three test
+    for args in guarded:
+        assert args[-2:]==['--device','cuda:0']
+        assert '--max-utilization' in args and '--max-memory-percent' in args and '--min-free-gib' in args
 
 
 @pytest.mark.parametrize('settings',[

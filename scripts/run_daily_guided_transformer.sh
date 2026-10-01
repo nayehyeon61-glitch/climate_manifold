@@ -1,26 +1,18 @@
 #!/usr/bin/env bash
-# Run inside the existing ERA5 root. Raw data is read in place.
+# Managed writes stay under /lustre/home/yehyeon; ERA5 is read in place.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 : "${ERA5_ROOT:?Set the existing ERA5 root with daily/YYYYMMDD.nc}"
-: "${DAILY_WORK:?Set a work directory below ERA5_ROOT}"
+: "${DAILY_WORK:?Set a work directory below /lustre/home/yehyeon}"
 PYTHON="${PYTHON:-python}"
+export WORK_ROOT=/lustre/home/yehyeon
 export PYTHONPATH="src${PYTHONPATH:+:$PYTHONPATH}"
 export ERA5_ROOT DAILY_WORK
-"$PYTHON" - <<'PY'
-import os
-from pathlib import Path
-root=Path(os.environ['ERA5_ROOT']).resolve(strict=True)
-work=Path(os.environ['DAILY_WORK']).resolve()
-repo=Path.cwd().resolve()
-if work==root or not work.is_relative_to(root) or not repo.is_relative_to(root):
-    raise SystemExit('Repository and work directory must both be inside ERA5_ROOT')
-if work.is_relative_to(root/'daily'):
-    raise SystemExit('Use a separate derived-work directory, outside raw daily files')
-work.mkdir(parents=True,exist_ok=True)
-PY
+# -B avoids bytecode writes before the path policy has been validated.
+"$PYTHON" -B -m climate_manifold.workspace
 
 export TMPDIR="$DAILY_WORK/tmp"
+export TMP="$TMPDIR" TEMP="$TMPDIR"
 export XDG_CACHE_HOME="$DAILY_WORK/cache"
 export PIP_CACHE_DIR="$DAILY_WORK/cache/pip"
 export TORCH_HOME="$DAILY_WORK/cache/torch"
@@ -28,20 +20,41 @@ export HF_HOME="$DAILY_WORK/cache/huggingface"
 export CUDA_CACHE_PATH="$DAILY_WORK/cache/cuda"
 export TRITON_CACHE_DIR="$DAILY_WORK/cache/triton"
 export PYTHONPYCACHEPREFIX="$DAILY_WORK/cache/pycache"
+export MPLCONFIGDIR="$DAILY_WORK/cache/matplotlib"
+export NUMBA_CACHE_DIR="$DAILY_WORK/cache/numba"
+export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
 mkdir -p "$TMPDIR" "$XDG_CACHE_HOME" "$DAILY_WORK/logs"
 export DEVICE="${DEVICE:-cuda}"
-"$PYTHON" - <<'PY'
-import os, torch
-if os.environ['DEVICE'].startswith('cuda'):
-    if not torch.cuda.is_available(): raise SystemExit('CUDA PyTorch is unavailable; install the server-compatible CUDA build first')
-    # Verify a real kernel, including Blackwell compatibility, before reading 47 years.
-    device=os.environ['DEVICE']
-    x=torch.randn(32,32,device=device)
-    (x@x).sum().item()
-    print('GPU:',torch.cuda.get_device_name(torch.device(device)),flush=True)
-PY
+export GPU_LOCK_ROOT="$WORK_ROOT/climate_manifold_gpu_locks"
+export GPU_MAX_UTILIZATION="${GPU_MAX_UTILIZATION:-10}"
+export GPU_MAX_MEMORY_PERCENT="${GPU_MAX_MEMORY_PERCENT:-10}" GPU_MIN_FREE_GIB="${GPU_MIN_FREE_GIB:-8}"
+case "$DEVICE" in
+  cuda*)
+    export GPU_GUARD=1 DEVICE=cuda:0
+    # Verify actual CUDA execution only after admission, before reading 47 years.
+    "$PYTHON" -m climate_manifold.gpu_guard --lock-root "$GPU_LOCK_ROOT" \
+      --max-utilization "$GPU_MAX_UTILIZATION" --max-memory-percent "$GPU_MAX_MEMORY_PERCENT" \
+      --min-free-gib "$GPU_MIN_FREE_GIB" -- "$PYTHON" -c \
+      'import torch; x=torch.randn(32,32,device="cuda:0"); print("CUDA kernel OK:",(x@x).sum().item(),torch.cuda.get_device_name(0))' \
+      2>&1 | tee "$DAILY_WORK/logs/gpu-preflight-$(date +%Y%m%d-%H%M%S).log"
+    ;;
+  cpu) export GPU_GUARD=0 ;;
+  *) echo 'DEVICE must be cuda or cpu' >&2; exit 2 ;;
+esac
 
-prepare=(--root "$ERA5_ROOT" --output "$DAILY_WORK/prepared"
+RUN_PREFLIGHT_TESTS="${RUN_PREFLIGHT_TESTS:-1}"
+[[ "$RUN_PREFLIGHT_TESTS" == 0 || "$RUN_PREFLIGHT_TESTS" == 1 ]] || { echo 'RUN_PREFLIGHT_TESTS must be 0 or 1' >&2; exit 2; }
+if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
+  # CPU-only software tests; temporary fixtures/caches also stay in DAILY_WORK.
+  # mktemp supplies a fresh basetemp because pytest clears that directory.
+  test_tmp=$(mktemp -d "$TMPDIR/preflight-XXXXXXXX")
+  CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 "$PYTHON" -m pytest -q \
+    tests/test_guided_training.py tests/test_guided_comparison.py tests/test_daily_era5.py \
+    tests/test_runtime_guards.py --basetemp "$test_tmp" -o "cache_dir=$DAILY_WORK/cache/pytest" \
+    2>&1 | tee "$DAILY_WORK/logs/tests-$(date +%Y%m%d-%H%M%S).log"
+fi
+
+prepare=(--root "$ERA5_ROOT" --write-root "$WORK_ROOT" --output "$DAILY_WORK/prepared"
   --start "${START_DATE:-1979-01-01}" --end "${END_DATE:-2025-12-31}"
   --target-lat-points "${TARGET_LAT_POINTS:-16}" --target-lon-points "${TARGET_LON_POINTS:-32}")
 if [[ -n "${OROGRAPHY:-}" ]]; then prepare+=(--orography "$OROGRAPHY"); fi
@@ -58,9 +71,10 @@ export HORIZON_STEPS="${HORIZON_STEPS:-5}" WINDOW_STRIDE=1
 export VARIABLE_CONDITIONING=1 INCLUDE_ZERO_GUIDE="${INCLUDE_ZERO_GUIDE:-1}"
 export STATISTICAL_LOSS="${STATISTICAL_LOSS:-signed_measure}"
 export STATISTICAL_FLOW_WEIGHT=0 CONDITIONAL_FLOW_WEIGHT=0
-export PYTHONUNBUFFERED=1
-# The existing runner refuses overwrite and evaluates all held-out validation
-# origins by default. 6 observed daily fields -> leads 24,48,72,96,120 hours.
+export EVALUATE_TEST="${EVALUATE_TEST:-1}"
+# Recheck GPU admission before each train/eval command. No parallel fits.
+# 6 observed daily fields -> leads 24,48,72,96,120 hours.
 bash scripts/run_guided_transformer_comparison.sh \
   2>&1 | tee "$DAILY_WORK/logs/train-$(date +%Y%m%d-%H%M%S).log"
 printf '\nCompleted comparison: %s\n' "$RUN/comparison.json"
+if [[ "$EVALUATE_TEST" == 1 ]]; then printf 'Held-out test comparison: %s\n' "$RUN/comparison.test.json"; fi

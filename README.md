@@ -5,8 +5,9 @@
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
 **하루 1개 ERA5 표본으로 Transformer 학습:** `daily/YYYYMMDD.nc`와 기존 지형 파일을
-제자리에서 읽는 전처리·실행 경로를 추가했습니다. 원본 변경 없이 작업 하위 폴더에
+제자리에서 읽는 전처리·실행 경로를 추가했습니다. 원본 변경 없이 `/lustre/home/yehyeon` 아래에
 16×32, 24시간 간격 archive를 만들고 6일 관측→1~5일 예측을 비교합니다.
+사용량이 적은 할당 GPU만 선택하며, 코드 테스트 → 학습 → validation/test 평가를 순서대로 실행합니다.
 [서버에서 브랜치 받기부터 전체 학습까지](docs/daily_transformer_training.md)를 참고하세요.
 
 **추가 경로: Raw + 통계 latent guide → Transformer → 미래 기상장.**

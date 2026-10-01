@@ -1,6 +1,7 @@
 """Read daily ERA5 files in place; write resumable, coarse 24h model archives.
 
-Only derived outputs below the supplied root are written. Each raw file is
+Raw inputs stay below root; derived outputs stay below the declared write root.
+If write_root is omitted, the original single-root policy applies. Each raw file is
 opened separately, and only selected fields/pressure levels are pooled. A date
 label at 00 UTC does not establish whether the source is an instantaneous or
 daily-aggregated field: source cell_methods are retained without reinterpretation.
@@ -110,12 +111,22 @@ def _field(ds, name, overrides):
 
 
 def prepare(root, output, *, start='1979-01-01', end='2025-12-31',
-            target_lat_points=16, target_lon_points=32, orography=None, units=None):
+            target_lat_points=16, target_lon_points=32, orography=None, units=None,
+            write_root=None):
     root = Path(root).resolve(strict=True)
     daily = _inside(root, root/'daily')
-    output = _inside(root, output)
-    if output == root or output.is_relative_to(daily):
+    separate_write_root = write_root is not None
+    write_root = Path(write_root).resolve(strict=True) if separate_write_root else root
+    output = _inside(write_root, output)
+    if output in (root, write_root) or output.is_relative_to(daily):
         raise ValueError('Derived output must be a separate subdirectory, never the raw daily directory')
+    if separate_write_root and output.is_relative_to(root):
+        raise ValueError('A separate write root requires outputs outside the read-only source root')
+    # Reject pre-existing symlink escapes, including resumable month caches.
+    if output.exists():
+        for path in output.rglob('*'):
+            if path.is_symlink():
+                _inside(output, path)
     if min(target_lat_points,target_lon_points)<4:
         raise ValueError('Use at least four cells per spatial dimension')
     overrides = {} if units is None else dict(units)
@@ -245,6 +256,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',required=True)
     parser.add_argument('--output',required=True)
+    parser.add_argument('--write-root',help='Allowed root for derived outputs; raw root remains read-only')
     parser.add_argument('--start',default='1979-01-01')
     parser.add_argument('--end',default='2025-12-31')
     parser.add_argument('--orography')
@@ -254,7 +266,7 @@ def main(argv=None):
     args=parser.parse_args(argv)
     prepare(args.root,args.output,start=args.start,end=args.end,orography=args.orography,
             target_lat_points=args.target_lat_points,target_lon_points=args.target_lon_points,
-            units=json.loads(args.units_json) if args.units_json else None)
+            units=json.loads(args.units_json) if args.units_json else None,write_root=args.write_root)
 
 
 if __name__=='__main__':
