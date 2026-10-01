@@ -1,0 +1,1095 @@
+작업·결과 저장 위치: /lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV
+Write root: /lustre/home/yehyeon; experiment: /lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV
+2026-10-01T14:18:16 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T14:23:16 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T14:28:16 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T14:33:16 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T14:38:16 GPU admission: all GPUs busy; retrying in 300s
+GPU admission: {"time": "2026-10-01T05:43:16.840255+00:00", "gpu": {"index": 1, "uuid": "GPU-985f44f4-4d2e-7486-6599-ace4e90f88c5", "used_mib": 5.0, "total_mib": 97887.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-c", "import torch; x=torch.randn(32,32,device=\"cuda:0\"); print(\"CUDA kernel OK:\",(x@x).sum().item(),torch.cuda.get_device_name(0))"]}
+CUDA kernel OK: 17.526168823242188 NVIDIA RTX PRO 6000 Blackwell Max-Q Workstation Edition
+..................................................                       [100%]
+=============================== warnings summary ===============================
+tests/test_guided_training.py::test_guided_joint_training_checkpoint_and_heldout_evaluation
+tests/test_guided_training.py::test_guided_forecast_and_information_objectives_have_separate_gradients
+tests/test_guided_training.py::test_zero_guide_ablation_blocks_forecast_gradient_to_encoder
+tests/test_guided_training.py::test_transformer_raw_and_latent_controls_train_and_reload[raw]
+tests/test_guided_training.py::test_transformer_raw_and_latent_controls_train_and_reload[latent]
+  /lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/code/scripts/synthetic_data.py:31: UserWarning: Converting non-nanosecond precision datetime values to nanosecond precision. This behavior can eventually be relaxed in xarray, as it is an artifact from pandas which is now beginning to support non-nanosecond precision values. This warning is caused by passing non-nanosecond np.datetime64 or np.timedelta64 values to the DataArray or Variable constructor; it can be silenced by converting the values to nanosecond precision ahead of time.
+    dataset = xr.Dataset({name: (("time", "lat", "lon"), fields[:, j].astype(np.float32))
+
+tests/test_guided_training.py::test_guided_joint_training_checkpoint_and_heldout_evaluation
+  <frozen importlib._bootstrap>:241: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 16 from C header, got 96 from PyObject
+
+tests/test_daily_era5.py: 96 warnings
+  /lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/code/tests/test_daily_era5.py:37: UserWarning: Converting non-nanosecond precision datetime values to nanosecond precision. This behavior can eventually be relaxed in xarray, as it is an artifact from pandas which is now beginning to support non-nanosecond precision values. This warning is caused by passing non-nanosecond np.datetime64 or np.timedelta64 values to the DataArray or Variable constructor; it can be silenced by converting the values to nanosecond precision ahead of time.
+    ds=xr.Dataset(values,coords={'time':[date],'level':levels,'latitude':lat,'longitude':lon})
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+50 passed, 102 warnings in 8.54s
+Prepared 1979-01: 31/17167 days
+Prepared 1979-02: 59/17167 days
+Prepared 1979-03: 90/17167 days
+Prepared 1979-04: 120/17167 days
+Prepared 1979-05: 151/17167 days
+Prepared 1979-06: 181/17167 days
+Prepared 1979-07: 212/17167 days
+Prepared 1979-08: 243/17167 days
+Prepared 1979-09: 273/17167 days
+Prepared 1979-10: 304/17167 days
+Prepared 1979-11: 334/17167 days
+Prepared 1979-12: 365/17167 days
+Prepared 1980-01: 396/17167 days
+Prepared 1980-02: 425/17167 days
+Prepared 1980-03: 456/17167 days
+Prepared 1980-04: 486/17167 days
+Prepared 1980-05: 517/17167 days
+Prepared 1980-06: 547/17167 days
+Prepared 1980-07: 578/17167 days
+Prepared 1980-08: 609/17167 days
+Prepared 1980-09: 639/17167 days
+Prepared 1980-10: 670/17167 days
+Prepared 1980-11: 700/17167 days
+Prepared 1980-12: 731/17167 days
+Prepared 1981-01: 762/17167 days
+Prepared 1981-02: 790/17167 days
+Prepared 1981-03: 821/17167 days
+Prepared 1981-04: 851/17167 days
+Prepared 1981-05: 882/17167 days
+Prepared 1981-06: 912/17167 days
+Prepared 1981-07: 943/17167 days
+Prepared 1981-08: 974/17167 days
+Prepared 1981-09: 1004/17167 days
+Prepared 1981-10: 1035/17167 days
+Prepared 1981-11: 1065/17167 days
+Prepared 1981-12: 1096/17167 days
+Prepared 1982-01: 1127/17167 days
+Prepared 1982-02: 1155/17167 days
+Prepared 1982-03: 1186/17167 days
+Prepared 1982-04: 1216/17167 days
+Prepared 1982-05: 1247/17167 days
+Prepared 1982-06: 1277/17167 days
+Prepared 1982-07: 1308/17167 days
+Prepared 1982-08: 1339/17167 days
+Prepared 1982-09: 1369/17167 days
+Prepared 1982-10: 1400/17167 days
+Prepared 1982-11: 1430/17167 days
+Prepared 1982-12: 1461/17167 days
+Prepared 1983-01: 1492/17167 days
+Prepared 1983-02: 1520/17167 days
+Prepared 1983-03: 1551/17167 days
+Prepared 1983-04: 1581/17167 days
+Prepared 1983-05: 1612/17167 days
+Prepared 1983-06: 1642/17167 days
+Prepared 1983-07: 1673/17167 days
+Prepared 1983-08: 1704/17167 days
+Prepared 1983-09: 1734/17167 days
+Prepared 1983-10: 1765/17167 days
+Prepared 1983-11: 1795/17167 days
+Prepared 1983-12: 1826/17167 days
+Prepared 1984-01: 1857/17167 days
+Prepared 1984-02: 1886/17167 days
+Prepared 1984-03: 1917/17167 days
+Prepared 1984-04: 1947/17167 days
+Prepared 1984-05: 1978/17167 days
+Prepared 1984-06: 2008/17167 days
+Prepared 1984-07: 2039/17167 days
+Prepared 1984-08: 2070/17167 days
+Prepared 1984-09: 2100/17167 days
+Prepared 1984-10: 2131/17167 days
+Prepared 1984-11: 2161/17167 days
+Prepared 1984-12: 2192/17167 days
+Prepared 1985-01: 2223/17167 days
+Prepared 1985-02: 2251/17167 days
+Prepared 1985-03: 2282/17167 days
+Prepared 1985-04: 2312/17167 days
+Prepared 1985-05: 2343/17167 days
+Prepared 1985-06: 2373/17167 days
+Prepared 1985-07: 2404/17167 days
+Prepared 1985-08: 2435/17167 days
+Prepared 1985-09: 2465/17167 days
+Prepared 1985-10: 2496/17167 days
+Prepared 1985-11: 2526/17167 days
+Prepared 1985-12: 2557/17167 days
+Prepared 1986-01: 2588/17167 days
+Prepared 1986-02: 2616/17167 days
+Prepared 1986-03: 2647/17167 days
+Prepared 1986-04: 2677/17167 days
+Prepared 1986-05: 2708/17167 days
+Prepared 1986-06: 2738/17167 days
+Prepared 1986-07: 2769/17167 days
+Prepared 1986-08: 2800/17167 days
+Prepared 1986-09: 2830/17167 days
+Prepared 1986-10: 2861/17167 days
+Prepared 1986-11: 2891/17167 days
+Prepared 1986-12: 2922/17167 days
+Prepared 1987-01: 2953/17167 days
+Prepared 1987-02: 2981/17167 days
+Prepared 1987-03: 3012/17167 days
+Prepared 1987-04: 3042/17167 days
+Prepared 1987-05: 3073/17167 days
+Prepared 1987-06: 3103/17167 days
+Prepared 1987-07: 3134/17167 days
+Prepared 1987-08: 3165/17167 days
+Prepared 1987-09: 3195/17167 days
+Prepared 1987-10: 3226/17167 days
+Prepared 1987-11: 3256/17167 days
+Prepared 1987-12: 3287/17167 days
+Prepared 1988-01: 3318/17167 days
+Prepared 1988-02: 3347/17167 days
+Prepared 1988-03: 3378/17167 days
+Prepared 1988-04: 3408/17167 days
+Prepared 1988-05: 3439/17167 days
+Prepared 1988-06: 3469/17167 days
+Prepared 1988-07: 3500/17167 days
+Prepared 1988-08: 3531/17167 days
+Prepared 1988-09: 3561/17167 days
+Prepared 1988-10: 3592/17167 days
+Prepared 1988-11: 3622/17167 days
+Prepared 1988-12: 3653/17167 days
+Prepared 1989-01: 3684/17167 days
+Prepared 1989-02: 3712/17167 days
+Prepared 1989-03: 3743/17167 days
+Prepared 1989-04: 3773/17167 days
+Prepared 1989-05: 3804/17167 days
+Prepared 1989-06: 3834/17167 days
+Prepared 1989-07: 3865/17167 days
+Prepared 1989-08: 3896/17167 days
+Prepared 1989-09: 3926/17167 days
+Prepared 1989-10: 3957/17167 days
+Prepared 1989-11: 3987/17167 days
+Prepared 1989-12: 4018/17167 days
+Prepared 1990-01: 4049/17167 days
+Prepared 1990-02: 4077/17167 days
+Prepared 1990-03: 4108/17167 days
+Prepared 1990-04: 4138/17167 days
+Prepared 1990-05: 4169/17167 days
+Prepared 1990-06: 4199/17167 days
+Prepared 1990-07: 4230/17167 days
+Prepared 1990-08: 4261/17167 days
+Prepared 1990-09: 4291/17167 days
+Prepared 1990-10: 4322/17167 days
+Prepared 1990-11: 4352/17167 days
+Prepared 1990-12: 4383/17167 days
+Prepared 1991-01: 4414/17167 days
+Prepared 1991-02: 4442/17167 days
+Prepared 1991-03: 4473/17167 days
+Prepared 1991-04: 4503/17167 days
+Prepared 1991-05: 4534/17167 days
+Prepared 1991-06: 4564/17167 days
+Prepared 1991-07: 4595/17167 days
+Prepared 1991-08: 4626/17167 days
+Prepared 1991-09: 4656/17167 days
+Prepared 1991-10: 4687/17167 days
+Prepared 1991-11: 4717/17167 days
+Prepared 1991-12: 4748/17167 days
+Prepared 1992-01: 4779/17167 days
+Prepared 1992-02: 4808/17167 days
+Prepared 1992-03: 4839/17167 days
+Prepared 1992-04: 4869/17167 days
+Prepared 1992-05: 4900/17167 days
+Prepared 1992-06: 4930/17167 days
+Prepared 1992-07: 4961/17167 days
+Prepared 1992-08: 4992/17167 days
+Prepared 1992-09: 5022/17167 days
+Prepared 1992-10: 5053/17167 days
+Prepared 1992-11: 5083/17167 days
+Prepared 1992-12: 5114/17167 days
+Prepared 1993-01: 5145/17167 days
+Prepared 1993-02: 5173/17167 days
+Prepared 1993-03: 5204/17167 days
+Prepared 1993-04: 5234/17167 days
+Prepared 1993-05: 5265/17167 days
+Prepared 1993-06: 5295/17167 days
+Prepared 1993-07: 5326/17167 days
+Prepared 1993-08: 5357/17167 days
+Prepared 1993-09: 5387/17167 days
+Prepared 1993-10: 5418/17167 days
+Prepared 1993-11: 5448/17167 days
+Prepared 1993-12: 5479/17167 days
+Prepared 1994-01: 5510/17167 days
+Prepared 1994-02: 5538/17167 days
+Prepared 1994-03: 5569/17167 days
+Prepared 1994-04: 5599/17167 days
+Prepared 1994-05: 5630/17167 days
+Prepared 1994-06: 5660/17167 days
+Prepared 1994-07: 5691/17167 days
+Prepared 1994-08: 5722/17167 days
+Prepared 1994-09: 5752/17167 days
+Prepared 1994-10: 5783/17167 days
+Prepared 1994-11: 5813/17167 days
+Prepared 1994-12: 5844/17167 days
+Prepared 1995-01: 5875/17167 days
+Prepared 1995-02: 5903/17167 days
+Prepared 1995-03: 5934/17167 days
+Prepared 1995-04: 5964/17167 days
+Prepared 1995-05: 5995/17167 days
+Prepared 1995-06: 6025/17167 days
+Prepared 1995-07: 6056/17167 days
+Prepared 1995-08: 6087/17167 days
+Prepared 1995-09: 6117/17167 days
+Prepared 1995-10: 6148/17167 days
+Prepared 1995-11: 6178/17167 days
+Prepared 1995-12: 6209/17167 days
+Prepared 1996-01: 6240/17167 days
+Prepared 1996-02: 6269/17167 days
+Prepared 1996-03: 6300/17167 days
+Prepared 1996-04: 6330/17167 days
+Prepared 1996-05: 6361/17167 days
+Prepared 1996-06: 6391/17167 days
+Prepared 1996-07: 6422/17167 days
+Prepared 1996-08: 6453/17167 days
+Prepared 1996-09: 6483/17167 days
+Prepared 1996-10: 6514/17167 days
+Prepared 1996-11: 6544/17167 days
+Prepared 1996-12: 6575/17167 days
+Prepared 1997-01: 6606/17167 days
+Prepared 1997-02: 6634/17167 days
+Prepared 1997-03: 6665/17167 days
+Prepared 1997-04: 6695/17167 days
+Prepared 1997-05: 6726/17167 days
+Prepared 1997-06: 6756/17167 days
+Prepared 1997-07: 6787/17167 days
+Prepared 1997-08: 6818/17167 days
+Prepared 1997-09: 6848/17167 days
+Prepared 1997-10: 6879/17167 days
+Prepared 1997-11: 6909/17167 days
+Prepared 1997-12: 6940/17167 days
+Prepared 1998-01: 6971/17167 days
+Prepared 1998-02: 6999/17167 days
+Prepared 1998-03: 7030/17167 days
+Prepared 1998-04: 7060/17167 days
+Prepared 1998-05: 7091/17167 days
+Prepared 1998-06: 7121/17167 days
+Prepared 1998-07: 7152/17167 days
+Prepared 1998-08: 7183/17167 days
+Prepared 1998-09: 7213/17167 days
+Prepared 1998-10: 7244/17167 days
+Prepared 1998-11: 7274/17167 days
+Prepared 1998-12: 7305/17167 days
+Prepared 1999-01: 7336/17167 days
+Prepared 1999-02: 7364/17167 days
+Prepared 1999-03: 7395/17167 days
+Prepared 1999-04: 7425/17167 days
+Prepared 1999-05: 7456/17167 days
+Prepared 1999-06: 7486/17167 days
+Prepared 1999-07: 7517/17167 days
+Prepared 1999-08: 7548/17167 days
+Prepared 1999-09: 7578/17167 days
+Prepared 1999-10: 7609/17167 days
+Prepared 1999-11: 7639/17167 days
+Prepared 1999-12: 7670/17167 days
+Prepared 2000-01: 7701/17167 days
+Prepared 2000-02: 7730/17167 days
+Prepared 2000-03: 7761/17167 days
+Prepared 2000-04: 7791/17167 days
+Prepared 2000-05: 7822/17167 days
+Prepared 2000-06: 7852/17167 days
+Prepared 2000-07: 7883/17167 days
+Prepared 2000-08: 7914/17167 days
+Prepared 2000-09: 7944/17167 days
+Prepared 2000-10: 7975/17167 days
+Prepared 2000-11: 8005/17167 days
+Prepared 2000-12: 8036/17167 days
+Prepared 2001-01: 8067/17167 days
+Prepared 2001-02: 8095/17167 days
+Prepared 2001-03: 8126/17167 days
+Prepared 2001-04: 8156/17167 days
+Prepared 2001-05: 8187/17167 days
+Prepared 2001-06: 8217/17167 days
+Prepared 2001-07: 8248/17167 days
+Prepared 2001-08: 8279/17167 days
+Prepared 2001-09: 8309/17167 days
+Prepared 2001-10: 8340/17167 days
+Prepared 2001-11: 8370/17167 days
+Prepared 2001-12: 8401/17167 days
+Prepared 2002-01: 8432/17167 days
+Prepared 2002-02: 8460/17167 days
+Prepared 2002-03: 8491/17167 days
+Prepared 2002-04: 8521/17167 days
+Prepared 2002-05: 8552/17167 days
+Prepared 2002-06: 8582/17167 days
+Prepared 2002-07: 8613/17167 days
+Prepared 2002-08: 8644/17167 days
+Prepared 2002-09: 8674/17167 days
+Prepared 2002-10: 8705/17167 days
+Prepared 2002-11: 8735/17167 days
+Prepared 2002-12: 8766/17167 days
+Prepared 2003-01: 8797/17167 days
+Prepared 2003-02: 8825/17167 days
+Prepared 2003-03: 8856/17167 days
+Prepared 2003-04: 8886/17167 days
+Prepared 2003-05: 8917/17167 days
+Prepared 2003-06: 8947/17167 days
+Prepared 2003-07: 8978/17167 days
+Prepared 2003-08: 9009/17167 days
+Prepared 2003-09: 9039/17167 days
+Prepared 2003-10: 9070/17167 days
+Prepared 2003-11: 9100/17167 days
+Prepared 2003-12: 9131/17167 days
+Prepared 2004-01: 9162/17167 days
+Prepared 2004-02: 9191/17167 days
+Prepared 2004-03: 9222/17167 days
+Prepared 2004-04: 9252/17167 days
+Prepared 2004-05: 9283/17167 days
+Prepared 2004-06: 9313/17167 days
+Prepared 2004-07: 9344/17167 days
+Prepared 2004-08: 9375/17167 days
+Prepared 2004-09: 9405/17167 days
+Prepared 2004-10: 9436/17167 days
+Prepared 2004-11: 9466/17167 days
+Prepared 2004-12: 9497/17167 days
+Prepared 2005-01: 9528/17167 days
+Prepared 2005-02: 9556/17167 days
+Prepared 2005-03: 9587/17167 days
+Prepared 2005-04: 9617/17167 days
+Prepared 2005-05: 9648/17167 days
+Prepared 2005-06: 9678/17167 days
+Prepared 2005-07: 9709/17167 days
+Prepared 2005-08: 9740/17167 days
+Prepared 2005-09: 9770/17167 days
+Prepared 2005-10: 9801/17167 days
+Prepared 2005-11: 9831/17167 days
+Prepared 2005-12: 9862/17167 days
+Prepared 2006-01: 9893/17167 days
+Prepared 2006-02: 9921/17167 days
+Prepared 2006-03: 9952/17167 days
+Prepared 2006-04: 9982/17167 days
+Prepared 2006-05: 10013/17167 days
+Prepared 2006-06: 10043/17167 days
+Prepared 2006-07: 10074/17167 days
+Prepared 2006-08: 10105/17167 days
+Prepared 2006-09: 10135/17167 days
+Prepared 2006-10: 10166/17167 days
+Prepared 2006-11: 10196/17167 days
+Prepared 2006-12: 10227/17167 days
+Prepared 2007-01: 10258/17167 days
+Prepared 2007-02: 10286/17167 days
+Prepared 2007-03: 10317/17167 days
+Prepared 2007-04: 10347/17167 days
+Prepared 2007-05: 10378/17167 days
+Prepared 2007-06: 10408/17167 days
+Prepared 2007-07: 10439/17167 days
+Prepared 2007-08: 10470/17167 days
+Prepared 2007-09: 10500/17167 days
+Prepared 2007-10: 10531/17167 days
+Prepared 2007-11: 10561/17167 days
+Prepared 2007-12: 10592/17167 days
+Prepared 2008-01: 10623/17167 days
+Prepared 2008-02: 10652/17167 days
+Prepared 2008-03: 10683/17167 days
+Prepared 2008-04: 10713/17167 days
+Prepared 2008-05: 10744/17167 days
+Prepared 2008-06: 10774/17167 days
+Prepared 2008-07: 10805/17167 days
+Prepared 2008-08: 10836/17167 days
+Prepared 2008-09: 10866/17167 days
+Prepared 2008-10: 10897/17167 days
+Prepared 2008-11: 10927/17167 days
+Prepared 2008-12: 10958/17167 days
+Prepared 2009-01: 10989/17167 days
+Prepared 2009-02: 11017/17167 days
+Prepared 2009-03: 11048/17167 days
+Prepared 2009-04: 11078/17167 days
+Prepared 2009-05: 11109/17167 days
+Prepared 2009-06: 11139/17167 days
+Prepared 2009-07: 11170/17167 days
+Prepared 2009-08: 11201/17167 days
+Prepared 2009-09: 11231/17167 days
+Prepared 2009-10: 11262/17167 days
+Prepared 2009-11: 11292/17167 days
+Prepared 2009-12: 11323/17167 days
+Prepared 2010-01: 11354/17167 days
+Prepared 2010-02: 11382/17167 days
+Prepared 2010-03: 11413/17167 days
+Prepared 2010-04: 11443/17167 days
+Prepared 2010-05: 11474/17167 days
+Prepared 2010-06: 11504/17167 days
+Prepared 2010-07: 11535/17167 days
+Prepared 2010-08: 11566/17167 days
+Prepared 2010-09: 11596/17167 days
+Prepared 2010-10: 11627/17167 days
+Prepared 2010-11: 11657/17167 days
+Prepared 2010-12: 11688/17167 days
+Prepared 2011-01: 11719/17167 days
+Prepared 2011-02: 11747/17167 days
+Prepared 2011-03: 11778/17167 days
+Prepared 2011-04: 11808/17167 days
+Prepared 2011-05: 11839/17167 days
+Prepared 2011-06: 11869/17167 days
+Prepared 2011-07: 11900/17167 days
+Prepared 2011-08: 11931/17167 days
+Prepared 2011-09: 11961/17167 days
+Prepared 2011-10: 11992/17167 days
+Prepared 2011-11: 12022/17167 days
+Prepared 2011-12: 12053/17167 days
+Prepared 2012-01: 12084/17167 days
+Prepared 2012-02: 12113/17167 days
+Prepared 2012-03: 12144/17167 days
+Prepared 2012-04: 12174/17167 days
+Prepared 2012-05: 12205/17167 days
+Prepared 2012-06: 12235/17167 days
+Prepared 2012-07: 12266/17167 days
+Prepared 2012-08: 12297/17167 days
+Prepared 2012-09: 12327/17167 days
+Prepared 2012-10: 12358/17167 days
+Prepared 2012-11: 12388/17167 days
+Prepared 2012-12: 12419/17167 days
+Prepared 2013-01: 12450/17167 days
+Prepared 2013-02: 12478/17167 days
+Prepared 2013-03: 12509/17167 days
+Prepared 2013-04: 12539/17167 days
+Prepared 2013-05: 12570/17167 days
+Prepared 2013-06: 12600/17167 days
+Prepared 2013-07: 12631/17167 days
+Prepared 2013-08: 12662/17167 days
+Prepared 2013-09: 12692/17167 days
+Prepared 2013-10: 12723/17167 days
+Prepared 2013-11: 12753/17167 days
+Prepared 2013-12: 12784/17167 days
+Prepared 2014-01: 12815/17167 days
+Prepared 2014-02: 12843/17167 days
+Prepared 2014-03: 12874/17167 days
+Prepared 2014-04: 12904/17167 days
+Prepared 2014-05: 12935/17167 days
+Prepared 2014-06: 12965/17167 days
+Prepared 2014-07: 12996/17167 days
+Prepared 2014-08: 13027/17167 days
+Prepared 2014-09: 13057/17167 days
+Prepared 2014-10: 13088/17167 days
+Prepared 2014-11: 13118/17167 days
+Prepared 2014-12: 13149/17167 days
+Prepared 2015-01: 13180/17167 days
+Prepared 2015-02: 13208/17167 days
+Prepared 2015-03: 13239/17167 days
+Prepared 2015-04: 13269/17167 days
+Prepared 2015-05: 13300/17167 days
+Prepared 2015-06: 13330/17167 days
+Prepared 2015-07: 13361/17167 days
+Prepared 2015-08: 13392/17167 days
+Prepared 2015-09: 13422/17167 days
+Prepared 2015-10: 13453/17167 days
+Prepared 2015-11: 13483/17167 days
+Prepared 2015-12: 13514/17167 days
+Prepared 2016-01: 13545/17167 days
+Prepared 2016-02: 13574/17167 days
+Prepared 2016-03: 13605/17167 days
+Prepared 2016-04: 13635/17167 days
+Prepared 2016-05: 13666/17167 days
+Prepared 2016-06: 13696/17167 days
+Prepared 2016-07: 13727/17167 days
+Prepared 2016-08: 13758/17167 days
+Prepared 2016-09: 13788/17167 days
+Prepared 2016-10: 13819/17167 days
+Prepared 2016-11: 13849/17167 days
+Prepared 2016-12: 13880/17167 days
+Prepared 2017-01: 13911/17167 days
+Prepared 2017-02: 13939/17167 days
+Prepared 2017-03: 13970/17167 days
+Prepared 2017-04: 14000/17167 days
+Prepared 2017-05: 14031/17167 days
+Prepared 2017-06: 14061/17167 days
+Prepared 2017-07: 14092/17167 days
+Prepared 2017-08: 14123/17167 days
+Prepared 2017-09: 14153/17167 days
+Prepared 2017-10: 14184/17167 days
+Prepared 2017-11: 14214/17167 days
+Prepared 2017-12: 14245/17167 days
+Prepared 2018-01: 14276/17167 days
+Prepared 2018-02: 14304/17167 days
+Prepared 2018-03: 14335/17167 days
+Prepared 2018-04: 14365/17167 days
+Prepared 2018-05: 14396/17167 days
+Prepared 2018-06: 14426/17167 days
+Prepared 2018-07: 14457/17167 days
+Prepared 2018-08: 14488/17167 days
+Prepared 2018-09: 14518/17167 days
+Prepared 2018-10: 14549/17167 days
+Prepared 2018-11: 14579/17167 days
+Prepared 2018-12: 14610/17167 days
+Prepared 2019-01: 14641/17167 days
+Prepared 2019-02: 14669/17167 days
+Prepared 2019-03: 14700/17167 days
+Prepared 2019-04: 14730/17167 days
+Prepared 2019-05: 14761/17167 days
+Prepared 2019-06: 14791/17167 days
+Prepared 2019-07: 14822/17167 days
+Prepared 2019-08: 14853/17167 days
+Prepared 2019-09: 14883/17167 days
+Prepared 2019-10: 14914/17167 days
+Prepared 2019-11: 14944/17167 days
+Prepared 2019-12: 14975/17167 days
+Prepared 2020-01: 15006/17167 days
+Prepared 2020-02: 15035/17167 days
+Prepared 2020-03: 15066/17167 days
+Prepared 2020-04: 15096/17167 days
+Prepared 2020-05: 15127/17167 days
+Prepared 2020-06: 15157/17167 days
+Prepared 2020-07: 15188/17167 days
+Prepared 2020-08: 15219/17167 days
+Prepared 2020-09: 15249/17167 days
+Prepared 2020-10: 15280/17167 days
+Prepared 2020-11: 15310/17167 days
+Prepared 2020-12: 15341/17167 days
+Prepared 2021-01: 15372/17167 days
+Prepared 2021-02: 15400/17167 days
+Prepared 2021-03: 15431/17167 days
+Prepared 2021-04: 15461/17167 days
+Prepared 2021-05: 15492/17167 days
+Prepared 2021-06: 15522/17167 days
+Prepared 2021-07: 15553/17167 days
+Prepared 2021-08: 15584/17167 days
+Prepared 2021-09: 15614/17167 days
+Prepared 2021-10: 15645/17167 days
+Prepared 2021-11: 15675/17167 days
+Prepared 2021-12: 15706/17167 days
+Prepared 2022-01: 15737/17167 days
+Prepared 2022-02: 15765/17167 days
+Prepared 2022-03: 15796/17167 days
+Prepared 2022-04: 15826/17167 days
+Prepared 2022-05: 15857/17167 days
+Prepared 2022-06: 15887/17167 days
+Prepared 2022-07: 15918/17167 days
+Prepared 2022-08: 15949/17167 days
+Prepared 2022-09: 15979/17167 days
+Prepared 2022-10: 16010/17167 days
+Prepared 2022-11: 16040/17167 days
+Prepared 2022-12: 16071/17167 days
+Prepared 2023-01: 16102/17167 days
+Prepared 2023-02: 16130/17167 days
+Prepared 2023-03: 16161/17167 days
+Prepared 2023-04: 16191/17167 days
+Prepared 2023-05: 16222/17167 days
+Prepared 2023-06: 16252/17167 days
+Prepared 2023-07: 16283/17167 days
+Prepared 2023-08: 16314/17167 days
+Prepared 2023-09: 16344/17167 days
+Prepared 2023-10: 16375/17167 days
+Prepared 2023-11: 16405/17167 days
+Prepared 2023-12: 16436/17167 days
+Prepared 2024-01: 16467/17167 days
+Prepared 2024-02: 16496/17167 days
+Prepared 2024-03: 16527/17167 days
+Prepared 2024-04: 16557/17167 days
+Prepared 2024-05: 16588/17167 days
+Prepared 2024-06: 16618/17167 days
+Prepared 2024-07: 16649/17167 days
+Prepared 2024-08: 16680/17167 days
+Prepared 2024-09: 16710/17167 days
+Prepared 2024-10: 16741/17167 days
+Prepared 2024-11: 16771/17167 days
+Prepared 2024-12: 16802/17167 days
+Prepared 2025-01: 16833/17167 days
+Prepared 2025-02: 16861/17167 days
+Prepared 2025-03: 16892/17167 days
+Prepared 2025-04: 16922/17167 days
+Prepared 2025-05: 16953/17167 days
+Prepared 2025-06: 16983/17167 days
+Prepared 2025-07: 17014/17167 days
+Prepared 2025-08: 17045/17167 days
+Prepared 2025-09: 17075/17167 days
+Prepared 2025-10: 17106/17167 days
+Prepared 2025-11: 17136/17167 days
+Prepared 2025-12: 17167/17167 days
+Daily preparation complete: /lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared
+2026-10-01T16:57:01 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:02:01 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:07:01 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:12:01 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:17:01 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:22:02 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:27:02 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:32:02 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:37:02 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:42:02 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:47:03 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:52:03 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T17:57:03 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:02:03 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:07:04 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:12:04 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:17:04 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:22:04 GPU admission: all GPUs busy; retrying in 300s
+GPU admission: {"time": "2026-10-01T09:27:05.220443+00:00", "gpu": {"index": 5, "uuid": "GPU-26afc5c4-4bd8-8eb8-62ce-8d9e1d441ed1", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "raw", "--regularization", "none", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed7.pt", "--seed", "7", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5186598941110425}
+{"model": "transformer", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.47956193230099314}
+{"model": "transformer", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.4488296535313477}
+{"model": "transformer", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.4271333531396564}
+{"model": "transformer", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.41415234046180655}
+{"model": "transformer", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.4028501565290526}
+{"model": "transformer", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.40006107386104617}
+{"model": "transformer", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.3887904098976275}
+{"model": "transformer", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.3852535267192197}
+{"model": "transformer", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.38189493934560553}
+{"model": "transformer", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.37948463857753056}
+{"model": "transformer", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.37949631260936006}
+{"model": "transformer", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.372116759205161}
+{"model": "transformer", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.37111944950511844}
+{"model": "transformer", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.370832547122664}
+{"model": "transformer", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.36810226727449336}
+{"model": "transformer", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.37036248755464285}
+{"model": "transformer", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.3667931225551875}
+{"model": "transformer", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.36528909369706647}
+{"model": "transformer", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.3639864598991247}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed7.pt
+2026-10-01T18:38:14 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:43:14 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:48:14 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:53:15 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T18:58:15 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T19:03:15 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T19:08:15 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T19:13:15 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T19:18:16 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T19:23:16 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T19:28:16 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T19:33:16 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T19:38:16 GPU admission: all GPUs busy; retrying in 300s
+GPU admission: {"time": "2026-10-01T10:43:17.336612+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed7.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed7.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed7.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6001044972915064, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9657421688806664}
+GPU admission: {"time": "2026-10-01T10:43:33.290376+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "latent", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed7.pt", "--seed", "7", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.46164587140083313}
+{"model": "transformer", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.42185135265060125}
+{"model": "transformer", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.40041289236172134}
+{"model": "transformer", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.38674471793450876}
+{"model": "transformer", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.37940859815465583}
+{"model": "transformer", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.37410368088428675}
+{"model": "transformer", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.37253736367820534}
+{"model": "transformer", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.37073742288168055}
+{"model": "transformer", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.37029019475353864}
+{"model": "transformer", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.37326290117040295}
+{"model": "transformer", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.37174323416617977}
+{"model": "transformer", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.37304524091074914}
+{"model": "transformer", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.3748580057635828}
+{"model": "transformer", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.37570619532165944}
+{"model": "transformer", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.3785408306714861}
+{"model": "transformer", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.37582609717641136}
+{"model": "transformer", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.37729564069358007}
+{"model": "transformer", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.37603033977726114}
+{"model": "transformer", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.3799189944189437}
+{"model": "transformer", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.37938306583442716}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed7.pt
+2026-10-01T20:17:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T20:22:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T20:27:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T20:32:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T20:37:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T20:42:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T20:47:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T20:52:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T20:57:33 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:02:33 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:07:33 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:12:33 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:17:33 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:22:34 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:27:34 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:32:34 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:37:34 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:42:34 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:47:35 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:52:35 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T21:57:35 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:02:35 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:07:35 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:12:36 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:17:36 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:22:36 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:27:36 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:32:36 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:37:37 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:42:37 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:47:37 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:52:37 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T22:57:38 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T23:02:38 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T23:07:38 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T23:12:38 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T23:17:38 GPU admission: all GPUs busy; retrying in 300s
+2026-10-01T23:22:39 GPU admission: all GPUs busy; retrying in 300s
+GPU admission: {"time": "2026-10-01T14:27:39.369327+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed7.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed7.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed7.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6072387419692763, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9663844035250282}
+GPU admission: {"time": "2026-10-01T14:28:10.262416+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "guided", "--guide-mode", "learned", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed7.pt", "--seed", "7", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "guided", "epoch": 1, "selection_state_mse": 0.5171296443751106}
+{"model": "transformer", "bridge": "guided", "epoch": 2, "selection_state_mse": 0.47699368439015366}
+{"model": "transformer", "bridge": "guided", "epoch": 3, "selection_state_mse": 0.44749838357021776}
+{"model": "transformer", "bridge": "guided", "epoch": 4, "selection_state_mse": 0.425505067720239}
+{"model": "transformer", "bridge": "guided", "epoch": 5, "selection_state_mse": 0.41268786534325325}
+{"model": "transformer", "bridge": "guided", "epoch": 6, "selection_state_mse": 0.3987659118748156}
+{"model": "transformer", "bridge": "guided", "epoch": 7, "selection_state_mse": 0.39010056611215654}
+{"model": "transformer", "bridge": "guided", "epoch": 8, "selection_state_mse": 0.38260331314406043}
+{"model": "transformer", "bridge": "guided", "epoch": 9, "selection_state_mse": 0.37804234395034575}
+{"model": "transformer", "bridge": "guided", "epoch": 10, "selection_state_mse": 0.3715769939857191}
+{"model": "transformer", "bridge": "guided", "epoch": 11, "selection_state_mse": 0.3708942571804767}
+{"model": "transformer", "bridge": "guided", "epoch": 12, "selection_state_mse": 0.366889040675369}
+{"model": "transformer", "bridge": "guided", "epoch": 13, "selection_state_mse": 0.3631334318940481}
+{"model": "transformer", "bridge": "guided", "epoch": 14, "selection_state_mse": 0.36485747723694306}
+{"model": "transformer", "bridge": "guided", "epoch": 15, "selection_state_mse": 0.36117119197015213}
+{"model": "transformer", "bridge": "guided", "epoch": 16, "selection_state_mse": 0.357890179196175}
+{"model": "transformer", "bridge": "guided", "epoch": 17, "selection_state_mse": 0.36092541498568936}
+{"model": "transformer", "bridge": "guided", "epoch": 18, "selection_state_mse": 0.35551901893119053}
+{"model": "transformer", "bridge": "guided", "epoch": 19, "selection_state_mse": 0.35678053549695377}
+{"model": "transformer", "bridge": "guided", "epoch": 20, "selection_state_mse": 0.352714464039456}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed7.pt
+2026-10-02T00:05:26 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:10:27 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:15:27 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:20:27 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:25:27 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:30:28 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:35:28 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:40:28 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:45:28 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:50:28 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T00:55:29 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:00:29 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:05:29 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:10:29 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:15:29 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:20:30 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:25:30 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:30:30 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:35:30 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:40:30 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:45:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:50:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T01:55:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:00:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:05:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:10:31 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:15:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:20:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:25:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:30:32 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:35:33 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:40:33 GPU admission: all GPUs busy; retrying in 300s
+2026-10-02T02:45:33 GPU admission: all GPUs busy; retrying in 300s
+GPU admission: {"time": "2026-10-01T17:50:33.954165+00:00", "gpu": {"index": 0, "uuid": "GPU-0b9ba95f-a7cf-4e48-c55b-337d06b02a27", "used_mib": 82.0, "total_mib": 97887.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed7.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed7.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed7.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.5925899940064215, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9477874324749078}
+GPU admission: {"time": "2026-10-01T17:50:52.980400+00:00", "gpu": {"index": 0, "uuid": "GPU-0b9ba95f-a7cf-4e48-c55b-337d06b02a27", "used_mib": 82.0, "total_mib": 97887.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "guided", "--guide-mode", "zero", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed7.pt", "--seed", "7", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "guided", "epoch": 1, "selection_state_mse": 0.518721012674414}
+{"model": "transformer", "bridge": "guided", "epoch": 2, "selection_state_mse": 0.4801530635083551}
+{"model": "transformer", "bridge": "guided", "epoch": 3, "selection_state_mse": 0.4511604074647906}
+{"model": "transformer", "bridge": "guided", "epoch": 4, "selection_state_mse": 0.4287638203485254}
+{"model": "transformer", "bridge": "guided", "epoch": 5, "selection_state_mse": 0.4182628276187809}
+{"model": "transformer", "bridge": "guided", "epoch": 6, "selection_state_mse": 0.4076679419368517}
+{"model": "transformer", "bridge": "guided", "epoch": 7, "selection_state_mse": 0.4026170105286438}
+{"model": "transformer", "bridge": "guided", "epoch": 8, "selection_state_mse": 0.39512300707929754}
+{"model": "transformer", "bridge": "guided", "epoch": 9, "selection_state_mse": 0.3945160463794029}
+{"model": "transformer", "bridge": "guided", "epoch": 10, "selection_state_mse": 0.3897057619601708}
+{"model": "transformer", "bridge": "guided", "epoch": 11, "selection_state_mse": 0.387085407277373}
+{"model": "transformer", "bridge": "guided", "epoch": 12, "selection_state_mse": 0.3848074276740107}
+{"model": "transformer", "bridge": "guided", "epoch": 13, "selection_state_mse": 0.382105839064832}
+{"model": "transformer", "bridge": "guided", "epoch": 14, "selection_state_mse": 0.38224950729294876}
+{"model": "transformer", "bridge": "guided", "epoch": 15, "selection_state_mse": 0.38179604230203196}
+{"model": "transformer", "bridge": "guided", "epoch": 16, "selection_state_mse": 0.3799344231264164}
+{"model": "transformer", "bridge": "guided", "epoch": 17, "selection_state_mse": 0.38087912239177746}
+{"model": "transformer", "bridge": "guided", "epoch": 18, "selection_state_mse": 0.3778494454708907}
+{"model": "transformer", "bridge": "guided", "epoch": 19, "selection_state_mse": 0.38012180292926034}
+{"model": "transformer", "bridge": "guided", "epoch": 20, "selection_state_mse": 0.37770494679694877}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed7.pt
+GPU admission: {"time": "2026-10-01T17:59:32.797633+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed7.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed7.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed7.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6131825600643165, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 2.028916265526213}
+GPU admission: {"time": "2026-10-01T17:59:46.938030+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "raw", "--regularization", "none", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed19.pt", "--seed", "19", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5142222356573877}
+{"model": "transformer", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.4765240508111775}
+{"model": "transformer", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.4460917216560232}
+{"model": "transformer", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.423918611325506}
+{"model": "transformer", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.4087998120297359}
+{"model": "transformer", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.4005357803211479}
+{"model": "transformer", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.39475160685439914}
+{"model": "transformer", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.38632678836178697}
+{"model": "transformer", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.38217681807346765}
+{"model": "transformer", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.3776371156803328}
+{"model": "transformer", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.3760772582926826}
+{"model": "transformer", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.3758321392758551}
+{"model": "transformer", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.3722990757868626}
+{"model": "transformer", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.37144234479979416}
+{"model": "transformer", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.36930193715275283}
+{"model": "transformer", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.3678703109230274}
+{"model": "transformer", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.3668421791700644}
+{"model": "transformer", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.365700118003353}
+{"model": "transformer", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.3635294304323067}
+{"model": "transformer", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.36420023271048807}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed19.pt
+GPU admission: {"time": "2026-10-01T18:03:46.149038+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed19.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed19.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed19.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6009877111368191, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9764160423216366}
+GPU admission: {"time": "2026-10-01T18:03:57.018009+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "latent", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed19.pt", "--seed", "19", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.4604470989743977}
+{"model": "transformer", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.42137386267907045}
+{"model": "transformer", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.40371951895190084}
+{"model": "transformer", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.39065721975056705}
+{"model": "transformer", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.3825727429225016}
+{"model": "transformer", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.37707932313684817}
+{"model": "transformer", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.37486543425594465}
+{"model": "transformer", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.37165696144659977}
+{"model": "transformer", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.3713198681193662}
+{"model": "transformer", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.3733147843728212}
+{"model": "transformer", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.3775116419727312}
+{"model": "transformer", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.3763942898964539}
+{"model": "transformer", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.3771277464900182}
+{"model": "transformer", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.37613748124588153}
+{"model": "transformer", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.38099191415138484}
+{"model": "transformer", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.3794316694609534}
+{"model": "transformer", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.38114679031134857}
+{"model": "transformer", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.3831452438676584}
+{"model": "transformer", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.3838203405411939}
+{"model": "transformer", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.3804018951625246}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed19.pt
+GPU admission: {"time": "2026-10-01T18:12:51.043299+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed19.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed19.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed19.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.608592064115521, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9798850699880335}
+GPU admission: {"time": "2026-10-01T18:13:13.860704+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "guided", "--guide-mode", "learned", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed19.pt", "--seed", "19", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "guided", "epoch": 1, "selection_state_mse": 0.5131812151123288}
+{"model": "transformer", "bridge": "guided", "epoch": 2, "selection_state_mse": 0.4751419983413309}
+{"model": "transformer", "bridge": "guided", "epoch": 3, "selection_state_mse": 0.44865740718102115}
+{"model": "transformer", "bridge": "guided", "epoch": 4, "selection_state_mse": 0.4266189273882598}
+{"model": "transformer", "bridge": "guided", "epoch": 5, "selection_state_mse": 0.4146641938662279}
+{"model": "transformer", "bridge": "guided", "epoch": 6, "selection_state_mse": 0.39684379196936087}
+{"model": "transformer", "bridge": "guided", "epoch": 7, "selection_state_mse": 0.3906688695281941}
+{"model": "transformer", "bridge": "guided", "epoch": 8, "selection_state_mse": 0.3820157639024974}
+{"model": "transformer", "bridge": "guided", "epoch": 9, "selection_state_mse": 0.37889949108115256}
+{"model": "transformer", "bridge": "guided", "epoch": 10, "selection_state_mse": 0.3725936612613091}
+{"model": "transformer", "bridge": "guided", "epoch": 11, "selection_state_mse": 0.3692218742618939}
+{"model": "transformer", "bridge": "guided", "epoch": 12, "selection_state_mse": 0.3664297732081897}
+{"model": "transformer", "bridge": "guided", "epoch": 13, "selection_state_mse": 0.3669538945133381}
+{"model": "transformer", "bridge": "guided", "epoch": 14, "selection_state_mse": 0.3640760444061236}
+{"model": "transformer", "bridge": "guided", "epoch": 15, "selection_state_mse": 0.3600500884498088}
+{"model": "transformer", "bridge": "guided", "epoch": 16, "selection_state_mse": 0.3593713884056194}
+{"model": "transformer", "bridge": "guided", "epoch": 17, "selection_state_mse": 0.36083473249534387}
+{"model": "transformer", "bridge": "guided", "epoch": 18, "selection_state_mse": 0.3581848183564995}
+{"model": "transformer", "bridge": "guided", "epoch": 19, "selection_state_mse": 0.35652386493549426}
+{"model": "transformer", "bridge": "guided", "epoch": 20, "selection_state_mse": 0.35327753921542887}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed19.pt
+GPU admission: {"time": "2026-10-01T18:23:32.490230+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed19.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed19.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed19.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.5925833091245136, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9546239615496555}
+GPU admission: {"time": "2026-10-01T18:23:46.558938+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "guided", "--guide-mode", "zero", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed19.pt", "--seed", "19", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "guided", "epoch": 1, "selection_state_mse": 0.5148690967674715}
+{"model": "transformer", "bridge": "guided", "epoch": 2, "selection_state_mse": 0.4747744546272947}
+{"model": "transformer", "bridge": "guided", "epoch": 3, "selection_state_mse": 0.45177777742209063}
+{"model": "transformer", "bridge": "guided", "epoch": 4, "selection_state_mse": 0.4348609405781479}
+{"model": "transformer", "bridge": "guided", "epoch": 5, "selection_state_mse": 0.4239837169600886}
+{"model": "transformer", "bridge": "guided", "epoch": 6, "selection_state_mse": 0.41321399263542447}
+{"model": "transformer", "bridge": "guided", "epoch": 7, "selection_state_mse": 0.40951211989690395}
+{"model": "transformer", "bridge": "guided", "epoch": 8, "selection_state_mse": 0.4040623243407336}
+{"model": "transformer", "bridge": "guided", "epoch": 9, "selection_state_mse": 0.3989429010915886}
+{"model": "transformer", "bridge": "guided", "epoch": 10, "selection_state_mse": 0.39611029607564896}
+{"model": "transformer", "bridge": "guided", "epoch": 11, "selection_state_mse": 0.39485458149967423}
+{"model": "transformer", "bridge": "guided", "epoch": 12, "selection_state_mse": 0.3947862532877338}
+{"model": "transformer", "bridge": "guided", "epoch": 13, "selection_state_mse": 0.3927778913337249}
+{"model": "transformer", "bridge": "guided", "epoch": 14, "selection_state_mse": 0.39097243909978513}
+{"model": "transformer", "bridge": "guided", "epoch": 15, "selection_state_mse": 0.3885426112547303}
+{"model": "transformer", "bridge": "guided", "epoch": 16, "selection_state_mse": 0.38943891772212014}
+{"model": "transformer", "bridge": "guided", "epoch": 17, "selection_state_mse": 0.3878730152235205}
+{"model": "transformer", "bridge": "guided", "epoch": 18, "selection_state_mse": 0.3876991053870157}
+{"model": "transformer", "bridge": "guided", "epoch": 19, "selection_state_mse": 0.388037058024197}
+{"model": "transformer", "bridge": "guided", "epoch": 20, "selection_state_mse": 0.38813114503316737}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed19.pt
+GPU admission: {"time": "2026-10-01T18:32:33.541853+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed19.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed19.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed19.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6202048682336571, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 2.061069517794155}
+GPU admission: {"time": "2026-10-01T18:32:47.376499+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "raw", "--regularization", "none", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed43.pt", "--seed", "43", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "raw", "epoch": 1, "selection_state_mse": 0.5190483957610147}
+{"model": "transformer", "bridge": "raw", "epoch": 2, "selection_state_mse": 0.48191534199929636}
+{"model": "transformer", "bridge": "raw", "epoch": 3, "selection_state_mse": 0.4482258374918957}
+{"model": "transformer", "bridge": "raw", "epoch": 4, "selection_state_mse": 0.4287364157173729}
+{"model": "transformer", "bridge": "raw", "epoch": 5, "selection_state_mse": 0.41173721682548153}
+{"model": "transformer", "bridge": "raw", "epoch": 6, "selection_state_mse": 0.40450284744439496}
+{"model": "transformer", "bridge": "raw", "epoch": 7, "selection_state_mse": 0.390000460122839}
+{"model": "transformer", "bridge": "raw", "epoch": 8, "selection_state_mse": 0.38360765513815953}
+{"model": "transformer", "bridge": "raw", "epoch": 9, "selection_state_mse": 0.3784125975560827}
+{"model": "transformer", "bridge": "raw", "epoch": 10, "selection_state_mse": 0.37169060428412193}
+{"model": "transformer", "bridge": "raw", "epoch": 11, "selection_state_mse": 0.36752828901211576}
+{"model": "transformer", "bridge": "raw", "epoch": 12, "selection_state_mse": 0.3635775649473448}
+{"model": "transformer", "bridge": "raw", "epoch": 13, "selection_state_mse": 0.3622423982717534}
+{"model": "transformer", "bridge": "raw", "epoch": 14, "selection_state_mse": 0.36018045969941576}
+{"model": "transformer", "bridge": "raw", "epoch": 15, "selection_state_mse": 0.35702963414889016}
+{"model": "transformer", "bridge": "raw", "epoch": 16, "selection_state_mse": 0.3559589467181151}
+{"model": "transformer", "bridge": "raw", "epoch": 17, "selection_state_mse": 0.3546665957870068}
+{"model": "transformer", "bridge": "raw", "epoch": 18, "selection_state_mse": 0.3528134444322375}
+{"model": "transformer", "bridge": "raw", "epoch": 19, "selection_state_mse": 0.3521049823619214}
+{"model": "transformer", "bridge": "raw", "epoch": 20, "selection_state_mse": 0.3517327674321057}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed43.pt
+GPU admission: {"time": "2026-10-01T18:36:46.878110+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed43.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed43.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed43.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.5898257794387639, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9084541103204544}
+GPU admission: {"time": "2026-10-01T18:36:57.425628+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "latent", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed43.pt", "--seed", "43", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "latent", "epoch": 1, "selection_state_mse": 0.46166590871951757}
+{"model": "transformer", "bridge": "latent", "epoch": 2, "selection_state_mse": 0.4198575341835867}
+{"model": "transformer", "bridge": "latent", "epoch": 3, "selection_state_mse": 0.3989782060369461}
+{"model": "transformer", "bridge": "latent", "epoch": 4, "selection_state_mse": 0.3847091675175334}
+{"model": "transformer", "bridge": "latent", "epoch": 5, "selection_state_mse": 0.37646867950463914}
+{"model": "transformer", "bridge": "latent", "epoch": 6, "selection_state_mse": 0.3741222626960004}
+{"model": "transformer", "bridge": "latent", "epoch": 7, "selection_state_mse": 0.3702984972195638}
+{"model": "transformer", "bridge": "latent", "epoch": 8, "selection_state_mse": 0.3705353426344887}
+{"model": "transformer", "bridge": "latent", "epoch": 9, "selection_state_mse": 0.3707028524656959}
+{"model": "transformer", "bridge": "latent", "epoch": 10, "selection_state_mse": 0.36777812666435256}
+{"model": "transformer", "bridge": "latent", "epoch": 11, "selection_state_mse": 0.369878734103261}
+{"model": "transformer", "bridge": "latent", "epoch": 12, "selection_state_mse": 0.3676203540846665}
+{"model": "transformer", "bridge": "latent", "epoch": 13, "selection_state_mse": 0.3718896569489413}
+{"model": "transformer", "bridge": "latent", "epoch": 14, "selection_state_mse": 0.37210322771144666}
+{"model": "transformer", "bridge": "latent", "epoch": 15, "selection_state_mse": 0.3741459105897867}
+{"model": "transformer", "bridge": "latent", "epoch": 16, "selection_state_mse": 0.37273412055650484}
+{"model": "transformer", "bridge": "latent", "epoch": 17, "selection_state_mse": 0.36942754402681405}
+{"model": "transformer", "bridge": "latent", "epoch": 18, "selection_state_mse": 0.37371879824163196}
+{"model": "transformer", "bridge": "latent", "epoch": 19, "selection_state_mse": 0.3746588923705954}
+{"model": "transformer", "bridge": "latent", "epoch": 20, "selection_state_mse": 0.3775496733614873}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed43.pt
+GPU admission: {"time": "2026-10-01T18:45:37.418505+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed43.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed43.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed43.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6060388333765662, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9645144721996266}
+GPU admission: {"time": "2026-10-01T18:46:01.798003+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "guided", "--guide-mode", "learned", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed43.pt", "--seed", "43", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "guided", "epoch": 1, "selection_state_mse": 0.5138775282711359}
+{"model": "transformer", "bridge": "guided", "epoch": 2, "selection_state_mse": 0.47889129272519126}
+{"model": "transformer", "bridge": "guided", "epoch": 3, "selection_state_mse": 0.4459915832466899}
+{"model": "transformer", "bridge": "guided", "epoch": 4, "selection_state_mse": 0.4220516597001505}
+{"model": "transformer", "bridge": "guided", "epoch": 5, "selection_state_mse": 0.4077298813439787}
+{"model": "transformer", "bridge": "guided", "epoch": 6, "selection_state_mse": 0.39713615982902223}
+{"model": "transformer", "bridge": "guided", "epoch": 7, "selection_state_mse": 0.3835363123396515}
+{"model": "transformer", "bridge": "guided", "epoch": 8, "selection_state_mse": 0.37724224967665587}
+{"model": "transformer", "bridge": "guided", "epoch": 9, "selection_state_mse": 0.3724493524280449}
+{"model": "transformer", "bridge": "guided", "epoch": 10, "selection_state_mse": 0.366238102554302}
+{"model": "transformer", "bridge": "guided", "epoch": 11, "selection_state_mse": 0.36341221577871924}
+{"model": "transformer", "bridge": "guided", "epoch": 12, "selection_state_mse": 0.36086859532334764}
+{"model": "transformer", "bridge": "guided", "epoch": 13, "selection_state_mse": 0.3585249298956901}
+{"model": "transformer", "bridge": "guided", "epoch": 14, "selection_state_mse": 0.3575235569680937}
+{"model": "transformer", "bridge": "guided", "epoch": 15, "selection_state_mse": 0.3535509526358937}
+{"model": "transformer", "bridge": "guided", "epoch": 16, "selection_state_mse": 0.3517833279233659}
+{"model": "transformer", "bridge": "guided", "epoch": 17, "selection_state_mse": 0.35069289740958287}
+{"model": "transformer", "bridge": "guided", "epoch": 18, "selection_state_mse": 0.35047541606810784}
+{"model": "transformer", "bridge": "guided", "epoch": 19, "selection_state_mse": 0.34864602075492274}
+{"model": "transformer", "bridge": "guided", "epoch": 20, "selection_state_mse": 0.35004983288140046}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed43.pt
+GPU admission: {"time": "2026-10-01T18:56:03.956695+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed43.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed43.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed43.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.5889801590840795, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9248871726919157}
+GPU admission: {"time": "2026-10-01T18:56:17.334868+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.train", "--model", "transformer", "--training-mode", "joint", "--initialization", "fresh", "--mode", "enriched", "--representation", "climate_manifold", "--latent-layout", "spatial", "--experiment", "primary", "--anchor", "none", "--raw-backend", "matched", "--manifold-dim", "64", "--manifold-hidden-dim", "512", "--latent-channels", "32", "--spatial-downsample", "2", "--spatial-hidden-dim", "64", "--context-dim", "64", "--history-steps", "6", "--history-stride", "1", "--hidden-dim", "128", "--weather-depth", "4", "--weather-patch-size", "2", "--transformer-heads", "4", "--epochs", "20", "--batch-size", "16", "--learning-rate", "0.001", "--horizon-steps", "5", "--tendency-weight", "0.1", "--reconstruction-weight", "0.1", "--window-stride", "1", "--max-windows", "0", "--spatial-variable-conditioning", "--bridge", "guided", "--guide-mode", "zero", "--constraint-pair", "statistical", "--regularization", "full", "--constraint-decoder", "separate_surface_and_information", "--statistical-loss", "signed_measure", "--statistical-weight", "0.1", "--statistical-flow-weight", "0", "--conditional-flow-weight", "0", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed43.pt", "--seed", "43", "--device", "cuda:0"]}
+{"model": "transformer", "bridge": "guided", "epoch": 1, "selection_state_mse": 0.5136417399062473}
+{"model": "transformer", "bridge": "guided", "epoch": 2, "selection_state_mse": 0.4787145262671684}
+{"model": "transformer", "bridge": "guided", "epoch": 3, "selection_state_mse": 0.4498493583851921}
+{"model": "transformer", "bridge": "guided", "epoch": 4, "selection_state_mse": 0.42874773983542114}
+{"model": "transformer", "bridge": "guided", "epoch": 5, "selection_state_mse": 0.4173075642467147}
+{"model": "transformer", "bridge": "guided", "epoch": 6, "selection_state_mse": 0.4096775143886882}
+{"model": "transformer", "bridge": "guided", "epoch": 7, "selection_state_mse": 0.4012954843864337}
+{"model": "transformer", "bridge": "guided", "epoch": 8, "selection_state_mse": 0.39552585593559747}
+{"model": "transformer", "bridge": "guided", "epoch": 9, "selection_state_mse": 0.3910563234522145}
+{"model": "transformer", "bridge": "guided", "epoch": 10, "selection_state_mse": 0.38565222597566967}
+{"model": "transformer", "bridge": "guided", "epoch": 11, "selection_state_mse": 0.3842264036584632}
+{"model": "transformer", "bridge": "guided", "epoch": 12, "selection_state_mse": 0.3827200875155341}
+{"model": "transformer", "bridge": "guided", "epoch": 13, "selection_state_mse": 0.38135523229455187}
+{"model": "transformer", "bridge": "guided", "epoch": 14, "selection_state_mse": 0.3800338254079622}
+{"model": "transformer", "bridge": "guided", "epoch": 15, "selection_state_mse": 0.3784120279645531}
+{"model": "transformer", "bridge": "guided", "epoch": 16, "selection_state_mse": 0.3802953406595044}
+{"model": "transformer", "bridge": "guided", "epoch": 17, "selection_state_mse": 0.37716136793426813}
+{"model": "transformer", "bridge": "guided", "epoch": 18, "selection_state_mse": 0.3786658451244889}
+{"model": "transformer", "bridge": "guided", "epoch": 19, "selection_state_mse": 0.37695115394644174}
+{"model": "transformer", "bridge": "guided", "epoch": 20, "selection_state_mse": 0.37892091873087774}
+/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed43.pt
+GPU admission: {"time": "2026-10-01T19:04:55.492500+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed43.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "validation", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed43.validation.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed43.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6112797674622041, "persistence_normalized_rmse": 0.9241835151782715, "wind_speed_rmse_mps": 1.9936689462329704}
+{
+  "transformer/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.5969726626223631,
+    "sample_std_normalized_rmse": 0.006205116526234478,
+    "scored_runs": 3
+  },
+  "transformer/climate_manifold/latent/none/joint/full/fresh/statistical:signed_measure": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6072898798204545,
+    "sample_std_normalized_rmse": 0.001277383306393714,
+    "scored_runs": 3
+  },
+  "transformer/climate_manifold/guided/none/joint/full/fresh/guided:learned:statistical:signed_measure": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.5913844874050049,
+    "sample_std_normalized_rmse": 0.002082212087664077,
+    "scored_runs": 3
+  },
+  "transformer/climate_manifold/guided/none/joint/full/fresh/guided:zero:statistical:signed_measure": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6148890652533926,
+    "sample_std_normalized_rmse": 0.004700901606650054,
+    "scored_runs": 3
+  }
+}
+GPU admission: {"time": "2026-10-01T19:05:10.692805+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed7.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed7.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed7.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6035100306316131, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.973404339305091}
+GPU admission: {"time": "2026-10-01T19:05:21.177439+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed7.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed7.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed7.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6081724533941761, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.9625088969573474}
+GPU admission: {"time": "2026-10-01T19:05:45.016716+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed7.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed7.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed7.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.5937277721069524, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.9461252838113825}
+GPU admission: {"time": "2026-10-01T19:05:58.561309+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed7.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed7.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed7.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6145476924473597, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 2.026562497008294}
+GPU admission: {"time": "2026-10-01T19:06:12.161147+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed19.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed19.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed19.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6023229255698996, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.9736941380998816}
+GPU admission: {"time": "2026-10-01T19:06:22.589219+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed19.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed19.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed19.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6099916932009729, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.97380338750762}
+GPU admission: {"time": "2026-10-01T19:06:46.391988+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed19.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed19.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed19.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.5941256352916083, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.9518498725469373}
+GPU admission: {"time": "2026-10-01T19:06:59.652727+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed19.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed19.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed19.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6209962266005137, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 2.052368801026839}
+GPU admission: {"time": "2026-10-01T19:07:12.885020+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed43.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed43.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-raw-seed43.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.591320618044718, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.905551874392488}
+GPU admission: {"time": "2026-10-01T19:07:23.087203+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed43.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed43.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-latent-seed43.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6075684373031318, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.956203275217991}
+GPU admission: {"time": "2026-10-01T19:07:45.605028+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed43.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed43.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided-seed43.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.5899776275816833, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.9251198652994737}
+GPU admission: {"time": "2026-10-01T19:07:58.716648+00:00", "gpu": {"index": 4, "uuid": "GPU-4a20339f-3f78-d542-6e53-e987f55af744", "used_mib": 3.0, "total_mib": 46068.0, "utilization": 0.0}, "thresholds": {"max_utilization": 10.0, "max_memory_percent": 10.0, "min_free_gib": 8.0}, "inherited_cuda_visible_devices": null, "command": ["/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/venv/bin/python", "-m", "climate_manifold.downstream.evaluate", "--checkpoint", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed43.pt", "--archive", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/surface.npz", "--information", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/prepared/information.npz", "--split", "test", "--output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed43.test.json", "--forecast-output", "/lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/transformer-guided_zero-seed43.test.forecast.npz", "--max-cases", "0", "--origin-stride", "1", "--device", "cuda:0"]}
+{"normalized_rmse": 0.6124816216134004, "persistence_normalized_rmse": 0.9266795496087756, "wind_speed_rmse_mps": 1.9925321364595987}
+{
+  "transformer/raw/raw/none/joint/none/fresh": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.5990511914154103,
+    "sample_std_normalized_rmse": 0.006721132946656269,
+    "scored_runs": 3
+  },
+  "transformer/climate_manifold/latent/none/joint/full/fresh/statistical:signed_measure": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.6085775279660937,
+    "sample_std_normalized_rmse": 0.00126139063862707,
+    "scored_runs": 3
+  },
+  "transformer/climate_manifold/guided/none/joint/full/fresh/guided:learned:statistical:signed_measure": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.5926103449934147,
+    "sample_std_normalized_rmse": 0.0022886621650980714,
+    "scored_runs": 3
+  },
+  "transformer/climate_manifold/guided/none/joint/full/fresh/guided:zero:statistical:signed_measure": {
+    "seeds": [
+      7,
+      19,
+      43
+    ],
+    "mean_normalized_rmse": 0.616008513553758,
+    "sample_std_normalized_rmse": 0.004441297473747684,
+    "scored_runs": 3
+  }
+}
+
+Completed comparison: /lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/comparison.json
+Held-out test comparison: /lustre/home/yehyeon/climate_manifold_transformer_20261001_140940_mrVHVMnV/runs/comparison-20261001-165629/comparison.test.json
+EXIT: 0
