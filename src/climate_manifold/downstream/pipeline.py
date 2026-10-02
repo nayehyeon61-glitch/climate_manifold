@@ -43,6 +43,10 @@ class PredictorConfig:
     weather_patch_size: int = 2
     transformer_heads: int = 4
     guide_mode: str = 'learned'
+    # Guided Transformers historically saw information only through E. When
+    # enabled, origin information also enters as raw-matched tokens, so guided
+    # and raw arms share the same direct information access.
+    guide_direct_information: bool = False
 
     def __post_init__(self):
         if self.model not in ('mlp','neural_ode','climode','persistence','transformer',*SPATIAL_IMPLEMENTATIONS):
@@ -61,6 +65,10 @@ class PredictorConfig:
             raise ValueError('Guide mode must be learned or zero')
         if self.guide_mode != 'learned' and self.bridge != 'guided':
             raise ValueError('Guide ablations require bridge=guided')
+        if not isinstance(self.guide_direct_information, bool):
+            raise ValueError('guide_direct_information must be a boolean')
+        if self.guide_direct_information and (self.bridge != 'guided' or not self.condition_information):
+            raise ValueError('Direct guide information requires bridge=guided with information conditioning')
         if (isinstance(self.transformer_heads, bool) or not isinstance(self.transformer_heads, int)
                 or self.transformer_heads < 1):
             raise ValueError('Transformer heads must be a positive integer')
@@ -155,6 +163,7 @@ class ForecastPipeline(nn.Module):
                 raise ValueError('Matched raw spatial controls require the archive schema')
             from .latent_climode import _pooled_coordinates
             _, _, periodic_lon = _pooled_coordinates(manifold.config.grid, schema, 1)
+        if matched_raw or config.guide_direct_information:
             if config.condition_information and manifold.info_metadata:
                 shape = tuple(manifold.info_metadata['shape'])
                 if len(shape) != 3 or shape[1:] != tuple(manifold.config.grid[1:]):
@@ -263,7 +272,9 @@ class ForecastPipeline(nn.Module):
             raise ValueError('Lead hours must be finite, positive and strictly increasing')
         features = self.bridge.encode_history(history,information)
         if self.config.bridge == 'guided':
-            mean, std = self.predictor(history, lead_hours, origin_ns, guide_history=features)
+            direct_information = information if self.config.guide_direct_information else None
+            mean, std = self.predictor(history, lead_hours, origin_ns, direct_information,
+                                       guide_history=features)
             if not torch.isfinite(mean).all():
                 raise FloatingPointError('Nonfinite guided downstream prediction')
             return {'mean': mean, 'std': std, 'reconstructed_origin': None,

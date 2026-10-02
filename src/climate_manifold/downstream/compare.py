@@ -214,6 +214,9 @@ def _validate_guides(group):
     if not group or group[0]['config']['model'] != 'transformer':
         return
     first = group[0]
+    if len({row['config'].get('guide_direct_information', False) for row in group
+            if row['config']['bridge'] == 'guided'}) > 1:
+        raise ValueError('Unfair comparison: guided arms differ in direct origin information')
     for row in group:
         cfg = row['config']
         for key, default in (('hidden_dim', 128), ('transformer_heads', 4),
@@ -234,6 +237,8 @@ def _validate_guides(group):
             'forecast_output': 'physical_fields', 'forecast_decoder_used': False,
             'forecast_gradient_to_encoder': mode == 'learned', 'stochastic_sampling': False,
         }
+        if cfg.get('guide_direct_information', False):
+            expected['direct_origin_information'] = True
         if mode not in ('learned', 'zero') or contract != expected:
             raise ValueError('Invalid guide_contract')
         if row.get('representation_config') is None:

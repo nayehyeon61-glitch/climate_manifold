@@ -167,3 +167,35 @@ def test_transformer_raw_and_latent_controls_train_and_reload(pinn_prepared, tmp
     assert output['mean'].shape == batch['targets'][:, :2].shape
     assert torch.isfinite(output['mean']).all()
     assert (output['predicted_latent'] is not None) == (bridge == 'latent')
+
+
+@pytest.mark.parametrize('guide_mode', ['learned', 'zero'])
+def test_guided_direct_information_matches_raw_access(pinn_prepared, tmp_path, guide_mode):
+    _, _, _, archive = pinn_prepared
+    args = guided_args(archive, tmp_path, '--guide-mode', guide_mode, '--guide-direct-information')
+    checkpoint = train(args)
+    model, payload = load_predictor(checkpoint)
+    assert payload['config']['guide_direct_information'] is True
+    assert payload['conditioning']['direct_origin_information'] is True
+    assert payload['guide_contract']['direct_origin_information'] is True
+    assert model.predictor.information_channels > 0
+    _, _, data = initialize_manifold(args)
+    batch = _batch(data, model.a_config)
+    model.eval()
+    history, information, origin, leads = _inputs(batch)
+    with torch.no_grad():
+        guide = model.bridge.encode_history(history, information)
+        base = model.predictor(history, leads, origin, information, guide_history=guide)[0]
+        moved = model.predictor(history, leads, origin, information + 1., guide_history=guide)[0]
+        torch.testing.assert_close(model(*_inputs(batch))['mean'], base, rtol=0, atol=0)
+    # Information reaches the forecast directly, not only through the encoder.
+    assert not torch.equal(base, moved)
+
+
+def test_guided_direct_information_defaults_off(pinn_prepared, tmp_path):
+    pipe, _, _ = _guided_pipeline(pinn_prepared, tmp_path)
+    assert pipe.config.guide_direct_information is False
+    assert pipe.predictor.information_channels == 0
+    with pytest.raises(ValueError, match='Direct guide information requires bridge=guided'):
+        PredictorConfig(model='transformer', bridge='latent', training_mode='joint',
+                        latent_layout='spatial', guide_direct_information=True)

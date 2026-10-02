@@ -110,7 +110,7 @@ def _runner(tmp_path, **settings):
     env={key:value for key,value in os.environ.items() if key not in (
         'SEEDS','A_CHECKPOINT','BATCH_SIZE','CONSTRAINT_DECODER','STATISTICAL_LOSS',
         'INCLUDE_ZERO_GUIDE','VARIABLE_CONDITIONING','STATISTICAL_FLOW_WEIGHT','CONDITIONAL_FLOW_WEIGHT',
-        'EVALUATE_TEST','GPU_GUARD','GPU_LOCK_ROOT')}
+        'EVALUATE_TEST','GPU_GUARD','GPU_LOCK_ROOT','GUIDE_DIRECT_INFORMATION')}
     env.update(PYTHON=str(stub),CALLS=str(calls),ARCHIVE='surface archive.npz',
                INFO='physical information',RUN=str(tmp_path/'run'),**settings)
     script=Path(__file__).resolve().parents[1]/'scripts/run_guided_transformer_comparison.sh'
@@ -224,3 +224,37 @@ def test_guided_constraint_ablation_does_not_normalize_away_confounds(tmp_path,p
     target[path[-1]]=value
     with pytest.raises(ValueError,match=message):
         run_compare(tmp_path,[control,guide_report()])
+
+
+def _direct(row):
+    row['config']['guide_direct_information'] = True
+    row['guide_contract']['direct_origin_information'] = True
+    return row
+
+
+def test_direct_information_guides_compare_and_reject_mixing(tmp_path):
+    rows = [transformer_raw(), guide_report('latent'), _direct(guide_report()), _direct(guide_report(mode='zero'))]
+    result = run_compare(tmp_path, rows)
+    assert len(result['guide_effects']) == 2
+    assert all(r['candidate_guide_mode']=='learned' for r in result['guide_effects'])
+    for name in ('mixed', 'unlabelled'):
+        (tmp_path/name).mkdir()
+    with pytest.raises(ValueError, match='direct origin information'):
+        run_compare(tmp_path/'mixed', [transformer_raw(), _direct(guide_report()), guide_report(mode='zero')])
+    unlabelled = _direct(guide_report())
+    del unlabelled['guide_contract']['direct_origin_information']
+    with pytest.raises(ValueError, match='guide_contract'):
+        run_compare(tmp_path/'unlabelled', [transformer_raw(), unlabelled])
+
+
+def test_runner_direct_information_only_on_guided_arms(tmp_path):
+    result, commands = _runner(tmp_path, SEEDS='7', INCLUDE_ZERO_GUIDE='1', GUIDE_DIRECT_INFORMATION='1')
+    assert result.returncode == 0, result.stderr
+    train=[r for r in commands if r[1]=='climate_manifold.downstream.train']
+    assert len(train)==4
+    for args in train:
+        guided = args[args.index('--bridge')+1]=='guided'
+        assert ('--guide-direct-information' in args) == guided
+    (tmp_path/'default').mkdir()
+    _, default = _runner(tmp_path/'default', SEEDS='7', INCLUDE_ZERO_GUIDE='1')
+    assert not any('--guide-direct-information' in r for r in default)

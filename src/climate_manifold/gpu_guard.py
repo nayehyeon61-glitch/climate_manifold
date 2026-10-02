@@ -17,9 +17,14 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 from uuid import UUID
 
 from .workspace import WORK_ROOT
+
+
+class NoGPUAvailable(RuntimeError):
+    """No visible GPU currently passes admission (busy or locked)."""
 
 
 @dataclass(frozen=True)
@@ -67,6 +72,13 @@ def query_gpus():
     return parse_gpus(result.stdout)
 
 
+def occupied_gpu_uuids():
+    """UUIDs of GPUs running any compute process (anyone's). Such GPUs are never admitted."""
+    result = subprocess.run(['nvidia-smi', '--query-compute-apps=gpu_uuid', '--format=csv,noheader'],
+                            check=True, capture_output=True, text=True, timeout=20)
+    return {canonical_uuid(line) for line in result.stdout.splitlines() if line.strip()}
+
+
 def visible_gpu_uuids():
     if (any(os.environ.get(key) for key in ('SLURM_JOB_ID', 'PBS_JOBID', 'LSB_JOBID'))
             and 'CUDA_VISIBLE_DEVICES' not in os.environ):
@@ -81,12 +93,13 @@ def visible_gpu_uuids():
         raise RuntimeError('Cannot resolve visible CUDA UUIDs; require UUID-capable PyTorch and non-MIG GPUs') from exc
 
 
-def candidates(records, visible, *, max_utilization=10, max_memory_percent=10, min_free_gib=8):
+def candidates(records, visible, *, max_utilization=10, max_memory_percent=10, min_free_gib=8,
+               occupied=frozenset()):
     thresholds = (max_utilization, max_memory_percent, min_free_gib)
     if (not all(math.isfinite(v) for v in thresholds) or not 0 <= max_utilization <= 100
             or not 0 <= max_memory_percent <= 100 or min_free_gib < 0):
         raise ValueError('Invalid GPU admission thresholds')
-    return sorted((g for g in records if g.uuid in visible
+    return sorted((g for g in records if g.uuid in visible and g.uuid not in occupied
                    and g.utilization <= max_utilization
                    and 100*g.used_mib/g.total_mib <= max_memory_percent
                    and (g.total_mib-g.used_mib)/1024 >= min_free_gib),
@@ -104,7 +117,7 @@ def run_guarded(command, lock_root, *, max_utilization=10, max_memory_percent=10
     visible = visible_gpu_uuids()
     thresholds = dict(max_utilization=max_utilization, max_memory_percent=max_memory_percent,
                       min_free_gib=min_free_gib)
-    options = candidates(query_gpus(), visible, **thresholds)
+    options = candidates(query_gpus(), visible, occupied=occupied_gpu_uuids(), **thresholds)
     lock_root.mkdir(parents=True, exist_ok=True)
     for gpu in options:
         path = lock_root/(gpu.uuid+'.lock')
@@ -116,7 +129,7 @@ def run_guarded(command, lock_root, *, max_utilization=10, max_memory_percent=10
             except BlockingIOError:
                 continue
             # Recheck after locking, immediately before launch.
-            latest = candidates(query_gpus(), {gpu.uuid}, **thresholds)
+            latest = candidates(query_gpus(), {gpu.uuid}, occupied=occupied_gpu_uuids(), **thresholds)
             if not latest:
                 continue
             selected = latest[0]
@@ -129,7 +142,7 @@ def run_guarded(command, lock_root, *, max_utilization=10, max_memory_percent=10
             # Pass the lock to the child so it remains held if this wrapper is
             # terminated while training still runs. Never terminate other jobs.
             return subprocess.call(command, env=env, pass_fds=(lock.fileno(),))
-    raise RuntimeError('No allocated/visible GPU satisfies the low-load thresholds (or all are locked). '
+    raise NoGPUAvailable('No allocated/visible GPU satisfies the low-load thresholds (or all are locked). '
                        'No training started; rerun in an available GPU allocation.')
 
 
@@ -142,9 +155,19 @@ def main(argv=None):
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
+    # GPU_WAIT_SECONDS>0: poll until a GPU is idle instead of refusing. Never preempts.
+    wait = float(os.environ.get('GPU_WAIT_SECONDS', '300'))
     try:
-        return run_guarded(command, args.lock_root, max_utilization=args.max_utilization,
-                           max_memory_percent=args.max_memory_percent, min_free_gib=args.min_free_gib)
+        while True:
+            try:
+                return run_guarded(command, args.lock_root, max_utilization=args.max_utilization,
+                                   max_memory_percent=args.max_memory_percent, min_free_gib=args.min_free_gib)
+            except NoGPUAvailable:
+                if wait <= 0:
+                    raise
+                print(f'{datetime.now().isoformat(timespec="seconds")} GPU admission: all GPUs busy; '
+                      f'retrying in {wait:.0f}s', file=sys.stderr, flush=True)
+                time.sleep(wait)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f'GPU admission refused: {exc}', file=sys.stderr)
         return 2

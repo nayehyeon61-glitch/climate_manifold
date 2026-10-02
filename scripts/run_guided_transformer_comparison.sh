@@ -26,6 +26,8 @@ case "$CONSTRAINT_DECODER" in
 esac
 INCLUDE_ZERO_GUIDE="${INCLUDE_ZERO_GUIDE:-0}"
 [[ "$INCLUDE_ZERO_GUIDE" == 0 || "$INCLUDE_ZERO_GUIDE" == 1 ]] || { echo 'INCLUDE_ZERO_GUIDE must be 0 or 1' >&2; exit 2; }
+GUIDE_DIRECT_INFORMATION="${GUIDE_DIRECT_INFORMATION:-0}"
+[[ "$GUIDE_DIRECT_INFORMATION" == 0 || "$GUIDE_DIRECT_INFORMATION" == 1 ]] || { echo 'GUIDE_DIRECT_INFORMATION must be 0 or 1' >&2; exit 2; }
 VARIABLE_CONDITIONING="${VARIABLE_CONDITIONING:-0}"
 [[ "$VARIABLE_CONDITIONING" == 0 || "$VARIABLE_CONDITIONING" == 1 ]] || { echo 'VARIABLE_CONDITIONING must be 0 or 1' >&2; exit 2; }
 EVALUATE_TEST="${EVALUATE_TEST:-0}"
@@ -71,6 +73,9 @@ statistical=(--constraint-pair statistical --regularization full
 if [[ "$STATISTICAL_LOSS" == kl_entropy ]]; then
   statistical+=(--kl-bins "${KL_BINS:-64}" --kl-range "${KL_RANGE:-6}" --kl-bandwidth "${KL_BANDWIDTH:-0.2}")
 fi
+# Optionally give guided arms the same direct origin-information tokens as raw.
+guide_information=()
+if [[ "$GUIDE_DIRECT_INFORMATION" == 1 ]]; then guide_information=(--guide-direct-information); fi
 arms=(raw latent guided)
 if [[ "$INCLUDE_ZERO_GUIDE" == 1 ]]; then arms+=(guided_zero); fi
 mkdir -p "$RUN"
@@ -82,8 +87,8 @@ for seed in "${seeds[@]}"; do
     case "$arm" in
       raw) route=(--bridge raw --regularization none) ;;
       latent) route=(--bridge latent "${statistical[@]}") ;;
-      guided) route=(--bridge guided --guide-mode learned "${statistical[@]}") ;;
-      guided_zero) route=(--bridge guided --guide-mode zero "${statistical[@]}") ;;
+      guided) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}") ;;
+      guided_zero) route=(--bridge guided --guide-mode zero "${guide_information[@]}" "${statistical[@]}") ;;
     esac
     run_model climate_manifold.downstream.train "${setup[@]}" "${route[@]}" \
       --archive "$ARCHIVE" --information "$INFO" --output "$prefix.pt" \

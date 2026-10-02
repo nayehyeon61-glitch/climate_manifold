@@ -40,7 +40,8 @@ def guide_contract(config):
             'fusion': 'joint_raw_guide_token_self_attention',
             'forecast_output': 'physical_fields', 'forecast_decoder_used': False,
             'forecast_gradient_to_encoder': config.guide_mode == 'learned',
-            'stochastic_sampling': False}
+            'stochastic_sampling': False,
+            **({'direct_origin_information': True} if config.guide_direct_information else {})}
 
 
 def sequence_predictor_provenance(model):
@@ -456,7 +457,8 @@ def train(args):
         latent_layout=a.config.representation_kind,latent_max_speed=args.latent_max_speed,
         latent_max_acceleration=args.latent_max_acceleration,raw_backend=raw_backend,
         weather_depth=args.weather_depth,weather_patch_size=args.weather_patch_size,
-        transformer_heads=getattr(args,'transformer_heads',4), guide_mode=getattr(args,'guide_mode','learned'))
+        transformer_heads=getattr(args,'transformer_heads',4), guide_mode=getattr(args,'guide_mode','learned'),
+        guide_direct_information=getattr(args,'guide_direct_information',False))
     experiment=validate_experiment(config,args.experiment)
     if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
         raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
@@ -599,8 +601,9 @@ def train(args):
             'selection_starts_sha256':hashlib.sha256(json.dumps(loaders[1].dataset.starts).encode()).hexdigest()},
         'trainable_parameters':sum(x.numel() for x in parameters),'total_parameters':sum(x.numel() for x in model.parameters()),
         'forecast_parameters':forecast_parameters,'constraint_parameters':constraint_parameters,
-        'conditioning':{'direct_origin_information':bool(config.condition_information and config.bridge=='raw'
-                            and (args.model in ('mlp','neural_ode','transformer',*SPATIAL_IMPLEMENTATIONS) or args.model=='climode' and raw_backend=='matched') and p['mode']=='enriched'),
+        'conditioning':{'direct_origin_information':bool(config.condition_information and p['mode']=='enriched' and (
+                            config.bridge=='raw' and (args.model in ('mlp','neural_ode','transformer',*SPATIAL_IMPLEMENTATIONS) or args.model=='climode' and raw_backend=='matched')
+                            or config.guide_direct_information)),
                         'manifold_origin_information':bool(config.bridge!='raw' and p['mode']=='enriched'),
                         'climode_static_constants':constants is not None,
                         'observed_information_available':p['mode']=='enriched'},
@@ -725,6 +728,8 @@ def parser():
     p.add_argument('--latent-max-speed',type=float,default=2.,help='Latent ClimODE velocity bound in latent cells/day; resolution dependent')
     p.add_argument('--latent-max-acceleration',type=float,default=1.,help='Bound on latent ClimODE raw velocity-coordinate rate per day')
     p.add_argument('--no-information-conditioning',action='store_true',help='Remove direct origin information from raw predictors; manifold modes pass information through the encoder')
+    p.add_argument('--guide-direct-information',action='store_true',
+                   help='Guided Transformer also receives origin information as direct tokens, matching raw controls')
     p.add_argument('--no-climode-attention',action='store_true')
     p.add_argument('--device',default='cpu')
     return p
