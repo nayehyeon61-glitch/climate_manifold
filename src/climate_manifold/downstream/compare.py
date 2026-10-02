@@ -39,17 +39,23 @@ def _regime(report):
     }
 
 
+def _fusion(row):
+    contract = row.get('guide_contract')
+    return isinstance(contract, dict) and contract.get('version') == 'climate_manifold.statistical_guide_fusion.v1'
+
+
 def _arm(row):
+    guided = 'guided_fusion' if _fusion(row) else 'guided'
     if row.get('constraint_pair'):
         name=row['constraint_pair'] + (':'+row['statistical_loss'] if row.get('statistical_loss') not in (None, 'w2') else '')
         if row.get('bridge') == 'guided':
-            name = 'guided:'+row['guide_mode']+':'+name
+            name = guided+':'+row['guide_mode']+':'+name
         flow=row.get('statistical_flow_config')
         conditional=row.get('conditional_flow_config')
         return (name + (':flow='+format(flow['weight'],'.12g') if flow else '')
                 + (':cfm='+format(conditional['weight'],'.12g') if conditional else ''))
     if row.get('bridge') == 'guided':
-        return 'guided:'+row['guide_mode']+':'+row['regularization']
+        return guided+':'+row['guide_mode']+':'+row['regularization']
     if row['representation']=='raw':
         return 'raw'
     if (row['representation']=='climate_manifold' and row['training_mode']=='joint'
@@ -68,7 +74,8 @@ def _validate_constraint_pairs(group):
             continue
         cfg = row['config']
         if cfg.get('bridge') == 'guided':
-            if (cfg.get('model') != 'transformer' or cfg.get('training_mode') != 'joint'
+            if ((cfg.get('model') != 'transformer' and cfg.get('guide_architecture', 'joint') != 'fusion')
+                    or cfg.get('training_mode') != 'joint'
                     or cfg.get('latent_layout') != 'spatial' or cfg.get('anchor') != 'none'
                     or row.get('initialization') != 'fresh' or row.get('regularization') != 'none'):
                 raise ValueError('Guided forecast-only controls require fresh joint spatial Transformer and regularization=none')
@@ -211,8 +218,10 @@ def _validate_family_inputs(group):
 
 def _validate_guides(group):
     """A statistical guide is field forecasting, with independently audited inputs."""
-    if not group or group[0]['config']['model'] != 'transformer':
+    if not group or not any(row['config']['bridge'] == 'guided' for row in group):
         return
+    from .pipeline import PredictorConfig
+    from .train import guide_contract
     first = group[0]
     if len({row['config'].get('guide_direct_information', False) for row in group
             if row['config']['bridge'] == 'guided'}) > 1:
@@ -229,6 +238,12 @@ def _validate_guides(group):
                 raise ValueError('guide_contract requires bridge=guided')
             continue
         mode = cfg.get('guide_mode', 'learned')
+        if cfg.get('guide_architecture', 'joint') == 'fusion':
+            if mode not in ('learned', 'zero') or contract != guide_contract(PredictorConfig(**cfg)):
+                raise ValueError('Invalid guide_contract')
+            if row.get('representation_config') is None:
+                raise ValueError('Guided comparison requires representation_config')
+            continue
         expected = {
             'version': 'climate_manifold.statistical_guide.v1', 'mode': mode,
             'raw_input': True,
@@ -275,7 +290,7 @@ def _validate_weather_provenance(group):
                 raise ValueError('Invalid predictor_provenance.'+key)
         if provenance['family'] != family:
             raise ValueError('predictor_provenance.family differs from model')
-        if provenance['implementation'] != row.get('implementation'):
+        if provenance['implementation'] != (row.get('implementation') or '').removeprefix('guide_fusion_v1+'):
             raise ValueError('predictor_provenance.implementation differs from report')
         if re.fullmatch(r'[0-9a-fA-F]{40}', provenance['upstream_commit']) is None:
             raise ValueError('predictor_provenance.upstream_commit must pin a full commit SHA')
@@ -301,7 +316,7 @@ def _validate_weather_provenance(group):
 def _validate_transport(group):
     """Check declared grid-index scaling; it is not exact geographic equivalence."""
     transport=[row for row in group if row['config']['model']=='climode' and
-        (row['config']['bridge']=='raw' and row['config'].get('raw_backend','legacy')=='matched'
+        (row['config']['bridge'] in ('raw','guided') and row['config'].get('raw_backend','legacy')=='matched'
          or row['config']['bridge']=='latent' and row['config'].get('latent_layout')=='spatial')]
     if not transport or not any(row.get('transport_contract') is not None for row in transport):
         return  # Historical reports did not record effective transport bounds.
@@ -319,7 +334,7 @@ def _validate_transport(group):
             raise ValueError('Invalid transport_contract.reference_spatial_downsample')
         if rep.get('spatial_downsample') is not None and rep['spatial_downsample']!=factor:
             raise ValueError('Unfair comparison: transport_contract.reference_spatial_downsample differs from representation_config')
-        raw=cfg['bridge']=='raw'
+        raw=cfg['bridge'] in ('raw','guided')
         if contract.get('speed_scaling')!=('source_grid_factor' if raw else 'latent_grid'):
             raise ValueError('Invalid transport_contract.speed_scaling')
         for key in ('velocity_bound_cells_per_day','raw_velocity_rate_bound_per_day'):

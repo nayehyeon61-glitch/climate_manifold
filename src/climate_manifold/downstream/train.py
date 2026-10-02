@@ -34,6 +34,17 @@ CONSTRAINT_PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static', 'st
 def guide_contract(config):
     if config.bridge != 'guided':
         return None
+    if config.guide_architecture == 'fusion':
+        return {'version': 'climate_manifold.statistical_guide_fusion.v1',
+                'mode': config.guide_mode, 'raw_input': True,
+                'guide_input': 'observed_history_encoded_with_origin_information',
+                'fusion': 'raw_guide_residual_fusion_transformer_zero_initialized',
+                'fusion_depth': config.guide_fusion_depth,
+                'downstream_model': config.model, 'downstream_input': 'fused_raw_grid_history',
+                'forecast_output': 'physical_fields', 'forecast_decoder_used': False,
+                'forecast_gradient_to_encoder': config.guide_mode == 'learned',
+                'stochastic_sampling': False,
+                'direct_origin_information': config.guide_direct_information}
     return {'version': 'climate_manifold.statistical_guide.v1',
             'mode': config.guide_mode, 'raw_input': True,
             'guide_input': 'observed_history_encoded_with_origin_information',
@@ -235,9 +246,10 @@ def prepare_constraint_pair(args):
     statistical_flow_config_from_args(args, pair)
     conditional_flow_config_from_args(args, pair)
     if args.bridge == 'guided':
-        if (args.model != 'transformer' or args.training_mode != 'joint'
+        fusion = getattr(args, 'guide_architecture', 'joint') == 'fusion'
+        if ((not fusion and args.model != 'transformer') or args.training_mode != 'joint'
                 or args.latent_layout == 'global' or args.anchor != 'none'):
-            raise ValueError('Guided forecasting requires a joint spatial Transformer with anchor=none')
+            raise ValueError('Guided forecasting requires a joint spatial Transformer (or guide fusion) with anchor=none')
         if (getattr(args, 'statistical_flow_weight', 0.)
                 or getattr(args, 'conditional_flow_weight', 0.)):
             raise ValueError('Guided forecasting keeps both distribution flow objectives disabled')
@@ -458,7 +470,9 @@ def train(args):
         latent_max_acceleration=args.latent_max_acceleration,raw_backend=raw_backend,
         weather_depth=args.weather_depth,weather_patch_size=args.weather_patch_size,
         transformer_heads=getattr(args,'transformer_heads',4), guide_mode=getattr(args,'guide_mode','learned'),
-        guide_direct_information=getattr(args,'guide_direct_information',False))
+        guide_direct_information=getattr(args,'guide_direct_information',False),
+        guide_architecture=getattr(args,'guide_architecture','joint'),
+        guide_fusion_depth=getattr(args,'guide_fusion_depth',2))
     experiment=validate_experiment(config,args.experiment)
     if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
         raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
@@ -572,14 +586,15 @@ def train(args):
                                    if representation_payload else None),
         'lead_hours':leads.cpu().tolist(),'options':vars(args),'best_epoch':best_epoch,'best_selection_state_mse':best,
         'selection_split':'calibration','training_seconds':time.perf_counter()-started,'source_commit':source_commit(),
-        'implementation':(TRANSFORMER_IMPLEMENTATION if args.model=='transformer'
+        'implementation':(('guide_fusion_v1+' if config.bridge=='guided' and config.guide_architecture=='fusion' else '')
+            +(TRANSFORMER_IMPLEMENTATION if args.model=='transformer'
             else SPATIAL_IMPLEMENTATIONS[args.model] if args.model in SPATIAL_IMPLEMENTATIONS
-            else 'raw_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='raw' and raw_backend=='matched'
-            else 'raw_spatial_'+args.model if args.bridge=='raw' and raw_backend=='matched'
+            else 'raw_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge in ('raw','guided') and raw_backend=='matched'
+            else 'raw_spatial_'+args.model if args.bridge in ('raw','guided') and raw_backend=='matched'
             else 'latent_climode_transport_adaptation_v1' if args.model=='climode' and args.bridge=='latent'
             else 'official_climode_custom_data_adaptation' if args.model=='climode'
             else 'spatial_'+args.model if args.bridge=='latent' and a.config.representation_kind=='spatial'
-            else 'local_'+args.model),
+            else 'local_'+args.model)),
         'predictor_provenance':sequence_predictor_provenance(model),
         'guide_contract':guide_contract(config),
         'constants_sha256':digest(args.constants) if constants is not None else None,
@@ -589,9 +604,9 @@ def train(args):
         'transport_contract':({'velocity_bound_cells_per_day':model.predictor.max_speed,
             'raw_velocity_rate_bound_per_day':model.predictor.max_acceleration,
             'reference_spatial_downsample':a.config.spatial_downsample,
-            'speed_scaling':'source_grid_factor' if config.bridge=='raw' else 'latent_grid',
+            'speed_scaling':'source_grid_factor' if config.bridge!='latent' else 'latent_grid',
             'uncertainty':'deterministic'}
-            if args.model=='climode' and (config.bridge=='latent' or raw_backend=='matched' and config.bridge=='raw') else None),
+            if args.model=='climode' and (config.bridge=='latent' or raw_backend=='matched' and config.bridge in ('raw','guided')) else None),
         'training_contract':{**{key:getattr(args,key) for key in ('epochs','batch_size','learning_rate','tendency_weight','horizon_steps')},
             # Shared requested setting; objective_weights records the effective
             # zero reconstruction coefficient for direct raw controls.
@@ -622,7 +637,9 @@ def train(args):
         'representation_training':'jointly_trained' if config.training_mode=='joint' and config.bridge!='raw' else 'frozen' if config.bridge!='raw' else 'none',
         'latent_coordinates':('not_applicable' if config.bridge=='raw' else
             'fixed pretrained seal' if bool(a.core.manifold_ready) else 'identity; no post-training reseal'),
-        'objective_semantics':({'forecast':('raw + statistically supervised encoder guide -> Transformer -> physical field; future MSE plus physical-time tendency; manifold forecast decoder unused'
+        'objective_semantics':({'forecast':(f'E -> guide; Fusion Transformer(raw, guide) -> raw + delta -> {config.model} -> physical field; future MSE plus physical-time tendency; manifold forecast decoder unused'
+            if config.bridge=='guided' and config.guide_architecture=='fusion' else
+            'raw + statistically supervised encoder guide -> Transformer -> physical field; future MSE plus physical-time tendency; manifold forecast decoder unused'
             if config.bridge=='guided' else 'E -> predictor -> D; future field MSE or Gaussian NLL plus physical-time tendency'),
             'reconstruction':(f'shared E -> information decoder only on observed origin-{a.config.step_hours}h,origin; surface decoder and predictor bypassed'
                 if information_only else
@@ -730,6 +747,9 @@ def parser():
     p.add_argument('--no-information-conditioning',action='store_true',help='Remove direct origin information from raw predictors; manifold modes pass information through the encoder')
     p.add_argument('--guide-direct-information',action='store_true',
                    help='Guided Transformer also receives origin information as direct tokens, matching raw controls')
+    p.add_argument('--guide-architecture',choices=['joint','fusion'],default='joint',
+                   help='joint: one Transformer attends raw+guide tokens (Transformer only); fusion: residual Fusion Transformer feeds any matched-raw --model')
+    p.add_argument('--guide-fusion-depth',type=int,default=2,help='Fusion Transformer block count (guide fusion only)')
     p.add_argument('--no-climode-attention',action='store_true')
     p.add_argument('--device',default='cpu')
     return p

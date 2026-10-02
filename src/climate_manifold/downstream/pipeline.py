@@ -47,6 +47,11 @@ class PredictorConfig:
     # enabled, origin information also enters as raw-matched tokens, so guided
     # and raw arms share the same direct information access.
     guide_direct_information: bool = False
+    # joint: one Transformer attends raw+guide tokens and forecasts directly
+    # (historical guided checkpoints). fusion: a residual Fusion Transformer
+    # maps (raw, guide) history to raw-grid history for any matched-raw family.
+    guide_architecture: str = 'joint'
+    guide_fusion_depth: int = 2
 
     def __post_init__(self):
         if self.model not in ('mlp','neural_ode','climode','persistence','transformer',*SPATIAL_IMPLEMENTATIONS):
@@ -79,15 +84,31 @@ class PredictorConfig:
                 raise ValueError('Transformer requires joint spatial latent/guided or matched raw forecasting')
             if self.hidden_dim % self.transformer_heads:
                 raise ValueError('Transformer hidden_dim must be divisible by transformer_heads')
-        if self.bridge == 'guided' and (self.model != 'transformer' or self.representation != 'climate_manifold'):
-            raise ValueError('Guided bridge requires the Transformer and climate_manifold representation')
+        if self.guide_architecture not in ('joint', 'fusion'):
+            raise ValueError('Guide architecture must be joint or fusion')
+        if self.guide_architecture == 'fusion':
+            if self.bridge != 'guided':
+                raise ValueError('Guide fusion requires bridge=guided')
+            if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
+                    or self.raw_backend != 'matched' or self.anchor != 'none'
+                    or self.model not in ('mlp', 'neural_ode', 'climode', 'transformer', *SPATIAL_IMPLEMENTATIONS)):
+                raise ValueError('Guide fusion requires a joint spatial matched-raw predictor with anchor=none')
+            if (isinstance(self.guide_fusion_depth, bool) or not isinstance(self.guide_fusion_depth, int)
+                    or self.guide_fusion_depth < 1):
+                raise ValueError('Guide fusion depth must be a positive integer')
+            if self.hidden_dim % self.transformer_heads:
+                raise ValueError('Guide fusion hidden_dim must be divisible by transformer_heads')
+        if self.bridge == 'guided' and self.representation != 'climate_manifold':
+            raise ValueError('Guided bridge requires the climate_manifold representation')
+        if self.bridge == 'guided' and self.guide_architecture == 'joint' and self.model != 'transformer':
+            raise ValueError('Joint guided bridge requires the Transformer; use guide_architecture=fusion')
         if self.bridge == 'guided' and not self.condition_information:
             raise ValueError('Guided bridge encodes origin information; disabling information conditioning is unsupported')
         if self.model in SPATIAL_IMPLEMENTATIONS:
             if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
-                    or self.bridge not in ('raw', 'latent')
+                    or self.bridge not in ('raw', 'latent', 'guided')
                     or self.bridge == 'raw' and self.raw_backend != 'matched'):
-                raise ValueError('Spatial sequence/weather models require joint spatial latent or matched raw forecasting')
+                raise ValueError('Spatial sequence/weather models require joint spatial latent, guided fusion or matched raw forecasting')
         if self.raw_backend == 'matched' and self.bridge == 'raw':
             if (self.training_mode != 'joint' or self.latent_layout != 'spatial'
                     or self.model not in ('mlp', 'neural_ode', 'climode', 'transformer', *SPATIAL_IMPLEMENTATIONS)):
@@ -156,14 +177,17 @@ class ForecastPipeline(nn.Module):
             selected.core.manifold.decoder.requires_grad_(False)
         dimension = self.bridge.dimension
         info_dim = math.prod(manifold.info_metadata['shape']) if manifold.info_metadata else 0
-        matched_raw = config.bridge == 'raw' and config.raw_backend == 'matched'
+        fusion = config.bridge == 'guided' and config.guide_architecture == 'fusion'
+        # Guide fusion feeds the family predictor raw-grid history, so it is
+        # built exactly like the matched raw control of the same family.
+        matched_raw = (config.bridge == 'raw' or fusion) and config.raw_backend == 'matched'
         information_channels = 0
         if matched_raw:
             if schema is None:
                 raise ValueError('Matched raw spatial controls require the archive schema')
             from .latent_climode import _pooled_coordinates
             _, _, periodic_lon = _pooled_coordinates(manifold.config.grid, schema, 1)
-        if matched_raw or config.guide_direct_information:
+        if (matched_raw and not fusion) or config.guide_direct_information:
             if config.condition_information and manifold.info_metadata:
                 shape = tuple(manifold.info_metadata['shape'])
                 if len(shape) != 3 or shape[1:] != tuple(manifold.config.grid[1:]):
@@ -173,10 +197,10 @@ class ForecastPipeline(nn.Module):
             from .guided_transformer import GuidedTransformerPredictor
             self.predictor = GuidedTransformerPredictor(
                 selected.config.latent_grid if config.bridge == 'latent' else selected.config.grid,
-                guide_grid=selected.config.latent_grid if config.bridge == 'guided' else None,
+                guide_grid=selected.config.latent_grid if config.bridge == 'guided' and not fusion else None,
                 history_steps=selected.config.history_steps, hidden=config.hidden_dim,
                 depth=config.weather_depth, patch_size=config.weather_patch_size,
-                heads=config.transformer_heads, guide_mode=config.guide_mode,
+                heads=config.transformer_heads, guide_mode='learned' if fusion else config.guide_mode,
                 history_dt_hours=selected.config.history_stride*selected.config.step_hours,
                 periodic_lon=periodic_lon if matched_raw else selected.core.physics.periodic_lon,
                 information_channels=information_channels)
@@ -248,6 +272,16 @@ class ForecastPipeline(nn.Module):
                     velocity_iterations=config.velocity_iterations,
                     history_dt_hours=manifold.config.history_stride*manifold.config.step_hours)
         else:self.predictor = None
+        # Built after F so the family predictor is initialized as in its raw arm.
+        self.guide_fusion = None
+        if fusion:
+            from .guided_fusion import GuidedFusion
+            self.guide_fusion = GuidedFusion(
+                selected.config.grid, selected.config.latent_grid, selected.config.history_steps,
+                hidden=config.hidden_dim, depth=config.guide_fusion_depth,
+                patch_size=config.weather_patch_size, heads=config.transformer_heads,
+                history_dt_hours=selected.config.history_stride*selected.config.step_hours,
+                guide_mode=config.guide_mode, periodic_lon=periodic_lon)
         # Create the observed-field head after F so enabling it cannot change
         # the forecast model's random initialization. Historical checkpoints
         # omit it completely and retain their original state-dict contract.
@@ -273,8 +307,12 @@ class ForecastPipeline(nn.Module):
         features = self.bridge.encode_history(history,information)
         if self.config.bridge == 'guided':
             direct_information = information if self.config.guide_direct_information else None
-            mean, std = self.predictor(history, lead_hours, origin_ns, direct_information,
-                                       guide_history=features)
+            if self.guide_fusion is not None:
+                fused = self.guide_fusion(history, features)
+                mean, std = self.predictor(fused, lead_hours, origin_ns, direct_information)
+            else:
+                mean, std = self.predictor(history, lead_hours, origin_ns, direct_information,
+                                           guide_history=features)
             if not torch.isfinite(mean).all():
                 raise FloatingPointError('Nonfinite guided downstream prediction')
             return {'mean': mean, 'std': std, 'reconstructed_origin': None,
