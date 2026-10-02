@@ -129,9 +129,12 @@ Do not tune models using test results. No maximum-window/case truncation is used
 in the full command. `EVALUATE_TEST=0` can reserve test data during further tuning;
 the requested complete command explicitly enables it.
 
-Daily support is deliberately scoped to fresh, jointly trained spatial
-Transformers with observed statistical constraints or forecast-only losses.
-Other forecasters, daily PINN and daily flow losses are rejected until validated.
+Daily support covers fresh, jointly trained spatial Transformer, NN, NeuralODE,
+ClimODE adaptation, ConvLSTM, SimVP, FourCastNet and ClimaX with observed
+statistical constraints or forecast-only losses. The runner on this page still
+compares the four Transformer routes; use the
+[two-route model matrix](raw_latent_model_comparison.md) for Raw → M / E → M → D.
+Daily PINN and daily flow losses remain unsupported.
 Existing 6-hour experiments retain their settings and checkpoint semantics.
 
 ## Results and restart

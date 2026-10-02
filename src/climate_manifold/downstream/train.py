@@ -325,12 +325,13 @@ def initialize_manifold(args):
             spatial_variable_conditioning=getattr(args,'spatial_variable_conditioning',False))
         mode = args.mode or ('enriched' if args.information else 'surface')
     if config.step_hours == 24:
-        if (args.model != 'transformer' or args.training_mode != 'joint' or pretrained
+        if (args.model not in ('transformer', 'mlp', 'neural_ode', 'climode', *SPATIAL_IMPLEMENTATIONS)
+                or args.training_mode != 'joint' or pretrained
                 or config.representation_kind != 'spatial' or args.bridge not in ('raw','latent','guided')
                 or pair not in (None,'statistical') or args.pinn
                 or getattr(args,'statistical_flow_weight',0.) or getattr(args,'conditional_flow_weight',0.)
                 or pair is None and args.regularization != 'none'):
-            raise ValueError('Daily support requires a fresh joint spatial Transformer with statistical-only or forecast-only objectives; PINN/flow are unsupported')
+            raise ValueError('Daily support requires a fresh joint spatial predictor with statistical-only or forecast-only objectives; PINN/flow are unsupported')
     if args.horizon_steps > config.horizon_steps:
         raise ValueError('Horizon exceeds the representation data contract')
     if pair and config.history_span_steps < 2:

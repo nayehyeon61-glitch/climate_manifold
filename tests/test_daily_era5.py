@@ -1,4 +1,4 @@
-"""Daily source units, causal time contracts and all four Transformer routes."""
+"""Daily source units, causal time contracts and supported forecasting routes."""
 import json
 from pathlib import Path
 
@@ -166,6 +166,6 @@ def test_daily_all_routes_train_reload_evaluate_compare(daily_prepared,tmp_path)
 def test_daily_rejects_unvalidated_forecaster(daily_prepared,tmp_path):
     _,archive,info,_=daily_prepared
     args=_args(archive,info,tmp_path/'unsupported.pt','raw')
-    args.model='mlp'
+    args.model='persistence'
     with pytest.raises(ValueError,match='Daily support requires'):
         initialize_manifold(args)
