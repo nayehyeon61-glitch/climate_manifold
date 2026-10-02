@@ -7,7 +7,8 @@ Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합�
 **Raw → M / E → M → D 비교:** M을 Transformer·NN·NeuralODE·ClimODE adaptation·ConvLSTM·
 SimVP·FourCastNet·ClimaX로 교체합니다. 일별 ERA5에서도 두 경로와 W2/signed measure를
 동일 데이터·seed로 학습하고 validation/test를 평가합니다.
-[새 브랜치·full 학습 명령과 비교 해석](docs/raw_latent_model_comparison.md)을 참고하세요.
+RMSE·ACC·Raw 대비 개선율 그래프를 PNG/PDF로 자동 저장합니다.
+[새 브랜치·full 학습·test·그래프 명령](docs/raw_latent_model_comparison.md)을 참고하세요.
 
 **하루 1개 ERA5 표본으로 Transformer 학습:** `daily/YYYYMMDD.nc`와 기존 지형 파일을
 제자리에서 읽는 전처리·실행 경로를 추가했습니다. 원본 변경 없이 `/lustre/home/yehyeon` 아래에

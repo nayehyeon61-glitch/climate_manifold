@@ -54,7 +54,7 @@ CONSTRAINT_PAIRS="statistical pinn_statistical" \
 bash scripts/run_raw_latent_comparison.sh
 ```
 
-## 새 브랜치 받기부터 full 학습·test까지
+## 새 브랜치 받기부터 full 학습·test·그래프까지
 
 할당받은 GPU 세션에서 실행합니다. 기본값은 **8개 M × (Raw 1개 + latent 손실 2개)
 × seed 3개 = 72회 학습**, batch 16, 20 epochs입니다. `MAX_WINDOWS=0`, `MAX_CASES=0`은
@@ -87,7 +87,7 @@ python3 -m venv "$DAILY_WORK/venv"
 source "$DAILY_WORK/venv/bin/activate"
 python -m pip install --upgrade pip
 python -m pip install 'torch==2.8.0' --index-url https://download.pytorch.org/whl/cu128
-python -m pip install 'xarray==2024.11.0' -e '.[forecast,era5,test]'
+python -m pip install 'xarray==2024.11.0' -e '.[forecast,era5,test,plots]'
 export PYTHON="$DAILY_WORK/venv/bin/python"
 export DEVICE=cuda BATCH_SIZE=16 EPOCHS=20 SEEDS="7 19 43"
 export MODELS="transformer mlp neural_ode climode convlstm simvp fourcastnet climax"
@@ -96,7 +96,7 @@ export STATISTICAL_FLOW_WEIGHT=0 CONDITIONAL_FLOW_WEIGHT=0
 export START_DATE=1979-01-01 END_DATE=2025-12-31
 export TARGET_LAT_POINTS=16 TARGET_LON_POINTS=32
 export MAX_WINDOWS=0 MAX_CASES=0 ORIGIN_STRIDE=1
-export RUN_PREFLIGHT_TESTS=1 EVALUATE_TEST=1 OMP_NUM_THREADS=4
+export RUN_PREFLIGHT_TESTS=1 EVALUATE_TEST=1 MAKE_PLOTS=1 OMP_NUM_THREADS=4
 export GPU_MAX_UTILIZATION=10 GPU_MAX_MEMORY_PERCENT=10 GPU_MIN_FREE_GIB=8
 unset ARCHIVE INFO A_CHECKPOINT
 git log -1 --oneline
@@ -134,6 +134,32 @@ bash scripts/run_raw_latent_comparison.sh
 | `comparison.validation.json`, `comparison.test.json` | 모델·손실별 seed 요약과 비교 |
 | `comparison.*.raw-effects.csv` | 같은 M·seed의 Raw 대비 latent RMSE 감소·ACC 차이 |
 | `comparison.*.statistical-effects.csv` | 같은 M·seed에서 W2/signed measure 교체 효과 |
+| `plots/validation/`, `plots/test/` | 해당 분할의 PNG/PDF 그래프, 집계 CSV, 입력 hash manifest |
+
+`MAKE_PLOTS=1`은 validation/test 비교가 끝날 때 각각 다음 그림을 자동 생성합니다.
+기압 `msl`, 기온 `t2m`, 바람 `u10/v10`을 별도 변수로 표시합니다.
+
+- `rmse_by_lead_<변수>.png/pdf`: 모델별 Raw/W2/signed measure RMSE 곡선.
+- `acc_by_lead_<변수>.png/pdf`: 같은 비교의 ACC 곡선.
+- `rmse_skill_percent_by_lead_<변수>.png/pdf`: 같은 seed의 Raw 대비 RMSE 개선율 곡선.
+- `last_lead_rmse_<변수>.png/pdf`: 마지막 예측일의 모델·경로별 RMSE 막대그래프.
+- `last_lead_improvement_heatmap.png/pdf`: 마지막 예측일의 Raw 대비 개선율. 양수가 개선입니다.
+- `plot_summary.csv`: 그림에 사용한 seed 평균·표본 표준편차·유효 seed 수.
+
+곡선/오차막대는 **seed 평균 ± 표본 표준편차**이며 신뢰구간이나 기상 앙상블의 불확실성이
+아닙니다. 정의되지 않은 ACC나 0인 Raw RMSE의 개선율은 빈 구간/N/A로 표시합니다.
+서로 다른 예측 실패 표본을 사용한 비교는 그림 생성을 거부합니다. 각 변수별 단위는
+그대로 유지하며, 마지막 날을 선택해 더 좋아 보이는 리드를 고르는 절차는 없습니다.
+
+학습을 다시 하지 않고 그림만 재생성하려면 기존 결과 폴더를 지정하세요.
+기존 그림을 보존하기 위해 새 출력 폴더를 사용합니다.
+
+```bash
+RUN=/lustre/home/yehyeon/<실행폴더>/runs/<결과폴더>
+python -m climate_manifold.downstream.plot_comparison \
+  --comparison "$RUN/comparison.test.json" \
+  --output "$RUN/plots/test-regenerated-$(date +%Y%m%d-%H%M%S)"
+```
 
 변수마다 단위가 다르므로 물리 RMSE를 합쳐 순위를 매기지 마세요. 변수·lead별로
 Transformer의 Raw/latent 점수와 다른 M의 대응 점수를 비교합니다. 서로 다른 M의
@@ -142,4 +168,5 @@ Transformer의 Raw/latent 점수와 다른 M의 대응 점수를 비교합니다
 소프트웨어 검증은 합성 일별 NetCDF로 8개 M의 두 경로와 W2/signed measure를
 실제 최적화하고 E/M/D gradient, 저장·복원 동일성, 미래 label을 입력하지 않는 예측,
 validation/test 분리와 비교 CSV를 확인합니다. 서버 matrix는 모의 실행으로 72개 학습과
-144개 평가의 인자·순서를 검증합니다. 실제 ERA5 full 학습이나 GPU 성능 결과는 아닙니다.
+144개 평가 및 그래프 생성의 인자·순서를 검증합니다. 그래프 집계와 PNG/PDF 렌더링도
+합성 결과로 확인합니다. 실제 ERA5 full 학습이나 GPU 성능 결과는 아닙니다.

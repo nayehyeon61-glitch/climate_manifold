@@ -10,6 +10,7 @@ from test_spatial_training import _capture, _assert_finite_gradient
 from climate_manifold.downstream.train import train, load_predictor, initialize_manifold, windows
 from climate_manifold.downstream.evaluate import evaluate
 from climate_manifold.downstream.compare import compare
+from climate_manifold.downstream.plot_comparison import summarize_comparison
 
 
 FAMILIES = ('transformer', 'mlp', 'neural_ode', 'climode', 'convlstm', 'simvp', 'fourcastnet', 'climax')
@@ -75,6 +76,10 @@ def test_daily_raw_latent_model_and_loss_matrix(daily_prepared, tmp_path, monkey
     assert validation['ranking_allowed'] and len(validation['seed_summary']) == 3*len(FAMILIES)
     assert {row['model'] for row in validation['direct_comparison']['effects']} == set(FAMILIES)
     assert (tmp_path/'comparison.validation.raw-effects.csv').is_file()
+    plot_rows = summarize_comparison(validation)
+    assert {r['model'] for r in plot_rows} == set(FAMILIES)
+    assert {r['label'] for r in plot_rows} == {'Raw','Latent / W2','Latent / signed measure'}
+    assert all(r['mean'] is not None for r in plot_rows if r['metric']=='rmse')
 
     # Test is evaluated only after every checkpoint is fixed.
     for checkpoint, path, validation_report in tests:

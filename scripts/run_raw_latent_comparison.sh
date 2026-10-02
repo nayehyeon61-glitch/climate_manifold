@@ -54,12 +54,17 @@ if [[ -n "${ARCHIVE:-}" && -z "${INFO:-}" || -z "${ARCHIVE:-}" && -n "${INFO:-}"
 fi
 EVALUATE_TEST="${EVALUATE_TEST:-1}"
 [[ "$EVALUATE_TEST" == 0 || "$EVALUATE_TEST" == 1 ]] || { echo 'EVALUATE_TEST must be 0 or 1' >&2; exit 2; }
+MAKE_PLOTS="${MAKE_PLOTS:-1}"
+[[ "$MAKE_PLOTS" == 0 || "$MAKE_PLOTS" == 1 ]] || { echo 'MAKE_PLOTS must be 0 or 1' >&2; exit 2; }
+if [[ "$MAKE_PLOTS" == 1 ]]; then
+  "$PYTHON" -c 'import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot'
+fi
 RUN_PREFLIGHT_TESTS="${RUN_PREFLIGHT_TESTS:-1}"
 [[ "$RUN_PREFLIGHT_TESTS" == 0 || "$RUN_PREFLIGHT_TESTS" == 1 ]] || { echo 'RUN_PREFLIGHT_TESTS must be 0 or 1' >&2; exit 2; }
 if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
   test_tmp=$(mktemp -d "$TMPDIR/preflight-XXXXXXXX")
   CUDA_VISIBLE_DEVICES="" OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 "$PYTHON" -m pytest -q \
-    tests/test_daily_model_comparison.py tests/test_raw_latent_runner.py tests/test_runtime_guards.py \
+    tests/test_daily_model_comparison.py tests/test_raw_latent_runner.py tests/test_runtime_guards.py tests/test_comparison_plots.py \
     --basetemp "$test_tmp" -o "cache_dir=$DAILY_WORK/cache/pytest" \
     2>&1 | tee "$DAILY_WORK/logs/tests-$(date +%Y%m%d-%H%M%S).log"
 fi
@@ -154,6 +159,9 @@ for seed in "${seeds[@]}"; do
   done
 done
 "$PYTHON" -m climate_manifold.downstream.compare --reports "${validation_reports[@]}" --output "$RUN/comparison.validation.json"
+if [[ "$MAKE_PLOTS" == 1 ]]; then
+  "$PYTHON" -m climate_manifold.downstream.plot_comparison --comparison "$RUN/comparison.validation.json" --output "$RUN/plots/validation"
+fi
 # Test is read only after every fit/checkpoint is fixed.
 if [[ "$EVALUATE_TEST" == 0 ]]; then
   printf '\nCompleted validation: %s\n' "$RUN/comparison.validation.json"
@@ -167,4 +175,8 @@ for prefix in "${prefixes[@]}"; do
   test_reports+=("$prefix.test.json")
 done
 "$PYTHON" -m climate_manifold.downstream.compare --reports "${test_reports[@]}" --output "$RUN/comparison.test.json"
+if [[ "$MAKE_PLOTS" == 1 ]]; then
+  "$PYTHON" -m climate_manifold.downstream.plot_comparison --comparison "$RUN/comparison.test.json" --output "$RUN/plots/test"
+  printf 'Figures: %s\n' "$RUN/plots/test"
+fi
 printf '\nCompleted: %s\n' "$RUN/comparison.test.raw-effects.csv"

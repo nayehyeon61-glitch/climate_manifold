@@ -36,6 +36,7 @@ if sys.argv[1:] == ['-']:
            'MODELS': 'transformer mlp neural_ode climode convlstm simvp fourcastnet climax',
            'STATISTICAL_LOSSES': 'w2 signed_measure', 'CONSTRAINT_PAIRS': 'statistical',
            'EVALUATE_TEST': '1', 'RUN_PREFLIGHT_TESTS': '0', 'BATCH_SIZE': '16',
+           'MAKE_PLOTS': '1',
            'A_CHECKPOINT': '', 'STATISTICAL_FLOW_WEIGHT': '0', 'CONDITIONAL_FLOW_WEIGHT': '0',
            **settings}
     result = subprocess.run(['bash', str(SCRIPT)], env=env, text=True, capture_output=True)
@@ -72,6 +73,11 @@ def test_default_two_route_matrix_has_no_added_transformer(tmp_path):
     last_fit = max(i for i,r in enumerate(rows) if 'climate_manifold.downstream.train' in r)
     test_indices = [i for i,r in enumerate(rows) if '--split' in r and arg(r,'--split') == 'test']
     assert len(test_indices) == 72 and min(test_indices) > last_fit
+    plots = [r for r in rows if 'climate_manifold.downstream.plot_comparison' in r]
+    assert len(plots) == 2
+    assert [Path(arg(r,'--output')).name for r in plots] == ['validation','test']
+    assert all(Path(arg(r,'--output')).is_relative_to(tmp_path/'work'/'runs') for r in plots)
+    assert rows.index(plots[-1]) > max(test_indices)
 
 
 @pytest.mark.parametrize('settings,message', [
@@ -100,3 +106,5 @@ def test_six_hour_pinn_and_kl_are_opt_in_and_keep_the_same_two_routes(tmp_path):
     assert '--pinn' not in train[1] and '--pinn' in train[2]
     assert all(arg(r,'--history-stride') == '4' and arg(r,'--horizon-steps') == '20' for r in train)
     assert not any('--split' in r and arg(r,'--split') == 'test' for r in rows)
+    plots = [r for r in rows if 'climate_manifold.downstream.plot_comparison' in r]
+    assert len(plots) == 1 and Path(arg(plots[0],'--output')).name == 'validation'
