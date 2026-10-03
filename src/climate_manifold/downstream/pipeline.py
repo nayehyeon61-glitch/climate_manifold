@@ -171,7 +171,8 @@ class ForecastPipeline(nn.Module):
             raise ValueError('Predictor latent layout does not match the actual manifold representation')
         self.bridge = ManifoldBridge(selected, config.bridge, config.anchor, config.training_mode)
         if config.bridge == 'guided':
-            # Forecasts are physical fields produced by the Transformer head.
+            # Forecasts are physical fields from the separate M in fusion mode,
+            # or from the Transformer forecast head in the legacy joint mode.
             # Preserve this dormant decoder for checkpoints, but never train it
             # on duplicate reconstruction or use it in the guided forecast.
             selected.core.manifold.decoder.requires_grad_(False)

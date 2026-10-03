@@ -1,5 +1,10 @@
 # Raw → M / E → M → D 모델 비교
 
+**이전 두 경로 실험을 보존한 문서입니다.** 현재 주실험인
+`Encoder guide + Raw → Fusion Transformer → 별도 M`과 Zero-guide 대조군은
+[manifold fusion 실험](manifold_fusion_experiments.md)을 참고하세요.
+이 페이지의 실행기는 새 Fusion 경로를 포함하지 않습니다.
+
 브랜치: `feature/raw-latent-model-comparison`
 
 예측기 **M 자체**를 교체하는 실험입니다. Transformer는 M의 한 선택지입니다.

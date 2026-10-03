@@ -29,6 +29,11 @@ def _identity(report):
                 seed=None if pure_a else report['seed'],
                 training_mode='a_only' if pure_a else cfg.get('training_mode','frozen'),
                 regularization=report.get('regularization','legacy'),
+                # Keep the complete front-end identity in physical score rows.
+                # Learned/zero guides share a bridge but are distinct experiments.
+                guide_mode=(cfg.get('guide_mode','learned')
+                            if not pure_a and cfg['bridge']=='guided' else None),
+                guide_contract=report.get('guide_contract'),
                 constraint_pair=report.get('constraint_pair'),
                 constraint_path=report.get('constraint_path','forecast_trajectory'),
                 constraint_decoder=constraint_decoder_from_payload(report),
@@ -142,7 +147,10 @@ def write_table(path, rows):
     if not rows:
         return
     with Path(path).open('w', newline='') as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        # Guide-input and observed-constraint ablations have distinct metadata.
+        # Preserve both when they share the same effect table.
+        fields = list(dict.fromkeys(key for row in rows for key in row))
+        writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader(); writer.writerows(rows)
 
 

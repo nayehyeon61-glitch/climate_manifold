@@ -746,7 +746,7 @@ def parser():
     p.add_argument('--latent-max-acceleration',type=float,default=1.,help='Bound on latent ClimODE raw velocity-coordinate rate per day')
     p.add_argument('--no-information-conditioning',action='store_true',help='Remove direct origin information from raw predictors; manifold modes pass information through the encoder')
     p.add_argument('--guide-direct-information',action='store_true',
-                   help='Guided Transformer also receives origin information as direct tokens, matching raw controls')
+                   help='The guided forecast model also receives direct origin information, matching raw controls (fusion: downstream M; joint: Transformer)')
     p.add_argument('--guide-architecture',choices=['joint','fusion'],default='joint',
                    help='joint: one Transformer attends raw+guide tokens (Transformer only); fusion: residual Fusion Transformer feeds any matched-raw --model')
     p.add_argument('--guide-fusion-depth',type=int,default=2,help='Fusion Transformer block count (guide fusion only)')

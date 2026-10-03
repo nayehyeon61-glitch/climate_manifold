@@ -78,7 +78,7 @@ def _validate_constraint_pairs(group):
                     or cfg.get('training_mode') != 'joint'
                     or cfg.get('latent_layout') != 'spatial' or cfg.get('anchor') != 'none'
                     or row.get('initialization') != 'fresh' or row.get('regularization') != 'none'):
-                raise ValueError('Guided forecast-only controls require fresh joint spatial Transformer and regularization=none')
+                raise ValueError('Guided forecast-only controls require fresh joint spatial guidance and regularization=none')
             if any(row.get(key) is not None for key in (
                     'constraint_path','constraint_contract','constraint_decoder','split_objective_weights')):
                 raise ValueError('Guided forecast-only controls must not declare a constraint objective')
@@ -223,6 +223,13 @@ def _validate_guides(group):
     from .pipeline import PredictorConfig
     from .train import guide_contract
     first = group[0]
+    guided = [row for row in group if row['config']['bridge'] == 'guided']
+    architectures = {row['config'].get('guide_architecture', 'joint') for row in guided}
+    if len(architectures) != 1:
+        raise ValueError('Unfair comparison: mismatched guide_architecture; compare fusion and joint in separate suites')
+    if architectures == {'fusion'} and len({
+            row['config'].get('guide_fusion_depth', 2) for row in guided}) != 1:
+        raise ValueError('Unfair comparison: mismatched guide_fusion_depth')
     if len({row['config'].get('guide_direct_information', False) for row in group
             if row['config']['bridge'] == 'guided'}) > 1:
         raise ValueError('Unfair comparison: guided arms differ in direct origin information')
@@ -714,6 +721,7 @@ def compare(reports,output,climode_reference_reports=None):
                  'Observed conditional-flow ablations add a separate auxiliary network and future-information supervision; their effects include capacity and supervision changes, not direct gradient to the forecast predictor.',
                  'PINN pairs may add auxiliary closure parameters; forecast and constraint parameter counts are reported separately.',
                  'Guided forecasts predict physical fields from raw observations and encoded observed-history guidance; they have no latent forecast trajectory.',
+                 'For guide_architecture=fusion, E plus Fusion Transformer(raw, guide) forms the manifold front-end; the downstream forecast family is a separate model.',
                  'Guided versus raw or latent comparisons change routes and parameter counts; matched Transformer width/depth does not imply equal capacity.',
                  'Guided forecast-only versus constrained guide holds the forecasting path fixed; the effect includes observed reconstruction/statistical supervision and any added auxiliary decoder capacity, not the statistical loss alone.',
                  'Zero-guide ablations replace guide tokens by zero but retain the same information-route supervision; they do not constitute stochastic encoder experiments.',

@@ -1,5 +1,12 @@
 # Raw fields with a learned statistical guide
 
+**Legacy joint-guide predictor.** This page describes `--guide-architecture joint`,
+where one Transformer predicts future fields. The current research experiment
+uses **Encoder + Fusion Transformer(raw, guide) as the manifold**, followed by a
+separate forecast model M. See [manifold fusion experiments](manifold_fusion_experiments.md)
+for the new branch, controls and full daily training/test/plot command.
+The legacy route remains available for reproduction.
+
 This adds an optional forecasting route without replacing the existing raw or
 E → predictor → D experiments. The encoder learns statistical constraints from
 observed reconstruction; its spatial latent features accompany raw observations

@@ -1,4 +1,4 @@
-"""Plot validated Raw -> M / E -> M -> D field comparisons, with seed spread."""
+"""Plot validated manifold/Raw forecasts and paired ablations across training seeds."""
 import argparse
 import csv
 import hashlib
@@ -9,13 +9,18 @@ import re
 
 import numpy as np
 
-from .compare import _arm
+from .compare import _arm, _fusion
 
 
 MODEL_ORDER = ('transformer', 'mlp', 'neural_ode', 'climode', 'convlstm', 'simvp', 'fourcastnet', 'climax')
-MODEL_NAMES = dict(zip(MODEL_ORDER, ('Transformer', 'NN (spatial)', 'NeuralODE', 'ClimODE adaptation',
+MODEL_NAMES = dict(zip(MODEL_ORDER, ('Transformer predictor', 'NN (spatial)', 'NeuralODE', 'ClimODE adaptation',
                                   'ConvLSTM', 'SimVP', 'FourCastNet adaptation', 'ClimaX adaptation')))
-METRIC_LABELS = {'rmse': 'RMSE', 'acc': 'ACC', 'rmse_skill_percent': 'RMSE reduction vs Raw (%)'}
+METRIC_LABELS = {
+    'rmse': 'RMSE', 'acc': 'ACC',
+    'rmse_skill_percent': 'RMSE reduction vs Raw (%)',
+    'guide_gain_percent': 'RMSE reduction vs Zero guide (%)',
+    'constraint_gain_percent': 'RMSE reduction vs No observed constraints (%)',
+}
 
 
 def _identity(row):
@@ -25,11 +30,36 @@ def _identity(row):
 def _label(row):
     if row['bridge'] == 'raw':
         return 'Raw'
+    route = 'Manifold' if _fusion(row) else 'Joint guided predictor' if row['bridge'] == 'guided' else 'Latent'
+    if row['bridge'] == 'guided' and row.get('guide_mode') == 'zero':
+        route += ' / Zero guide'
+    if row.get('regularization') == 'none':
+        return route+' / No observed constraints'
     loss = {'w2': 'W2', 'kl_entropy': 'KL-entropy', 'signed_measure': 'signed measure'}.get(row.get('statistical_loss'))
     if loss:
         prefix = 'PINN + ' if row.get('constraint_pair') == 'pinn_statistical' else ''
-        return 'Latent / '+prefix+loss
-    return 'Latent / '+row.get('regularization', 'full')
+        return route+' / '+prefix+loss
+    return route+' / '+(row.get('constraint_pair') or row.get('regularization', 'full'))
+
+
+def _physical_identity(row, rows):
+    """Resolve older physical tables which omitted guide identity, never by order.
+
+    A representation fingerprint and the shared evaluation metadata can uniquely
+    identify a legacy row. If they cannot, regenerate comparison JSON from the
+    original reports; guessing could swap learned and zero-guide scores.
+    """
+    if row['bridge'] != 'guided' or 'guide_mode' in row:
+        return _identity(row)
+    fields = ('model', 'bridge', 'seed', 'representation', 'training_mode', 'regularization',
+              'constraint_pair', 'constraint_decoder', 'statistical_loss',
+              'statistical_loss_config', 'statistical_flow_config', 'conditional_flow_config',
+              'initialization', 'implementation', 'representation_sha256')
+    matches = [candidate for candidate in rows
+               if all(candidate.get(key) == row[key] for key in fields if key in row)]
+    if len(matches) != 1:
+        raise ValueError('Ambiguous or unknown legacy guided physical score; regenerate comparison JSON from evaluation reports')
+    return _identity(matches[0])
 
 
 def _finite(value):
@@ -49,8 +79,8 @@ def summarize_comparison(data):
         raise ValueError('Incomplete forecasts or unequal successful origins; inspect evaluation reports before plotting')
     groups, labels = {}, {}
     for row in data['rows']:
-        if row['bridge'] not in ('raw', 'latent') or row.get('statistical_flow_config') or row.get('conditional_flow_config'):
-            raise ValueError('This plotter supports the two-route matrix with both flow objectives disabled')
+        if row['bridge'] not in ('raw', 'latent', 'guided') or row.get('statistical_flow_config') or row.get('conditional_flow_config'):
+            raise ValueError('This plotter supports Raw, latent and guided routes with both flow objectives disabled')
         key = _identity(row)
         if row['seed'] in groups.setdefault(key, set()):
             raise ValueError('Duplicate model/route/seed in comparison')
@@ -63,7 +93,7 @@ def summarize_comparison(data):
         raise ValueError('Missing physical per-variable/per-lead metrics; re-evaluate checkpoints')
     bins, units, axes = {}, {}, set()
     for row in source:
-        identity = _identity(row)
+        identity = _physical_identity(row, data['rows'])
         if identity not in groups or row['seed'] not in groups[identity]:
             raise ValueError('Physical score has an unknown model/route/seed')
         variable, lead = row['variable'], row['lead_hours']
@@ -88,22 +118,48 @@ def summarize_comparison(data):
             for metric in ('rmse', 'acc'):
                 if set(bins.get((*identity, variable, lead, metric), {})) != seeds:
                     raise ValueError('Missing physical model/route/seed/variable/lead score')
-    for row in data.get('direct_comparison', {}).get('effects', []):
-        identity = (row['model'], 'latent', row['candidate_arm'])
-        if identity not in groups or row['seed'] not in groups[identity]:
-            raise ValueError('Raw effect has an unknown model/route/seed')
-        key = (*identity, row['variable'], row['lead_hours'], 'rmse_skill_percent')
+    def effect_identity(row, arm_key):
+        matches = [identity for identity, seeds in groups.items()
+                   if identity[0] == row['model'] and identity[2] == row[arm_key] and row['seed'] in seeds]
+        if len(matches) != 1:
+            raise ValueError('Paired effect has an unknown or ambiguous model/route/seed')
+        return matches[0]
+
+    def add_effect(row, metric, value_key):
+        identity = effect_identity(row, 'candidate_arm')
+        baseline = effect_identity(row, 'control')
+        if groups[identity] != groups[baseline]:
+            raise ValueError('Paired effect has unequal training seeds')
+        key = (*identity, row['variable'], row['lead_hours'], metric)
         if (row['variable'], row['lead_hours']) not in axes:
-            raise ValueError('Raw effect has an unknown variable/lead')
+            raise ValueError('Paired effect has an unknown variable/lead')
+        if row.get('units') != units[row['variable']]:
+            raise ValueError('Paired effect has inconsistent physical units')
         values = bins.setdefault(key, {})
         if row['seed'] in values:
-            raise ValueError('Duplicate paired Raw effect')
-        value = row.get('rmse_skill_vs_raw')
+            raise ValueError('Duplicate paired effect')
+        value = row.get(value_key)
         values[row['seed']] = 100*value if row.get('ranking_allowed') and _finite(value) else None
+
+    for row in data.get('direct_comparison', {}).get('effects', []):
+        add_effect(row, 'rmse_skill_percent', 'rmse_skill_vs_raw')
+    for row in data.get('guide_effects', []):
+        if row.get('interpretation') == 'change_guide_input':
+            if row.get('baseline_guide_mode') != 'zero' or row.get('candidate_guide_mode') != 'learned':
+                raise ValueError('Guide gain must compare learned guide against zero guide')
+            add_effect(row, 'guide_gain_percent', 'rmse_skill_vs_baseline')
+        elif row.get('interpretation') == 'add_observed_encoder_constraints':
+            add_effect(row, 'constraint_gain_percent', 'rmse_skill_vs_baseline')
     for identity in groups:
-        if identity[1] == 'latent':
+        if identity[1] != 'raw' and any(key[1] == 'raw' and key[0] == identity[0] for key in groups):
             for variable, lead in axes:
                 bins.setdefault((*identity, variable, lead, 'rmse_skill_percent'), {})
+    # Missing paired leads must be explicit gaps rather than lines joining over
+    # an absent result, just as missing seeds never produce partial averages.
+    effect_axes = {(key[:3], key[-1]) for key in bins if key[-1].endswith('_percent')}
+    for identity, metric in effect_axes:
+        for variable, lead in axes:
+            bins.setdefault((*identity, variable, lead, metric), {})
     summary = []
     for key, values in sorted(bins.items()):
         model, bridge, arm, variable, lead, metric = key
@@ -111,7 +167,7 @@ def summarize_comparison(data):
         valid = [v for v in values.values() if v is not None]
         complete = set(values) == groups[identity] and len(valid) == len(groups[identity])
         summary.append(dict(model=model, bridge=bridge, arm=arm, label=labels[identity],
-            variable=variable, units=units[variable] if metric == 'rmse' else '%' if metric == 'rmse_skill_percent' else '1',
+            variable=variable, units=units[variable] if metric == 'rmse' else '%' if metric.endswith('_percent') else '1',
             lead_hours=lead, metric=metric, seeds=sorted(groups[identity]),
             expected_seeds=len(groups[identity]), valid_seeds=len(valid),
             mean=float(np.mean(valid)) if complete else None,
@@ -143,8 +199,8 @@ def plot_comparison(comparison, output):
     split = data.get('climode_benchmark', {}).get('split', 'evaluation')
     files = []
     seed_count = summary[0]['expected_seeds']
-    notes = (f'{seed_count} training seeds: mean ± sample SD; not a confidence interval. Undefined scores are gaps.'
-             if seed_count>1 else 'One training seed; sample SD unavailable. Undefined scores are gaps.')
+    notes = (f'{seed_count} training seeds: mean ± sample SD; not forecast uncertainty or a confidence interval. Undefined scores are gaps.'
+             if seed_count>1 else 'One training seed; seed SD unavailable (not forecast uncertainty). Undefined scores are gaps.')
 
     def save(fig, stem):
         for suffix in ('png', 'pdf'):
@@ -186,7 +242,7 @@ def plot_comparison(comparison, output):
                         ax.fill_between(x,y-sd,y+sd,color=colors[arm],alpha=.13)
                     ax.set(title=MODEL_NAMES.get(model,model),xlabel='Lead time (days)',ylabel=ylabel)
                     ax.grid(alpha=.2)
-                    if metric=='rmse_skill_percent': ax.axhline(0,color='#334155',lw=.8,ls='--')
+                    if metric.endswith('_percent'): ax.axhline(0,color='#334155',lw=.8,ls='--')
                     if not any(r['mean'] is not None for r in rows if r['model']==model):
                         ax.text(.5,.5,'Undefined for these cases',ha='center',transform=ax.transAxes)
                 for ax in list(axs.flat)[len(models):]: ax.set_visible(False)
@@ -209,26 +265,26 @@ def plot_comparison(comparison, output):
             decorate(fig,f'{split.upper()} · {variable} · day {last/24:g} RMSE (lower is better)',arms)
             save(fig,'last_lead_rmse_'+safe(variable))
 
-        latent = [a for a in arms if a!='raw']
-        if latent:
+        heat_rows=[r for r in summary if r['metric']=='rmse_skill_percent']
+        candidates = [a for a in arms if any(r['arm']==a for r in heat_rows)]
+        if candidates:
             heat_cols=min(2,len(variables))
             fig, axs = plt.subplots(math.ceil(len(variables)/2),heat_cols,
-                figsize=(max(10,6+2.6*len(latent)),4*math.ceil(len(variables)/2)+1),squeeze=False)
+                figsize=(max(10,6+2.6*len(candidates)),4*math.ceil(len(variables)/2)+1),squeeze=False)
             fig.subplots_adjust(top=.9,bottom=.14,wspace=.20,hspace=.55)
-            heat_rows=[r for r in summary if r['metric']=='rmse_skill_percent']
             last=max(r['lead_hours'] for r in heat_rows)
             lookup={(r['variable'],r['model'],r['arm']):r for r in heat_rows if r['lead_hours']==last}
             finite=[abs(r['mean']) for r in lookup.values() if r['mean'] is not None]
             limit=max([1.,*finite]); norm=TwoSlopeNorm(vmin=-limit,vcenter=0,vmax=limit)
             cmap=plt.get_cmap('RdBu').copy();cmap.set_bad('#e2e8f0')
             for index,(ax,variable) in enumerate(zip(axs.flat,variables)):
-                array=np.array([[lookup.get((variable,m,a),{}).get('mean') for a in latent] for m in models],dtype=float)
+                array=np.array([[lookup.get((variable,m,a),{}).get('mean') for a in candidates] for m in models],dtype=float)
                 im=ax.imshow(array,cmap=cmap,norm=norm,aspect='auto')
-                ax.set_xticks(range(len(latent)),[labels[a] for a in latent],rotation=18,ha='right')
+                ax.set_xticks(range(len(candidates)),[labels[a] for a in candidates],rotation=18,ha='right')
                 ax.set_yticks(range(len(models)),[MODEL_NAMES.get(m,m) for m in models]);ax.set_title(variable)
                 ax.tick_params(axis='y',labelleft=index%heat_cols==0)
                 for i in range(len(models)):
-                    for j in range(len(latent)):
+                    for j in range(len(candidates)):
                         v=array[i,j];label=f'{v:+.1f}%' if np.isfinite(v) else 'N/A'
                         ax.text(j,i,label,ha='center',va='center',color='white' if np.isfinite(v) and abs(v)>.6*limit else '#0f172a',fontsize=9)
             for ax in list(axs.flat)[len(variables):]: ax.set_visible(False)
@@ -244,7 +300,10 @@ def plot_comparison(comparison, output):
     manifest={'format':'climate_manifold.comparison_plots.v1','comparison':str(path.resolve()),
               'comparison_sha256':hashlib.sha256(raw).hexdigest(),'split':split,
               'figures':files,'summary':'plot_summary.csv','notes':notes,
-              'interpretation':'Raw/latent contrasts compare whole models; seed SD is not predictive uncertainty.'}
+              'interpretation':('Manifold = encoder + Fusion Transformer(raw, guide); panel names identify the separate downstream forecast model. '
+                  'Raw-relative scores compare whole systems, including extra parameters. Guide gain compares learned against zero guide. '
+                  'Constraint gain holds the guided forecast route fixed and adds observed encoder constraints; auxiliary parameters may differ. '
+                  'Seed SD is training variability, not predictive uncertainty.')}
     (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest
 

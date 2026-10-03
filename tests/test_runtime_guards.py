@@ -66,6 +66,9 @@ def test_visible_devices_use_cuda_uuid_not_global_numeric_indices(monkeypatch):
 
 def _mock_gpu(monkeypatch, visible=None, metrics=None):
     monkeypatch.setattr(guard,'visible_gpu_uuids',lambda:{GPU1} if visible is None else visible)
+    # GPU admission also queries compute processes. Unit/preflight tests must
+    # simulate this input rather than inspect the server or require nvidia-smi.
+    monkeypatch.setattr(guard,'occupied_gpu_uuids',lambda:set())
     monkeypatch.setattr(guard,'query_gpus',lambda:metrics if metrics is not None else [
         guard.GPU(0,GPU0,0,24000,0),guard.GPU(1,GPU1,100,24000,5)])
 
@@ -86,7 +89,7 @@ def test_guard_launches_only_allocated_uuid_and_preserves_parent_visibility(tmp_
     assert os.environ['CUDA_VISIBLE_DEVICES']=='3'
 
 
-@pytest.mark.parametrize('reason',['busy','no_visible','locked','became_busy'])
+@pytest.mark.parametrize('reason',['busy','no_visible','locked','became_busy','occupied','became_occupied'])
 def test_guard_refuses_without_launching_or_using_other_gpus(tmp_path,monkeypatch,reason):
     _mock_gpu(monkeypatch,visible=set() if reason=='no_visible' else None,
               metrics=[guard.GPU(1,GPU1,100,24000,80)] if reason=='busy' else None)
@@ -94,6 +97,11 @@ def test_guard_refuses_without_launching_or_using_other_gpus(tmp_path,monkeypatc
     if reason=='became_busy':
         records=iter([[guard.GPU(1,GPU1,100,24000,0)],[guard.GPU(1,GPU1,100,24000,80)]])
         monkeypatch.setattr(guard,'query_gpus',lambda:next(records))
+    if reason=='occupied':
+        monkeypatch.setattr(guard,'occupied_gpu_uuids',lambda:{GPU1})
+    if reason=='became_occupied':
+        records=iter([set(),{GPU1}])
+        monkeypatch.setattr(guard,'occupied_gpu_uuids',lambda:next(records))
     locks=tmp_path/'locks';locks.mkdir()
     with (locks/(GPU1+'.lock')).open('a+') as held:
         if reason=='locked':
@@ -113,3 +121,13 @@ def test_gpu_lock_write_cannot_escape_allowed_root(tmp_path,monkeypatch):
     with pytest.raises(ValueError,match='symlink'):
         guard.run_guarded(['python'],lock_root,work_root=allowed)
     assert outside.read_text()=='unchanged'
+
+
+def test_compute_process_query_uses_uuid_and_deduplicates(monkeypatch):
+    from types import SimpleNamespace
+    def query(command, **kwargs):
+        assert command == ['nvidia-smi', '--query-compute-apps=gpu_uuid', '--format=csv,noheader']
+        assert kwargs['check'] and kwargs['timeout'] == 20
+        return SimpleNamespace(stdout=f'{GPU1}\n\n{GPU1}\n{GPU0}\n')
+    monkeypatch.setattr(guard.subprocess, 'run', query)
+    assert guard.occupied_gpu_uuids() == {GPU0, GPU1}

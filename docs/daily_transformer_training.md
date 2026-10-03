@@ -1,5 +1,11 @@
 # Daily ERA5 Transformer comparison
 
+**Legacy Transformer-predictor experiment.** For the current manifold experiment,
+where Encoder + Fusion Transformer(raw, guide) feeds a separate forecast family M,
+use [manifold fusion experiments](manifold_fusion_experiments.md) and
+`scripts/run_daily_manifold_fusion.sh`. It reuses the daily preparation and runtime
+guards described here, while running the all-family comparison matrix.
+
 Branch: `feature/yehyeon-daily-transformer` (extends the daily-data branch at `29dff11`).
 
 The source has one 00 UTC-labelled value per day, not four 6-hourly snapshots.

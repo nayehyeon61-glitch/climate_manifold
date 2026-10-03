@@ -4,20 +4,49 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
-**Raw → M / E → M → D 비교:** M을 Transformer·NN·NeuralODE·ClimODE adaptation·ConvLSTM·
+**현재 주실험 — 통계 guide + Raw를 결합한 manifold → 별도 예측 모델 M.**
+브랜치 `feature/manifold-fusion-experiments`는 기존 Fusion 구현을 보강합니다.
+`guide=E(X,I)`와 Raw를 **Fusion Transformer T**에 함께 넣어 관측 격자 표현
+`H=T(X,guide)=X+Δ`를 만들고, 그 뒤의 M이 미래를 예측합니다. E/T/M을 공동 학습하며
+관측 보조 경로 `E → D_rec`, `E → D_info`가 복원·통계 손실로 E를 학습시킵니다.
+Guided 경로에서는 예측용 manifold decoder를 사용하지 않습니다.
+
+| 비교군 | 예측 경로 |
+|---|---|
+| Raw | Raw → M |
+| Latent 대조군 | E → M → D_forecast |
+| 제안 manifold | Raw + E guide → Fusion T → M |
+| Zero-guide | Raw + 0 guide → 동일 Fusion T → M |
+| 선택적 보조 감독 제거 | 제안 manifold → M, 관측 복원·통계 손실 끔 |
+
+기본 **8개 M × 4개 경로 × 3개 seed = 96회**이며,
+`INCLUDE_GUIDED_FORECAST_ONLY=1`은 마지막 대조군을 추가해 120회 학습합니다.
+M은 NN/CNN(`mlp`), NeuralODE, ClimODE adaptation, ConvLSTM, SimVP, FourCastNet,
+ClimaX, Transformer입니다. 마지막 선택지의 예측용 Transformer는 앞단 Fusion T와
+별개입니다. 한 실험에는 `STATISTICAL_LOSS=w2|kl_entropy|signed_measure` 중 하나를
+사용합니다. 기본은 W2, batch 16이며 PINN/static/flow 손실은 꺼집니다.
+
+`scripts/run_daily_manifold_fusion.sh`는 일별 ERA5를 제자리에서 읽고
+`/lustre/home/yehyeon` 아래에서 전처리·GPU 확인·학습·validation/test·그래프 생성을
+수행합니다. 기본은 16×32 격자, 연속 6일 관측→미래 1~5일 예측입니다.
+[최신 구조·비교 해석·브랜치 받기부터 전체 실행까지](docs/manifold_fusion_experiments.md)를
+참고하세요. Raw 대비 이득은 용량 변화도 포함하므로 Zero-guide 및 선택적 보조 감독
+제거 대조군을 함께 봅니다. Guide는 확률 샘플링이 없는 결정론적 표현입니다.
+
+**이전 실험 보존 — Raw → M / E → M → D 비교:** M을 Transformer·NN·NeuralODE·ClimODE adaptation·ConvLSTM·
 SimVP·FourCastNet·ClimaX로 교체합니다. 일별 ERA5에서도 두 경로와 W2/signed measure를
 동일 데이터·seed로 학습하고 validation/test를 평가합니다.
 RMSE·ACC·Raw 대비 개선율 그래프를 PNG/PDF로 자동 저장합니다.
-[새 브랜치·full 학습·test·그래프 명령](docs/raw_latent_model_comparison.md)을 참고하세요.
+[이전 두 경로 실험 명령](docs/raw_latent_model_comparison.md)을 참고하세요.
 
-**하루 1개 ERA5 표본으로 Transformer 학습:** `daily/YYYYMMDD.nc`와 기존 지형 파일을
+**이전 일별 Transformer 예측 실험:** `daily/YYYYMMDD.nc`와 기존 지형 파일을
 제자리에서 읽는 전처리·실행 경로를 추가했습니다. 원본 변경 없이 `/lustre/home/yehyeon` 아래에
 16×32, 24시간 간격 archive를 만들고 6일 관측→1~5일 예측을 비교합니다.
 사용량이 적은 할당 GPU만 선택하며, 코드 테스트 → 학습 → validation/test 평가를 순서대로 실행합니다.
 [서버에서 브랜치 받기부터 전체 학습까지](docs/daily_transformer_training.md)를 참고하세요.
 
-**추가 경로: Raw + 통계 latent guide → Transformer → 미래 기상장.**
-`--model transformer --bridge guided`는 원자료와 encoder의 공간 latent를 함께 입력합니다.
+**이전 joint-guide 경로: Raw + 통계 latent guide → Transformer → 미래 기상장.**
+`--model transformer --bridge guided --guide-architecture joint`는 원자료와 encoder의 공간 latent를 함께 입력합니다.
 예측용 manifold decoder는 잠그고, 별도 관측 복원·정보 decoder가 공유 encoder에 통계 제약을 줍니다.
 encoder와 Transformer는 동시에 학습합니다. 이 guide는 통계 손실로 학습하는 결정론적 표현이며
 확률적 latent sampling을 뜻하지 않습니다. W2/KL-entropy/signed-measure 선택과 변수별 encoder를 지원합니다.
@@ -25,7 +54,7 @@ encoder와 Transformer는 동시에 학습합니다. 이 guide는 통계 손실�
 `scripts/run_guided_transformer_comparison.sh`는 Raw / E→Transformer→D / Raw+guide를 비교하고,
 `INCLUDE_ZERO_GUIDE=1`로 같은 guide token 구조에 값을 0으로 넣는 대조군을 추가합니다.
 
-**이 브랜치의 새 실험:** 예측 `E → F → D`와 관측 복원 `E → D_rec`, `E → D_I`의 제약 경로를
+**기존 PINN/통계/static 제약 실험 보존:** 예측 `E → F → D`와 관측 복원 `E → D_rec`, `E → D_I`의 제약 경로를
 분리하고 **PINN+Statistical / PINN+Static / Statistical+Static**을 비교합니다.
 기본 `CONSTRAINT_DECODER=separate_surface_and_information`에서는 **별도 장복원 decoder D_rec**가
 현재 기상장 복원·분포 손실을 담당합니다. 해면기압 `msl`을 포함한 surface 변수들의 W₂²도 유지합니다.
@@ -62,7 +91,7 @@ GraphCast는 **공식 JAX 구현을 사용하는 별도 Raw 비교군**이며 E�
 | Hybrid PINN | 선택적으로 기압면 운동량·열역학·연속·층후 제약 및 learned closure |
 | A 보조 sampler | raw latent에서 flow matching, 상태·전이 분포 및 120시간 경로 손실 |
 | 데이터/평가 | ERA5 변환·shard 다운로드, train-only 정규화, 지연시간별 진단·CRPS·geometry audit |
-| 예측 주실험 | Neural ODE·ClimODE 각각 **data → model → forecast** / **E → model → D** / **E → model → D + 물리·정보 제약** 비교 |
+| 예측 주실험 | 동일 M의 **Raw / Latent / 통계 guide+Raw Fusion manifold / Zero-guide** 비교, 선택적 관측 제약 제거 |
 
 공동 학습의 기본 latent는 **32×ceil(H/2)×ceil(W/2)**입니다. 예를 들어 18×36 격자는
 32×9×18 잠재장으로 표현합니다. **전역 64차원 병목은 새 기본 경로에 없습니다.**
@@ -75,7 +104,7 @@ Python 3.10 이상, Linux/macOS 환경을 권장합니다. CUDA 학습은 사용
 PyTorch를 먼저 설치하세요. 아래 명령은 저장소 루트에서 실행합니다.
 
 ```bash
-git clone --branch feature/official-weather-baselines https://github.com/nayehyeon61-glitch/climate_manifold.git
+git clone --branch feature/manifold-fusion-experiments https://github.com/nayehyeon61-glitch/climate_manifold.git
 cd climate_manifold
 python -m venv .venv
 source .venv/bin/activate
