@@ -74,8 +74,16 @@ if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
     if [[ "${INCLUDE_DYNAMICS:-0}" == 1 ]]; then
       preflight+=(tests/test_dynamics_guide.py tests/test_dual_dynamics_training.py tests/test_dynamics_runner.py)
     fi
+    if [[ "${INCLUDE_TWO_STAGE:-0}" == 1 ]]; then
+      preflight+=(tests/test_guide_interaction.py tests/test_two_stage_training.py
+        tests/test_two_stage_reporting.py tests/test_two_stage_runner.py)
+    fi
   fi
-  CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 "$PYTHON" -m pytest -q \
+  # Tests explicitly select their optional arms. Do not let this experiment's
+  # exported activation flags silently change their default comparison matrix.
+  CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 \
+    INCLUDE_DYNAMICS=0 INCLUDE_ZERO_DYNAMICS=1 INCLUDE_TWO_STAGE=0 \
+    INCLUDE_TWO_STAGE_BYPASS=0 GUIDE_INTERACTION_DEPTH=1 "$PYTHON" -m pytest -q \
     "${preflight[@]}" --basetemp "$test_tmp" -o "cache_dir=$DAILY_WORK/cache/pytest" \
     2>&1 | tee "$DAILY_WORK/logs/tests-$(date +%Y%m%d-%H%M%S).log"
 fi

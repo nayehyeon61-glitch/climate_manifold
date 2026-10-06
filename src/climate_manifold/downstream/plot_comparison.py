@@ -10,7 +10,7 @@ import re
 import numpy as np
 
 from .compare import _arm, _fusion
-from .protocol import dynamics_identity
+from .protocol import dynamics_identity, guide_interaction_identity
 
 
 MODEL_ORDER = ('transformer', 'mlp', 'neural_ode', 'climode', 'convlstm', 'simvp', 'fourcastnet', 'climax')
@@ -23,6 +23,8 @@ METRIC_LABELS = {
     'constraint_gain_percent': 'RMSE reduction vs No observed constraints (%)',
     'dynamics_gain_percent': 'RMSE reduction vs Dynamics off (%)',
     'dynamics_input_gain_percent': 'RMSE reduction vs Zero dynamics (%)',
+    'two_stage_gain_percent': 'RMSE reduction vs Trained single-stage (%)',
+    'guide_interaction_input_gain_percent': 'RMSE reduction vs Same-checkpoint bypass (%)',
 }
 
 
@@ -39,6 +41,11 @@ def _label(row):
     encoder, dynamics_mode = dynamics_identity(row)
     if encoder != 'off':
         route += ' / '+('Zero dynamics' if dynamics_mode == 'zero' else 'Dynamics')+' ('+encoder+')'
+    interaction, depth, effective = guide_interaction_identity(row)
+    if interaction != 'off':
+        route += ' / Two-stage (depth '+str(depth)+')'
+        if effective == 'off':
+            route += ' / Inference bypass'
     if row.get('regularization') == 'none':
         return route+' / No observed constraints'
     loss = {'w2': 'W2', 'kl_entropy': 'KL-entropy', 'signed_measure': 'signed measure'}.get(row.get('statistical_loss'))
@@ -59,13 +66,18 @@ def _physical_identity(row, rows):
     missing_dynamics = ('dynamics_encoder' not in row and any(
         candidate['model'] == row['model'] and candidate['bridge'] == row['bridge']
         and dynamics_identity(candidate)[0] != 'off' for candidate in rows))
-    if not missing_guide and not missing_dynamics:
+    missing_interaction = ('guide_interaction' not in row and any(
+        candidate['model'] == row['model'] and candidate['bridge'] == row['bridge']
+        and guide_interaction_identity(candidate)[0] != 'off' for candidate in rows))
+    if not missing_guide and not missing_dynamics and not missing_interaction:
         return _identity(row)
     fields = ('model', 'bridge', 'seed', 'representation', 'training_mode', 'regularization',
               'constraint_pair', 'constraint_decoder', 'statistical_loss',
               'statistical_loss_config', 'statistical_flow_config', 'conditional_flow_config',
               'initialization', 'implementation', 'representation_sha256',
-              'dynamics_encoder', 'dynamics_mode', 'dynamics_contract', 'dynamics_auxiliary_config')
+              'dynamics_encoder', 'dynamics_mode', 'dynamics_contract', 'dynamics_auxiliary_config',
+              'guide_interaction', 'guide_interaction_depth', 'guide_interaction_contract',
+              'guide_interaction_evaluation')
     matches = [candidate for candidate in rows
                if all(candidate.get(key) == row[key] for key in fields if key in row)]
     if len(matches) != 1:
@@ -171,6 +183,20 @@ def summarize_comparison(data):
             if row.get('baseline_dynamics_mode') != 'zero' or row.get('candidate_dynamics_mode') != 'learned':
                 raise ValueError('Dynamics input gain must compare learned dynamics against zero dynamics')
             add_effect(row, 'dynamics_input_gain_percent', 'rmse_skill_vs_baseline')
+    for row in data.get('guide_interaction_effects', []):
+        if row.get('interpretation') == 'add_guide_interaction':
+            if (row.get('baseline_guide_interaction') != 'off'
+                    or row.get('candidate_effective_guide_interaction') != 'transformer'
+                    or row.get('inference_intervention') is not False):
+                raise ValueError('Two-stage gain must compare trained two-stage against trained single-stage')
+            add_effect(row, 'two_stage_gain_percent', 'rmse_skill_vs_baseline')
+        elif row.get('interpretation') == 'bypass_trained_guide_interaction':
+            if (row.get('same_checkpoint') is not True or row.get('inference_intervention') is not True
+                    or row.get('baseline_guide_interaction') != 'transformer'
+                    or row.get('baseline_effective_guide_interaction') != 'off'
+                    or row.get('candidate_effective_guide_interaction') != 'transformer'):
+                raise ValueError('Guide interaction bypass effect requires an identical trained checkpoint')
+            add_effect(row, 'guide_interaction_input_gain_percent', 'rmse_skill_vs_baseline')
     for identity in groups:
         if identity[1] != 'raw' and any(key[1] == 'raw' and key[0] == identity[0] for key in groups):
             for variable, lead in axes:
@@ -325,6 +351,8 @@ def plot_comparison(comparison, output):
                   'Raw-relative scores compare whole systems, including extra parameters. Guide gain compares learned against zero guide. '
                   'Constraint gain holds the guided forecast route fixed and adds observed encoder constraints; auxiliary parameters may differ. '
                   'Dynamics gain compares enabled versus off (capacity and auxiliary supervision change); dynamics input gain compares learned versus zero dynamics features. '
+                  'Two-stage gain compares separately trained first-stage attention on/off models; capacity changes. '
+                  'Same-checkpoint bypass gain is an inference intervention and is not a separately trained single-stage baseline. '
                   'Seed SD is training variability, not predictive uncertainty.')}
     (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest

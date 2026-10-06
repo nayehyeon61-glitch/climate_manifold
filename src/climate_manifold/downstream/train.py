@@ -18,7 +18,7 @@ from ..physical_information import digest, information_digest
 from ..temporal_supervision import TemporalWindowDataset, TemporalObjective
 from .pipeline import (ForecastPipeline, PredictorConfig, SEQUENCE_IMPLEMENTATIONS,
                        WEATHER_IMPLEMENTATIONS, SPATIAL_IMPLEMENTATIONS, TRANSFORMER_IMPLEMENTATION)
-from .protocol import validate_experiment
+from .protocol import validate_experiment, guide_interaction_contract
 from .constraint_protocol import CONSTRAINT_DECODERS, make_constraint_contract, constraint_decoder_from_payload
 from .statistical_objective import STATISTICAL_LOSSES, statistical_config_from_args, statistical_config_from_payload
 from .statistical_flow import (statistical_flow_config_from_args, statistical_flow_config_from_payload,
@@ -62,6 +62,10 @@ def guide_contract(config):
     if contract is not None and config.dynamics_encoder != 'off':
         contract = dict(contract, dynamics=dynamics_contract(config),
                         fusion='raw_spatial_dynamics_residual_fusion_transformer_zero_initialized')
+    interaction = guide_interaction_contract(config)
+    if interaction is not None:
+        contract = dict(contract, guide_interaction=interaction,
+                        fusion='guide_interaction_then_raw_refined_guide_residual_fusion')
     return contract
 
 
@@ -214,6 +218,8 @@ def load_predictor(path,device='cpu'):
     conditional_config=conditional_flow_config_from_payload(p)
     config=PredictorConfig(**p['config'])
     dynamics_auxiliary_config_from_payload(p, config)
+    if p.get('guide_interaction_contract') != guide_interaction_contract(config):
+        raise ValueError('Checkpoint guide_interaction_contract disagrees with its predictor config')
     if p.get('guide_contract') != guide_contract(config):
         raise ValueError('Checkpoint guide_contract disagrees with its predictor config')
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
@@ -484,6 +490,8 @@ def train(args):
         guide_direct_information=getattr(args,'guide_direct_information',False),
         guide_architecture=getattr(args,'guide_architecture','joint'),
         guide_fusion_depth=getattr(args,'guide_fusion_depth',2),
+        guide_interaction=getattr(args,'guide_interaction','off'),
+        guide_interaction_depth=getattr(args,'guide_interaction_depth',1),
         dynamics_encoder=getattr(args,'dynamics_encoder','off'),
         dynamics_mode=getattr(args,'dynamics_mode','learned'),
         dynamics_hidden_dim=getattr(args,'dynamics_hidden_dim',32),
@@ -702,6 +710,14 @@ def train(args):
             'same E_d(history) -> independent lead-conditioned temporal head/decoder -> future surface labels; '
             'per-lead normalized field reconstruction and selectable spatial statistics, optional physical-time tendency; '
             'no future encoder input, no predictor/forecast-decoder gradient from dynamics auxiliary objective')
+    interaction = guide_interaction_contract(config)
+    if interaction is not None:
+        payload['guide_interaction_contract']=interaction
+        payload['implementation']='two_stage_guide_v1+'+payload['implementation']
+        payload['objective_semantics']['forecast']=(
+            'shared E_s and independent shared E_d(history) -> T1(spatial guide, dynamics guide) '
+            '-> T2(raw history, refined guides) -> unchanged predictor -> fields; '
+            'T1 sees observed guide tokens only; auxiliary heads use original encoder features')
     output.parent.mkdir(parents=True,exist_ok=True)
     torch.save(payload,output)
     write_json(output.with_suffix('.manifest.json'),{'checkpoint_sha256':digest(output),'format':FORMAT})
@@ -784,6 +800,10 @@ def parser():
     p.add_argument('--guide-architecture',choices=['joint','fusion'],default='joint',
                    help='joint: one Transformer attends raw+guide tokens (Transformer only); fusion: residual Fusion Transformer feeds any matched-raw --model')
     p.add_argument('--guide-fusion-depth',type=int,default=2,help='Fusion Transformer block count (guide fusion only)')
+    p.add_argument('--guide-interaction',choices=['off','transformer'],default='off',
+                   help='Optional T1 refines spatial+dynamics guide tokens before existing raw fusion T2; requires guided fusion and dynamics')
+    p.add_argument('--guide-interaction-depth',type=int,default=1,
+                   help='Guide-only interaction Transformer block count; independent of --guide-fusion-depth')
     p.add_argument('--dynamics-encoder',choices=['off','conv_gru','temporal_conv'],default='off',
                    help='Optional independent temporal encoder, shared by forecast and future-label auxiliary paths')
     p.add_argument('--dynamics-mode',choices=['learned','zero'],default='learned',

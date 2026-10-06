@@ -73,6 +73,14 @@ elif args and args[0] == '-':
            'STATISTICAL_LOSS': 'w2', 'RESUME': '0', 'INCLUDE_ZERO_GUIDE': '1',
            'INCLUDE_GUIDED_FORECAST_ONLY': '0', 'VARIABLE_CONDITIONING': '0',
            'GUIDE_DIRECT_INFORMATION': '1', 'MAKE_PLOTS': '1', 'EVALUATE_TEST': '1'}
+    # This fixture is also called from a daily preflight inside an exported
+    # production experiment. Optional knobs must be explicit test settings.
+    for name in ('DYNAMICS_ENCODER', 'DYNAMICS_STATISTICAL_LOSS', 'DYNAMICS_HIDDEN_DIM',
+                 'DYNAMICS_CHANNELS', 'DYNAMICS_RECONSTRUCTION_WEIGHT',
+                 'DYNAMICS_STATISTICAL_WEIGHT', 'DYNAMICS_TENDENCY_WEIGHT'):
+        env.pop(name, None)
+    env.update(INCLUDE_DYNAMICS='0', INCLUDE_ZERO_DYNAMICS='1', INCLUDE_TWO_STAGE='0',
+               INCLUDE_TWO_STAGE_BYPASS='0', GUIDE_INTERACTION_DEPTH='1')
     return env, log
 
 

@@ -11,7 +11,8 @@ from ..train import write_json
 from .statistical_objective import statistical_config_from_payload
 from .statistical_flow import statistical_flow_config_from_payload
 from .conditional_flow import conditional_flow_config_from_payload
-from .protocol import experiment_contract,validate_experiment,dynamics_identity
+from .protocol import (experiment_contract, validate_experiment, dynamics_identity,
+                       guide_interaction_contract, guide_interaction_identity)
 from .climode_benchmark import benchmark,write_table
 from .constraint_protocol import constraint_decoder_from_payload, normalize_constraint_contract
 
@@ -67,7 +68,37 @@ def _base_arm(row):
 def _arm(row):
     name = _base_arm(row)
     encoder, mode = dynamics_identity(row)
-    return name + (':dynamics='+encoder+':'+mode if encoder != 'off' else '')
+    name += ':dynamics='+encoder+':'+mode if encoder != 'off' else ''
+    interaction, depth, effective = guide_interaction_identity(row)
+    if interaction != 'off':
+        name += ':guide_interaction='+interaction+':depth='+str(depth)
+        if effective == 'off':
+            name += ':evaluation_bypass'
+    return name
+
+
+def _validate_guide_interactions(group):
+    for row in group:
+        cfg = row['config']
+        contract = guide_interaction_contract(cfg)
+        if row.get('guide_interaction_contract') != contract:
+            raise ValueError('Invalid guide_interaction_contract')
+        evaluation = row.get('guide_interaction_evaluation')
+        kind = cfg.get('guide_interaction', 'off')
+        if evaluation is None:
+            if kind != 'off':
+                raise ValueError('Enabled guide_interaction requires evaluation metadata')
+            continue
+        requested = evaluation.get('requested') if isinstance(evaluation, dict) else None
+        if requested not in ('checkpoint', 'off'):
+            raise ValueError('Invalid guide_interaction_evaluation.requested')
+        effective = 'off' if requested == 'off' else kind
+        expected = dict(requested=requested, trained=kind, effective=effective,
+                        bypassed=kind != 'off' and effective == 'off')
+        if evaluation != expected:
+            raise ValueError('Invalid guide_interaction_evaluation')
+        if expected['bypassed'] and not row.get('checkpoint_sha256'):
+            raise ValueError('Bypassed guide interaction requires checkpoint_sha256')
 
 
 def _validate_dynamics(group):
@@ -125,7 +156,8 @@ def _validate_constraint_pairs(group):
                 raise ValueError('Guided forecast-only controls require zero effective objective_weights')
             for candidate in split:
                 if (candidate['config']['bridge'] != 'guided'
-                        or dynamics_identity(candidate) != dynamics_identity(row)):
+                        or dynamics_identity(candidate) != dynamics_identity(row)
+                        or guide_interaction_identity(candidate) != guide_interaction_identity(row)):
                     continue
                 for key in ('forecast_parameters','implementation','conditioning'):
                     if row.get(key) is None or row.get(key) != candidate.get(key):
@@ -198,7 +230,8 @@ def _validate_constraint_pairs(group):
             raise ValueError('Unfair comparison: mismatched constraint_contract')
         common_contract = common
         route_first = next(r for r in split if r['config']['bridge'] == row['config']['bridge']
-                           and dynamics_identity(r) == dynamics_identity(row))
+                           and dynamics_identity(r) == dynamics_identity(row)
+                           and guide_interaction_identity(r) == guide_interaction_identity(row))
         if row.get('forecast_parameters') is None or row['forecast_parameters'] != route_first.get('forecast_parameters'):
             raise ValueError('Unfair comparison: mismatched forecast_parameters')
         weights = row.get('split_objective_weights')
@@ -222,7 +255,8 @@ def _validate_constraint_pairs(group):
                      and r['config']['bridge']==row['config']['bridge']
                      and r['config'].get('guide_mode', 'learned')==row['config'].get('guide_mode', 'learned')
                      and bool(r.get('conditional_flow_config'))==bool(row.get('conditional_flow_config'))
-                     and dynamics_identity(r) == dynamics_identity(row)]
+                     and dynamics_identity(r) == dynamics_identity(row)
+                     and guide_interaction_identity(r) == guide_interaction_identity(row)]
         for name in ('total_parameters','trainable_parameters','constraint_parameters','implementation'):
             if row.get(name) != same_pair[0].get(name):
                 raise ValueError('Cannot pool different '+name+' as constraint_pair seeds')
@@ -337,6 +371,10 @@ def _validate_weather_provenance(group):
         if provenance['family'] != family:
             raise ValueError('predictor_provenance.family differs from model')
         implementation = row.get('implementation') or ''
+        if guide_interaction_identity(row)[0] != 'off':
+            if not implementation.startswith('two_stage_guide_v1+'):
+                raise ValueError('Enabled guide interaction requires two_stage_guide_v1 implementation wrapper')
+            implementation = implementation.removeprefix('two_stage_guide_v1+')
         if dynamics_identity(row)[0] != 'off':
             if not implementation.startswith('dual_dynamics_v1+'):
                 raise ValueError('Enabled dynamics report requires dual_dynamics_v1 implementation wrapper')
@@ -469,7 +507,7 @@ def _constraint_field_effects(identity, candidate, baseline):
 
 def compare(reports,output,climode_reference_reports=None):
     output=Path(output)
-    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv','.guide-effects.csv','.route-effects.csv','.dynamics-effects.csv')) or output.exists():
+    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv','.guide-effects.csv','.route-effects.csv','.dynamics-effects.csv','.guide-interaction-effects.csv')) or output.exists():
         raise FileExistsError('Choose a new comparison path')
     data=[json.loads(Path(path).read_text()) for path in reports]
     if not data:raise ValueError('At least one evaluation report is required')
@@ -490,6 +528,7 @@ def compare(reports,output,climode_reference_reports=None):
         _validate_weather_provenance(group)
         _validate_guides(group)
         _validate_dynamics(group)
+        _validate_guide_interactions(group)
         _validate_constraint_pairs(group)
         _validate_family_inputs(group)
         _validate_transport(group)
@@ -541,6 +580,11 @@ def compare(reports,output,climode_reference_reports=None):
             dynamics_encoder=dynamics_identity(report)[0], dynamics_mode=dynamics_identity(report)[1],
             dynamics_contract=report.get('dynamics_contract'),
             dynamics_auxiliary_config=report.get('dynamics_auxiliary_config'),
+            guide_interaction=cfg.get('guide_interaction', 'off'),
+            guide_interaction_depth=cfg.get('guide_interaction_depth', 1),
+            guide_interaction_contract=report.get('guide_interaction_contract'),
+            guide_interaction_evaluation=report.get('guide_interaction_evaluation'),
+            checkpoint_sha256=report.get('checkpoint_sha256'),
             latent_shape=report.get('latent_shape'),implementation=report.get('implementation'),
             predictor_provenance=report.get('predictor_provenance'),
             raw_backend=cfg.get('raw_backend','legacy') if cfg['bridge']=='raw' else None,
@@ -569,6 +613,8 @@ def compare(reports,output,climode_reference_reports=None):
             raise ValueError('Cannot pool different dynamics_contract as seeds within '+key)
         if groups.get(key) and row['dynamics_auxiliary_config'] != groups[key][0]['dynamics_auxiliary_config']:
             raise ValueError('Cannot pool different dynamics_auxiliary_config as seeds within '+key)
+        if groups.get(key) and row['guide_interaction_contract'] != groups[key][0]['guide_interaction_contract']:
+            raise ValueError('Cannot pool different guide_interaction_contract as seeds within '+key)
         if groups.get(key) and row['guide_contract'] != groups[key][0]['guide_contract']:
             raise ValueError('Cannot pool different guide_contract as seeds within '+key)
         if groups.get(key) and row['conditional_flow_config']!=groups[key][0]['conditional_flow_config']:
@@ -589,7 +635,7 @@ def compare(reports,output,climode_reference_reports=None):
                       'scored_runs':len(scores)} if scores else {'seeds':[x['seed'] for x in group],
                       'mean_normalized_rmse':None,'sample_std_normalized_rmse':None,'scored_runs':0}
     ranking_allowed=same_cases and all(r['finite_forecast_fraction']==1 for r in rows)
-    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[];guide_physical=[];route_physical=[];dynamics_physical=[]
+    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[];guide_physical=[];route_physical=[];dynamics_physical=[];interaction_physical=[]
     if ranking_allowed and contracts[0]['suite']=='primary':
         indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization'],dynamics_identity(r)):r
                  for r in rows if not r['constraint_pair'] and r['bridge'] != 'guided'}
@@ -630,13 +676,13 @@ def compare(reports,output,climode_reference_reports=None):
                                'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
         # Hold the guided forecasting path fixed when adding observed encoder
         # constraints. Auxiliary decoder parameters can differ and stay explicit.
-        guide_controls={(row['model'],row['seed'],row['guide_mode'],dynamics_identity(row)):row for row in rows
+        guide_controls={(row['model'],row['seed'],row['guide_mode'],dynamics_identity(row),guide_interaction_identity(row)):row for row in rows
                         if row['bridge']=='guided' and not row['constraint_pair']
                         and row['regularization']=='none'}
         for candidate in rows:
             if candidate['bridge']!='guided' or not candidate['constraint_pair']:
                 continue
-            baseline=guide_controls.get((candidate['model'],candidate['seed'],candidate['guide_mode'],dynamics_identity(candidate)))
+            baseline=guide_controls.get((candidate['model'],candidate['seed'],candidate['guide_mode'],dynamics_identity(candidate),guide_interaction_identity(candidate)))
             if baseline is None:
                 continue
             identity={'model':candidate['model'],'seed':candidate['seed'],
@@ -663,7 +709,8 @@ def compare(reports,output,climode_reference_reports=None):
                               (r['conditional_flow_config'] or {}).get('weight',0.)))
             for baseline,candidate in combinations(variants,2):
                 baseline_arm,candidate_arm=baseline['candidate_arm'],candidate['candidate_arm']
-                if dynamics_identity(baseline) != dynamics_identity(candidate):
+                if (dynamics_identity(baseline) != dynamics_identity(candidate)
+                        or guide_interaction_identity(baseline) != guide_interaction_identity(candidate)):
                     continue  # Dynamics changes have their own matched effect table.
                 if baseline['bridge'] != candidate['bridge']:
                     if (baseline['constraint_pair'] != candidate['constraint_pair']
@@ -759,6 +806,8 @@ def compare(reports,output,climode_reference_reports=None):
                 continue
             for baseline in rows:
                 base_encoder, base_mode = dynamics_identity(baseline)
+                if guide_interaction_identity(candidate) != guide_interaction_identity(baseline):
+                    continue
                 if not (base_encoder == 'off' or base_encoder == encoder and base_mode == 'zero'):
                     continue
                 if any(candidate.get(key) != baseline.get(key) for key in (
@@ -781,6 +830,52 @@ def compare(reports,output,climode_reference_reports=None):
                         'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
                 dynamics_physical.extend(_constraint_field_effects(
                     identity,source[id(candidate)],source[id(baseline)]))
+        # The first Transformer is trained jointly. Removing it at inference
+        # is a separate intervention and only pairs with the identical checkpoint.
+        for candidate in rows:
+            kind, depth, effective = guide_interaction_identity(candidate)
+            if kind != 'transformer' or effective != 'transformer':
+                continue
+            for baseline in rows:
+                base_kind, base_depth, base_effective = guide_interaction_identity(baseline)
+                bypass = base_kind == kind and base_depth == depth and base_effective == 'off'
+                if base_kind != 'off' and not bypass:
+                    continue
+                if dynamics_identity(candidate) != dynamics_identity(baseline):
+                    continue
+                if any(candidate.get(key) != baseline.get(key) for key in (
+                        'model','seed','bridge','representation','training_mode','regularization',
+                        'guide_mode','constraint_pair','constraint_path','constraint_contract',
+                        'constraint_decoder','statistical_loss_config','statistical_flow_config',
+                        'conditional_flow_config','objective_weights','split_objective_weights',
+                        'dynamics_auxiliary_config','conditioning')):
+                    continue
+                configs = [{k:v for k,v in source[id(row)]['config'].items()
+                            if k not in ('guide_interaction', 'guide_interaction_depth')}
+                           for row in (candidate, baseline)]
+                if configs[0] != configs[1]:
+                    continue
+                if bypass and (not candidate['checkpoint_sha256']
+                               or candidate['checkpoint_sha256'] != baseline['checkpoint_sha256']):
+                    continue
+                identity={'model':candidate['model'],'seed':candidate['seed'],
+                    'control':baseline['candidate_arm'],'candidate_arm':candidate['candidate_arm'],
+                    'training_mode':candidate['training_mode'],
+                    'pair_key':candidate['model']+'/'+candidate['candidate_arm']+'/vs_'+baseline['candidate_arm'],
+                    'interpretation':'bypass_trained_guide_interaction' if bypass else 'add_guide_interaction',
+                    'inference_intervention':bypass, 'same_checkpoint':bypass,
+                    'baseline_guide_interaction':base_kind,'candidate_guide_interaction':kind,
+                    'baseline_effective_guide_interaction':base_effective,
+                    'candidate_effective_guide_interaction':effective,
+                    'candidate_guide_interaction_depth':depth,
+                    'baseline_parameters':baseline['total_parameters'],
+                    'candidate_parameters':candidate['total_parameters']}
+                error, ours = baseline['normalized_rmse'], candidate['normalized_rmse']
+                if error is not None and ours is not None:
+                    paired.append({**identity,'rmse_reduction':error-ours,
+                        'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
+                interaction_physical.extend(_constraint_field_effects(
+                    identity,source[id(candidate)],source[id(baseline)]))
         for row in paired:
             key=row['pair_key'] if row['training_mode']=='joint' else row['model']+'/vs_'+row['control']
             paired_summary.setdefault(key,[]).append(row)
@@ -796,6 +891,7 @@ def compare(reports,output,climode_reference_reports=None):
         'conditional_flow_effects':conditional_physical,
         'guide_effects':guide_physical,'route_effects':route_physical,
         'dynamics_effects':dynamics_physical,
+        'guide_interaction_effects':interaction_physical,
         'direct_comparison':_direct_effects(direct_pairs),
         'same_successful_origins':same_cases,'ranking_allowed':ranking_allowed,
         'notes':['Inspect per-variable and per-lead physical scores in the original reports.',
@@ -813,6 +909,8 @@ def compare(reports,output,climode_reference_reports=None):
                  'Guided versus raw or latent comparisons change routes and parameter counts; matched Transformer width/depth does not imply equal capacity.',
                  'Guided forecast-only versus constrained guide holds the forecasting path fixed; the effect includes observed reconstruction/statistical supervision and any added auxiliary decoder capacity, not the statistical loss alone.',
                  'Zero-guide ablations replace guide tokens by zero but retain the same information-route supervision; they do not constitute stochastic encoder experiments.',
+                 'Two-stage versus single-stage changes guide interaction capacity and jointly trained weights; it is not an equal-parameter comparison.',
+                 'Bypassing guide interaction at evaluation is a same-checkpoint intervention, not a separately trained single-stage baseline.',
                  'Dynamics-off versus learned changes encoder/auxiliary capacity and supervision; zero-dynamics versus learned holds the temporal encoder and auxiliary training fixed and changes forecast access to its features.',
                  'Raw-versus-latent and plain-AE comparisons change representation or supervision and are whole-model comparisons, not causal evidence for physical constraints.',
                  'Latent coordinate errors are within-representation diagnostics, never cross-encoder rankings.',
@@ -834,10 +932,11 @@ def compare(reports,output,climode_reference_reports=None):
     write_table(output.with_suffix('.guide-effects.csv'),result['guide_effects'])
     write_table(output.with_suffix('.route-effects.csv'),result['route_effects'])
     write_table(output.with_suffix('.dynamics-effects.csv'),result['dynamics_effects'])
+    write_table(output.with_suffix('.guide-interaction-effects.csv'),result['guide_interaction_effects'])
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
         for row in rows:
-            structured = ('guide_contract','dynamics_contract','dynamics_auxiliary_config','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
+            structured = ('guide_interaction_contract','guide_interaction_evaluation','guide_contract','dynamics_contract','dynamics_auxiliary_config','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
             writer.writerow({**row,**{key:json.dumps(row[key],sort_keys=True) for key in structured}})
     return result
 

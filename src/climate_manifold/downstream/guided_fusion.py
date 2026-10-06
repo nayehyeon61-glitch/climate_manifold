@@ -26,7 +26,8 @@ class GuidedFusion(nn.Module):
 
     def __init__(self, raw_grid, guide_grid, history_steps, hidden=128, depth=2,
                  patch_size=2, heads=4, history_dt_hours=24., guide_mode='learned',
-                 periodic_lon=False, dynamics_grid=None, dynamics_mode='learned'):
+                 periodic_lon=False, dynamics_grid=None, dynamics_mode='learned',
+                 guide_interaction='off', guide_interaction_depth=1):
         super().__init__()
         self.raw_grid = _positive_grid(raw_grid, 'Raw grid')
         self.guide_grid = _positive_grid(guide_grid, 'Guide grid')
@@ -39,6 +40,13 @@ class GuidedFusion(nn.Module):
             raise ValueError('Guide mode must be learned or zero')
         if dynamics_mode not in ('learned', 'zero'):
             raise ValueError('Dynamics mode must be learned or zero')
+        if guide_interaction not in ('off', 'transformer'):
+            raise ValueError('Guide interaction must be off or transformer')
+        if (isinstance(guide_interaction_depth, bool)
+                or not isinstance(guide_interaction_depth, int) or guide_interaction_depth < 1):
+            raise ValueError('Guide interaction depth must be a positive integer')
+        if guide_interaction != 'off' and dynamics_grid is None:
+            raise ValueError('Guide interaction requires an enabled dynamics guide')
         if (isinstance(history_dt_hours, bool) or not math.isfinite(history_dt_hours)
                 or history_dt_hours <= 0):
             raise ValueError('History spacing must be finite and positive')
@@ -91,6 +99,16 @@ class GuidedFusion(nn.Module):
                 nn.init.normal_(dynamics_type, std=.02)
                 self.type_embed = nn.Parameter(torch.cat((self.type_embed.detach(), dynamics_type), dim=0))
 
+        # T1 is independent of the original raw/guide Transformer T2. Disabled
+        # checkpoints gain no parameters, and enabling T1 must not perturb
+        # the initialization of this module or subsequent common modules.
+        self.guide_interaction = None
+        self.guide_interaction_bypass = False
+        if guide_interaction == 'transformer':
+            from .guide_interaction import GuideInteraction
+            with torch.random.fork_rng(devices=[]):
+                self.guide_interaction = GuideInteraction(hidden, guide_interaction_depth, heads)
+
     def forward(self, history, guide_history=None, dynamics_history=None):
         batch = len(history)
         if (history.ndim != 3 or history.shape[1:] != (self.history_steps, self.dimension)
@@ -120,6 +138,11 @@ class GuidedFusion(nn.Module):
             dynamics = dynamics_history.reshape(batch, self.history_steps, *self.dynamics_grid)
             chunks.append(self._patch_tokens(dynamics, self.dynamics_embed,
                                              self.dynamics_coordinates, 2, self.history_age_days))
+        if self.guide_interaction is not None and not self.guide_interaction_bypass:
+            # Zero controls above remove source information before any T1
+            # attention, so a zeroed bank cannot leak its source into the other
+            # bank. Raw tokens enter T2 only, after guide-only interaction.
+            chunks[1:] = self.guide_interaction(chunks[1], chunks[2])
         tokens = torch.cat(chunks, dim=1)
         memory = self.transformer(tokens)[:, :self.history_steps * self.raw_patch_count]
         patches = self.head(memory)

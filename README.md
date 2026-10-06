@@ -4,6 +4,14 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
+**선택형 이중 Transformer — `feature/two-stage-guide-fusion`.**
+`T1(E_s, E_d)`로 두 guide를 먼저 상호 작용시킨 뒤 기존 `T2(Raw, guides) → M`에
+연결할 수 있습니다. `--guide-interaction off|transformer`로 선택하며 기존 경로의 기본은
+off입니다. 새 `run_two_stage_manifold_comparison.sh`는 기존 Dynamics 8개 비교군에
+2단 구조를 추가해 기본 216회 학습하고, 같은 checkpoint의 T1 우회 평가도 별도로 수행합니다.
+독립 학습한 1단/2단 비교와 test-time bypass 진단은 구분합니다.
+[구조·선택 옵션·전체 학습/test/그래프 명령](docs/two_stage_manifold.md).
+
 **선택형 dynamics 보강 — `feature/dual-dynamics-manifold`.**
 기존 공간 Encoder `E_s`에 관측 history를 읽는 별도 `E_d`를 추가할 수 있습니다.
 `conv_gru|temporal_conv`를 선택하고, **Latent: `(E_s + P(E_d)) → M → D`**와

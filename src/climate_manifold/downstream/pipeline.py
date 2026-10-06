@@ -58,8 +58,22 @@ class PredictorConfig:
     dynamics_mode: str = 'learned'
     dynamics_hidden_dim: int = 32
     dynamics_channels: int = 8
+    # T1 optionally mixes spatial/dynamics guides before the existing T2 raw
+    # fusion. Off retains the exact one-stage module/checkpoint structure.
+    guide_interaction: str = 'off'
+    guide_interaction_depth: int = 1
 
     def __post_init__(self):
+        if self.guide_interaction not in ('off', 'transformer'):
+            raise ValueError('Guide interaction must be off or transformer')
+        if (isinstance(self.guide_interaction_depth, bool)
+                or not isinstance(self.guide_interaction_depth, int)
+                or self.guide_interaction_depth < 1):
+            raise ValueError('Guide interaction depth must be a positive integer')
+        if self.guide_interaction != 'off' and (
+                self.bridge != 'guided' or self.guide_architecture != 'fusion'
+                or self.dynamics_encoder == 'off'):
+            raise ValueError('Guide interaction requires guided fusion and an enabled dynamics encoder')
         if self.dynamics_encoder not in ('off', 'conv_gru', 'temporal_conv'):
             raise ValueError('Dynamics encoder must be off, conv_gru or temporal_conv')
         if self.dynamics_mode not in ('learned', 'zero'):
@@ -306,7 +320,9 @@ class ForecastPipeline(nn.Module):
                 patch_size=config.weather_patch_size, heads=config.transformer_heads,
                 history_dt_hours=selected.config.history_stride*selected.config.step_hours,
                 guide_mode=config.guide_mode, periodic_lon=periodic_lon,
-                dynamics_grid=dynamics_grid, dynamics_mode=config.dynamics_mode)
+                dynamics_grid=dynamics_grid, dynamics_mode=config.dynamics_mode,
+                guide_interaction=config.guide_interaction,
+                guide_interaction_depth=config.guide_interaction_depth)
         # Create the observed-field head after F so enabling it cannot change
         # the forecast model's random initialization. Historical checkpoints
         # omit it completely and retain their original state-dict contract.

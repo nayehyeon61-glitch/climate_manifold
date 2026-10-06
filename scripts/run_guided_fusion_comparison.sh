@@ -48,6 +48,15 @@ INCLUDE_ZERO_DYNAMICS="${INCLUDE_ZERO_DYNAMICS:-1}"
 for name in INCLUDE_DYNAMICS INCLUDE_ZERO_DYNAMICS; do
   [[ "${!name}" == 0 || "${!name}" == 1 ]] || { echo "$name must be 0 or 1" >&2; exit 2; }
 done
+INCLUDE_TWO_STAGE="${INCLUDE_TWO_STAGE:-0}"
+INCLUDE_TWO_STAGE_BYPASS="${INCLUDE_TWO_STAGE_BYPASS:-0}"
+for name in INCLUDE_TWO_STAGE INCLUDE_TWO_STAGE_BYPASS; do
+  [[ "${!name}" == 0 || "${!name}" == 1 ]] || { echo "$name must be 0 or 1" >&2; exit 2; }
+done
+[[ "$INCLUDE_TWO_STAGE" == 0 || "$INCLUDE_DYNAMICS" == 1 ]] || { echo 'INCLUDE_TWO_STAGE=1 requires INCLUDE_DYNAMICS=1' >&2; exit 2; }
+[[ "$INCLUDE_TWO_STAGE_BYPASS" == 0 || "$INCLUDE_TWO_STAGE" == 1 ]] || { echo 'INCLUDE_TWO_STAGE_BYPASS=1 requires INCLUDE_TWO_STAGE=1' >&2; exit 2; }
+GUIDE_INTERACTION_DEPTH="${GUIDE_INTERACTION_DEPTH:-1}"
+[[ "$GUIDE_INTERACTION_DEPTH" =~ ^[1-9][0-9]*$ ]] || { echo 'GUIDE_INTERACTION_DEPTH must be a positive integer' >&2; exit 2; }
 DYNAMICS_ENCODER="${DYNAMICS_ENCODER:-conv_gru}"
 case "$DYNAMICS_ENCODER" in conv_gru|temporal_conv) ;;
   *) echo 'DYNAMICS_ENCODER must be conv_gru or temporal_conv; disable with INCLUDE_DYNAMICS=0' >&2; exit 2;;
@@ -124,6 +133,10 @@ dynamics=(--dynamics-encoder "$DYNAMICS_ENCODER"
 # Record only effective optional settings; inactive knobs do not alter a run.
 effective_dynamics=()
 if [[ "$INCLUDE_DYNAMICS" == 1 ]]; then effective_dynamics=("${dynamics[@]}"); fi
+two_stage=()
+if [[ "$INCLUDE_TWO_STAGE" == 1 ]]; then
+  two_stage=(--guide-interaction transformer --guide-interaction-depth "$GUIDE_INTERACTION_DEPTH")
+fi
 arms=(raw latent guided)
 if [[ "$INCLUDE_ZERO_GUIDE" == 1 ]]; then arms+=(guided_zero); fi
 if [[ "$INCLUDE_GUIDED_FORECAST_ONLY" == 1 ]]; then arms+=(guided_forecast_only); fi
@@ -133,15 +146,17 @@ if [[ "$INCLUDE_DYNAMICS" == 1 ]]; then
     arms+=(latent_dynamics_zero guided_dynamics_zero)
   fi
 fi
+if [[ "$INCLUDE_TWO_STAGE" == 1 ]]; then arms+=(guided_dynamics_two_stage); fi
 # Capture actual effective arguments, not just exported overrides. Fingerprints
 # cover prepared inputs and code; original daily ERA5 files are never hashed.
 "$PYTHON" -m climate_manifold.fusion_run --archive "$ARCHIVE" --information "$INFO" \
   --run "$RUN" --source-root "$PWD" --resume "$RESUME" \
   --setting models "${models[*]}" --setting seeds "${seeds[*]}" --setting arms "${arms[*]}" \
   --setting evaluate_test "$EVALUATE_TEST" --setting make_plots "$MAKE_PLOTS" \
+  --setting include_two_stage "$INCLUDE_TWO_STAGE" --setting include_two_stage_bypass "$INCLUDE_TWO_STAGE_BYPASS" \
   --setting max_cases "${MAX_CASES:-0}" --setting origin_stride "${ORIGIN_STRIDE:-1}" \
   --setting device "$([[ "$GPU_GUARD" == 1 ]] && echo cuda:0 || echo "${DEVICE:-cpu}")" \
-  -- setup "${setup[@]}" statistical "${statistical[@]}" guide "${guide_information[@]}" dynamics "${effective_dynamics[@]}"
+  -- setup "${setup[@]}" statistical "${statistical[@]}" guide "${guide_information[@]}" dynamics "${effective_dynamics[@]}" two_stage "${two_stage[@]}"
 printf 'Run: %s\nFits: %s\n' "$RUN" "$(( ${#models[@]} * ${#arms[@]} * ${#seeds[@]} ))"
 # Analysis is written to fresh staging paths. Publish the comparison JSON last
 # and the plot directory only after success, so interrupted analysis is resumable.
@@ -168,6 +183,7 @@ try:
         '.guide-effects.csv': data.get('guide_effects'),
         '.route-effects.csv': data.get('route_effects'),
         '.dynamics-effects.csv': data.get('dynamics_effects'),
+        '.guide-interaction-effects.csv': data.get('guide_interaction_effects'),
     }
     complete = path.with_suffix('.csv').is_file() and all(
         not rows or path.with_suffix(suffix).is_file() for suffix, rows in tables.items())
@@ -219,6 +235,7 @@ for seed in "${seeds[@]}"; do
       guided_dynamics) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned) ;;
       latent_dynamics_zero) route=(--bridge latent "${statistical[@]}" "${dynamics[@]}" --dynamics-mode zero) ;;
       guided_dynamics_zero) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode zero) ;;
+      guided_dynamics_two_stage) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned "${two_stage[@]}") ;;
     esac
     if [[ ! -f "$prefix.manifest.json" ]]; then
       run_model climate_manifold.downstream.train --model "$family" "${setup[@]}" "${route[@]}" \
@@ -232,6 +249,31 @@ for seed in "${seeds[@]}"; do
   done
  done
 done
+# This is a diagnostic intervention on the already trained two-stage checkpoint,
+# not another fit or a replacement for the independently trained one-stage arm.
+evaluate_two_stage_bypass() {
+  local split="$1" seed family checkpoint prefix forecast
+  [[ "$INCLUDE_TWO_STAGE_BYPASS" == 1 ]] || return 0
+  for seed in "${seeds[@]}"; do
+   for family in "${models[@]}"; do
+    checkpoint="$RUN/$family-guided_dynamics_two_stage-seed$seed.pt"
+    prefix="$RUN/$family-guided_dynamics_two_stage_bypass-seed$seed"
+    if [[ "$split" == validation ]]; then
+      reports+=("$prefix.validation.json")
+      forecast="$prefix.forecast.npz"
+    else
+      test_reports+=("$prefix.test.json")
+      forecast="$prefix.test.forecast.npz"
+    fi
+    [[ ! -f "$prefix.$split.json" ]] || continue
+    run_model climate_manifold.downstream.evaluate --checkpoint "$checkpoint" \
+      --guide-interaction-override off --archive "$ARCHIVE" --information "$INFO" --split "$split" \
+      --output "$prefix.$split.json" --forecast-output "$forecast" \
+      --max-cases "${MAX_CASES:-0}" --origin-stride "${ORIGIN_STRIDE:-1}"
+   done
+  done
+}
+evaluate_two_stage_bypass validation
 compare_reports "$RUN/comparison.json" "${reports[@]}"
 make_plots "$RUN/comparison.json" validation
 if [[ "$EVALUATE_TEST" == 1 ]]; then
@@ -250,6 +292,7 @@ if [[ "$EVALUATE_TEST" == 1 ]]; then
     done
    done
   done
+  evaluate_two_stage_bypass test
   compare_reports "$RUN/comparison.test.json" "${test_reports[@]}"
   make_plots "$RUN/comparison.test.json" test
 fi

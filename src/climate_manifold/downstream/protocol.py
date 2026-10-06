@@ -61,6 +61,14 @@ def experiment_contract(config):
                   'statistical encoder + dynamics encoder -> fusion transformer(raw, statistical guide, dynamics guide) -> raw-grid predictor -> fields'),
             predictor_variant=contract['predictor_variant'] + '_dual_encoder',
         )
+    if cfg.get('guide_interaction', 'off') != 'off':
+        contract.update(
+            guide_interaction=cfg['guide_interaction'],
+            guide_interaction_depth=cfg.get('guide_interaction_depth', 1),
+            path=('statistical encoder + dynamics encoder -> guide interaction transformer(spatial, dynamics) '
+                  '-> fusion transformer(raw, refined guides) -> raw-grid predictor -> fields'),
+            predictor_variant=contract['predictor_variant'] + '_two_stage',
+        )
     return contract
 
 
@@ -71,10 +79,43 @@ def dynamics_identity(row):
     return (encoder, cfg.get('dynamics_mode', 'learned')) if encoder != 'off' else ('off', None)
 
 
+def guide_interaction_contract(config):
+    """Describe the independent guide-only first attention stage."""
+    cfg = vars(config) if not isinstance(config, dict) else config
+    if cfg.get('guide_interaction', 'off') == 'off':
+        return None
+    return {
+        'version': 'climate_manifold.guide_interaction.v1',
+        'kind': cfg['guide_interaction'], 'depth': cfg.get('guide_interaction_depth', 1),
+        'input': 'spatial_and_dynamics_guide_tokens', 'raw_input': False,
+        'output': 'refined_guide_tokens', 'integration': 'before_raw_guide_fusion',
+        'parameters_shared_with_fusion': False,
+    }
+
+
+def guide_interaction_identity(row):
+    """Separate trained single/two-stage models from same-checkpoint bypasses."""
+    cfg = row.get('config', row)
+    kind = cfg.get('guide_interaction', 'off')
+    if kind == 'off':
+        return ('off', None, 'off')
+    evaluation = row.get('guide_interaction_evaluation') or {}
+    return (kind, cfg.get('guide_interaction_depth', 1), evaluation.get('effective', kind))
+
+
 def validate_experiment(config, requested):
     if requested not in ('primary', 'auxiliary'):
         raise ValueError('Experiment must be primary or auxiliary')
     cfg = vars(config) if not isinstance(config, dict) else config
+    interaction = cfg.get('guide_interaction', 'off')
+    if interaction not in ('off', 'transformer'):
+        raise ValueError('guide_interaction must be off or transformer')
+    if interaction != 'off':
+        depth = cfg.get('guide_interaction_depth', 1)
+        if isinstance(depth, bool) or not isinstance(depth, int) or depth < 1:
+            raise ValueError('guide_interaction_depth must be a positive integer')
+        if not _guide_fusion(cfg) or cfg.get('dynamics_encoder', 'off') == 'off':
+            raise ValueError('guide_interaction requires guided fusion and an enabled dynamics encoder')
     if cfg['model'] in ('convlstm', 'simvp', 'fourcastnet', 'climax', 'transformer') and not _sequence_supported(cfg):
         raise ValueError('Spatial sequence/weather models require joint spatial latent or matched raw forecasting, anchor=none')
     if cfg['bridge'] == 'guided' and (not (cfg['model'] == 'transformer' or _guide_fusion(cfg))

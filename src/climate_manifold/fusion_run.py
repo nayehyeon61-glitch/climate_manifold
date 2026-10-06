@@ -53,9 +53,10 @@ def source_identity(root):
         'run_guided_fusion_comparison.sh', 'run_daily_manifold_fusion.sh',
         'run_daily_guided_transformer.sh')]
     paths += [root/'pyproject.toml']
-    dynamics_runner = root/'scripts'/'run_dynamics_manifold_comparison.sh'
-    if dynamics_runner.is_file():
-        paths.append(dynamics_runner)
+    for name in ('run_dynamics_manifold_comparison.sh', 'run_two_stage_manifold_comparison.sh'):
+        optional_runner = root/'scripts'/name
+        if optional_runner.is_file():
+            paths.append(optional_runner)
     return {str(path.relative_to(root)): digest(path) for path in paths}
 
 
@@ -67,8 +68,13 @@ def verify_completed_fits(run, settings):
                 checkpoint = prefix.with_suffix('.pt')
                 manifest = prefix.with_suffix('.manifest.json')
                 reports = [prefix.with_suffix(f'.{split}.json') for split in ('validation', 'test')]
+                bypass_reports = []
+                if arm == 'guided_dynamics_two_stage' and settings.get('include_two_stage_bypass') == '1':
+                    bypass_prefix = run/f'{model}-guided_dynamics_two_stage_bypass-seed{seed}'
+                    bypass_reports = [bypass_prefix.with_suffix(f'.{split}.json')
+                                      for split in ('validation', 'test')]
                 if not checkpoint.exists() and not manifest.exists():
-                    if any(p.exists() for p in reports):
+                    if any(p.exists() for p in reports+bypass_reports):
                         raise ValueError(f'Report without a completed checkpoint: {prefix}')
                     continue
                 if not checkpoint.is_file() or not manifest.is_file():
@@ -76,9 +82,20 @@ def verify_completed_fits(run, settings):
                 checksum = digest(checkpoint)['sha256']
                 if json.loads(manifest.read_text()).get('checkpoint_sha256') != checksum:
                     raise ValueError(f'Checkpoint manifest/hash mismatch: {checkpoint}')
-                for report in reports:
-                    if report.exists() and json.loads(report.read_text()).get('checkpoint_sha256') != checksum:
+                for report in reports+bypass_reports:
+                    if not report.exists():
+                        continue
+                    result = json.loads(report.read_text())
+                    if result.get('checkpoint_sha256') != checksum:
                         raise ValueError(f'Report/checkpoint mismatch: {report}')
+                    if arm == 'guided_dynamics_two_stage':
+                        bypassed = report in bypass_reports
+                        expected = {'requested': 'off' if bypassed else 'checkpoint',
+                                    'trained': 'transformer',
+                                    'effective': 'off' if bypassed else 'transformer',
+                                    'bypassed': bypassed}
+                        if result.get('guide_interaction_evaluation') != expected:
+                            raise ValueError(f'Guide interaction report/configuration mismatch: {report}')
 
 
 def initialize_run(run, archive, information, source_root, settings, arguments, *, resume):

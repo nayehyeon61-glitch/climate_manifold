@@ -17,7 +17,8 @@ from .conditional_flow import conditional_flow_config_from_payload
 
 
 def evaluate(checkpoint,archive,output,*,information=None,split='validation',max_cases=0,
-             origin_stride=1,device='cpu',forecast_output=None):
+             origin_stride=1,device='cpu',forecast_output=None,
+             guide_interaction_override='checkpoint'):
     output=Path(output)
     if split not in ('calibration','validation','test'):raise ValueError('Use a held-out downstream split')
     if max_cases<0 or origin_stride<1:raise ValueError('Invalid evaluation counts')
@@ -25,6 +26,19 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
     if forecast_output and (Path(forecast_output).suffix!='.npz' or Path(forecast_output).resolve()==output.resolve()):
         raise ValueError('Forecast path must be a distinct .npz file')
     model,p=load_predictor(checkpoint,device)
+    if guide_interaction_override not in ('checkpoint', 'off'):
+        raise ValueError('Guide interaction override must be checkpoint or off; an untrained module cannot be enabled at evaluation')
+    interaction_evaluation = None
+    trained_interaction = model.config.guide_interaction
+    if guide_interaction_override == 'off' and trained_interaction != 'transformer':
+        raise ValueError('Guide interaction bypass requires a checkpoint trained with --guide-interaction transformer')
+    if trained_interaction == 'transformer':
+        bypassed = guide_interaction_override == 'off'
+        model.guide_fusion.guide_interaction_bypass = bypassed
+        interaction_evaluation = {
+            'requested': guide_interaction_override, 'trained': trained_interaction,
+            'effective': 'off' if bypassed else trained_interaction, 'bypassed': bypassed,
+        }
     statistical_config=statistical_config_from_payload(p)
     dynamics_latent_audit = ({
         'reference_encoder': 'statistical_encoder_E_s',
@@ -103,6 +117,9 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                         values['latent_diagnostic_semantics_json'] = json.dumps(dynamics_latent_audit, sort_keys=True)
                     values['dynamics_contract_json'] = json.dumps(p['dynamics_contract'], sort_keys=True)
                     values['dynamics_auxiliary_config_json'] = json.dumps(p.get('dynamics_auxiliary_config'), sort_keys=True)
+                if interaction_evaluation is not None:
+                    values['guide_interaction_contract_json'] = json.dumps(p['guide_interaction_contract'], sort_keys=True)
+                    values['guide_interaction_evaluation_json'] = json.dumps(interaction_evaluation, sort_keys=True)
                 np.savez_compressed(path,**values);saved=True
     if str(device).startswith('cuda'):torch.cuda.synchronize()
     report={'format':'climate_manifold.downstream_evaluation.v1','checkpoint_sha256':digest(checkpoint),
@@ -149,6 +166,12 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'cuda_peak_memory_bytes':torch.cuda.max_memory_allocated() if str(device).startswith('cuda') else None,
             'forecast_output_written':saved,
             'limits':'Scores are conditional on finite forecasts; failed origins are explicit. Gaussian uncertainty is marginal, not a coherent stochastic trajectory ensemble.'}
+    if interaction_evaluation is not None:
+        report['guide_interaction_contract'] = p['guide_interaction_contract']
+        report['guide_interaction_evaluation'] = interaction_evaluation
+        if interaction_evaluation['bypassed']:
+            report['limits'] += (' Guide interaction T1 is bypassed in a checkpoint trained with it. '
+                                 'This is a same-checkpoint inference intervention, not an independently trained single-stage baseline.')
     write_json(output,report);return report
 
 
@@ -159,6 +182,8 @@ def main(argv=None):
     p.add_argument('--split',choices=['calibration','validation','test'],default='validation')
     p.add_argument('--max-cases',type=int,default=0);p.add_argument('--origin-stride',type=int,default=1)
     p.add_argument('--device',default='cpu')
+    p.add_argument('--guide-interaction-override',choices=['checkpoint','off'],default='checkpoint',
+                   help='checkpoint keeps the trained architecture; off bypasses T1 of a trained two-stage checkpoint as an inference ablation')
     r=evaluate(**vars(p.parse_args(argv)));print(json.dumps(r['scores']['aggregate']));return 0
 
 if __name__=='__main__':raise SystemExit(main())
