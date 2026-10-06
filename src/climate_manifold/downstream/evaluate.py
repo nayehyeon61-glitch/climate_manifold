@@ -109,6 +109,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'statistical_loss':statistical_config['kind'] if statistical_config else None,
             'statistical_loss_config':statistical_config,
             'statistical_flow_config':statistical_flow_config_from_payload(p),
+            'forecast_signed_measure':p.get('forecast_signed_measure'),
             'conditional_flow_config':conditional_flow_config_from_payload(p),
             'split_objective_weights':p.get('split_objective_weights'),
             'forecast_parameters':p.get('forecast_parameters'),

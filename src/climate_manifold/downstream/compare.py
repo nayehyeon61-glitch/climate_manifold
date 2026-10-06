@@ -452,7 +452,7 @@ def compare(reports,output,climode_reference_reports=None):
         for row in group[1:]:
             if _comparison_training_contract(row,raw_and_split)!=training_contract:
                 raise ValueError('Unfair comparison: mismatched training_contract')
-            for key in ('constants_sha256',):
+            for key in ('constants_sha256','forecast_signed_measure'):
                 if row.get(key)!=first.get(key):raise ValueError('Unfair comparison: mismatched '+key)
             if _regime(row)['training_mode']=='joint' and _regime(row)['initialization']!=_regime(first)['initialization']:
                 raise ValueError('Unfair comparison: mismatched initialization')

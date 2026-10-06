@@ -42,7 +42,9 @@ VARIABLE_CONDITIONING="${VARIABLE_CONDITIONING:-0}"
 [[ "$VARIABLE_CONDITIONING" == 0 || "$VARIABLE_CONDITIONING" == 1 ]] || { echo 'VARIABLE_CONDITIONING must be 0 or 1' >&2; exit 2; }
 EVALUATE_TEST="${EVALUATE_TEST:-0}"
 GPU_GUARD="${GPU_GUARD:-0}"
-for name in EVALUATE_TEST GPU_GUARD; do
+# COMPARE=0 lets parallel shards share one RUN; compare once after all finish.
+COMPARE="${COMPARE:-1}"
+for name in EVALUATE_TEST GPU_GUARD COMPARE; do
   [[ "${!name}" == 0 || "${!name}" == 1 ]] || { echo "$name must be 0 or 1" >&2; exit 2; }
 done
 if [[ "$GPU_GUARD" == 1 ]]; then
@@ -78,6 +80,10 @@ setup=(--training-mode joint --initialization fresh
   --climode-step-hours "${CLIMODE_STEP_HOURS:-1}" --ode-substeps "${ODE_SUBSTEPS:-2}"
   --static-weight 0)
 if [[ "$VARIABLE_CONDITIONING" == 1 ]]; then setup+=(--spatial-variable-conditioning); fi
+# Signed measure (A+-, G+-) on predicted future fields; every arm, raw included. 0 disables.
+FORECAST_SIGNED_WEIGHT="${FORECAST_SIGNED_WEIGHT:-0}"
+[[ "$FORECAST_SIGNED_WEIGHT" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo 'FORECAST_SIGNED_WEIGHT must be a nonnegative number' >&2; exit 2; }
+if [[ "$FORECAST_SIGNED_WEIGHT" =~ [1-9] ]]; then setup+=(--forecast-signed-weight "$FORECAST_SIGNED_WEIGHT"); fi
 statistical=(--constraint-pair statistical --regularization full
   --constraint-decoder "$CONSTRAINT_DECODER" --statistical-loss "$STATISTICAL_LOSS"
   --statistical-weight "${STATISTICAL_WEIGHT:-0.1}"
@@ -118,8 +124,10 @@ for seed in "${seeds[@]}"; do
   done
  done
 done
-rm -f "$RUN"/comparison.*
-"$PYTHON" -m climate_manifold.downstream.compare --reports "${reports[@]}" --output "$RUN/comparison.json"
+if [[ "$COMPARE" == 1 ]]; then
+  rm -f "$RUN"/comparison.*
+  "$PYTHON" -m climate_manifold.downstream.compare --reports "${reports[@]}" --output "$RUN/comparison.json"
+fi
 if [[ "$EVALUATE_TEST" == 1 ]]; then
   # Every fit/checkpoint is fixed before test evaluation. Test scores never
   # enter optimization, checkpoint selection, or validation comparisons.
@@ -136,5 +144,7 @@ if [[ "$EVALUATE_TEST" == 1 ]]; then
     done
    done
   done
-  "$PYTHON" -m climate_manifold.downstream.compare --reports "${test_reports[@]}" --output "$RUN/comparison.test.json"
+  if [[ "$COMPARE" == 1 ]]; then
+    "$PYTHON" -m climate_manifold.downstream.compare --reports "${test_reports[@]}" --output "$RUN/comparison.test.json"
+  fi
 fi

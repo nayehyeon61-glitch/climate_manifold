@@ -20,7 +20,8 @@ from .pipeline import (ForecastPipeline, PredictorConfig, SEQUENCE_IMPLEMENTATIO
                        WEATHER_IMPLEMENTATIONS, SPATIAL_IMPLEMENTATIONS, TRANSFORMER_IMPLEMENTATION)
 from .protocol import validate_experiment
 from .constraint_protocol import CONSTRAINT_DECODERS, make_constraint_contract, constraint_decoder_from_payload
-from .statistical_objective import STATISTICAL_LOSSES, statistical_config_from_args, statistical_config_from_payload
+from .statistical_objective import (STATISTICAL_LOSSES, statistical_config_from_args, statistical_config_from_payload,
+                                   make_statistical_config, spatial_signed_measure)
 from .statistical_flow import (statistical_flow_config_from_args, statistical_flow_config_from_payload,
                                forecast_statistical_flow_losses)
 from .conditional_flow import (conditional_flow_config_from_args, conditional_flow_config_from_payload,
@@ -239,6 +240,24 @@ def forecast_loss(output,batch,temporal,lead_hours,tendency_weight):
     return {'loss':loss,'state_mse':state_mse,'tendency_mse':tendency,'fit':fit}
 
 
+def forecast_signed_measure_loss(output,batch,temporal,weight):
+    """Signed measure on every predicted future field, per lead and variable.
+
+    Same estimator as the observed guide constraint: positive/negative parts
+    relative to training-normalized zero, area-weighted total mass A+- and
+    spatial location probabilities G+-. Applies to any bridge (raw included).
+    """
+    prediction=output['mean']
+    target=batch['targets'][:,:prediction.shape[1]]
+    shape=(*prediction.shape[:2],temporal.grid[0],-1)
+    scores=spatial_signed_measure(prediction.reshape(shape),target.reshape(shape),
+                                  temporal.area.flatten(),make_statistical_config('signed_measure'))
+    return {'forecast_signed_measure':scores['loss'],
+            'forecast_signed_spatial_js':scores['signed_spatial_js'],
+            'forecast_signed_mass_mse':scores['signed_mass_mse'],
+            'forecast_signed_regularization':weight*scores['loss']}
+
+
 def prepare_constraint_pair(args):
     """Validate the opt-in split objective before any representation is built."""
     pair=getattr(args,'constraint_pair',None)
@@ -446,7 +465,8 @@ def train(args):
     if not math.isfinite(args.learning_rate) or args.learning_rate<=0 or not math.isfinite(args.tendency_weight) or args.tendency_weight<0:
         raise ValueError('Invalid learning rate/tendency weight')
     torch.manual_seed(args.seed);np.random.seed(args.seed)
-    for name in ('reconstruction_weight','information_weight','static_weight','distribution_weight','physics_weight','pinn_weight','statistical_weight'):
+    for name in ('reconstruction_weight','information_weight','static_weight','distribution_weight','physics_weight','pinn_weight','statistical_weight',
+                 'forecast_signed_weight'):
         value=getattr(args,name)
         if value is not None and (not math.isfinite(value) or value<0):
             raise ValueError('Objective weights must be finite and nonnegative: '+name)
@@ -527,6 +547,10 @@ def train(args):
                     prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads,
                                      reconstruct_origin=not (information_only or separate_decoder))
                     losses=forecast_loss(prediction,batch,temporal,leads,args.tendency_weight)
+                    if args.forecast_signed_weight:
+                        signed=forecast_signed_measure_loss(prediction,batch,temporal,args.forecast_signed_weight)
+                        losses.update(signed)
+                        losses['loss']=losses['loss']+signed['forecast_signed_regularization']
                     if config.training_mode == 'joint' and config.bridge != 'raw':
                         if split_constraints:
                             from .reconstruction_objective import reconstruction_constraint_losses
@@ -630,6 +654,11 @@ def train(args):
         'statistical_loss':statistical_config['kind'] if statistical_config else None,
         'statistical_loss_config':statistical_config,
         'statistical_flow_config':flow_config,
+        'forecast_signed_measure':({'weight':args.forecast_signed_weight,
+            'config':make_statistical_config('signed_measure'),
+            'semantics':'predicted vs observed future fields at every lead: positive/negative spatial measures relative to '
+                        'training-normalized zero, per variable JS of location probabilities plus total-mass MSE; added to forecast loss for every bridge'}
+            if args.forecast_signed_weight else None),
         'conditional_flow_config':conditional_config,
         'split_objective_weights':({'reconstruction':weights.reconstruction,'pinn':weights.pinn,
             'statistical':weights.distribution,'static':weights.static} if split_constraints else None),
@@ -713,6 +742,8 @@ def parser():
         help='Positive flow weight only: area-weighted quantile count (default 32)')
     p.add_argument('--statistical-loss',choices=STATISTICAL_LOSSES,default=None,
         help='Observed statistics: w2 value marginal, kl_entropy value histogram, or signed_measure spatial sign/mass')
+    p.add_argument('--forecast-signed-weight',type=float,default=0.,
+        help='Signed measure (A+-, G+-) on predicted future fields vs targets, any bridge; 0 disables (default)')
     p.add_argument('--kl-bins',type=int,default=None,help='KL only: total bins including two open tails (default 64)')
     p.add_argument('--kl-range',type=float,default=None,help='KL only: boundaries span +/- this normalized value (default 6)')
     p.add_argument('--kl-bandwidth',type=float,default=None,help='KL only: sigmoid smoothing width in normalized units (default 0.2)')
