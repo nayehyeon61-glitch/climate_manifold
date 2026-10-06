@@ -96,6 +96,13 @@ guide_information=(--guide-architecture fusion --guide-fusion-depth "${GUIDE_FUS
 if [[ "$GUIDE_DIRECT_INFORMATION" == 1 ]]; then guide_information+=(--guide-direct-information); fi
 arms=(raw latent guided)
 if [[ "$INCLUDE_ZERO_GUIDE" == 1 ]]; then arms+=(guided_zero); fi
+# ARMS selects a subset (e.g. reuse raw fits that do not depend on the guide loss).
+if [[ -n "${ARMS:-}" ]]; then
+  read -r -a arms <<< "$ARMS"
+  for arm in "${arms[@]}"; do
+    case "$arm" in raw|latent|guided|guided_zero) ;; *) echo "Unknown arm: $arm" >&2; exit 2;; esac
+  done
+fi
 mkdir -p "$RUN"
 reports=()
 test_reports=()

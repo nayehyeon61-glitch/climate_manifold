@@ -84,7 +84,7 @@ def _runner(tmp_path, **settings):
     stub.chmod(0o755)
     calls = tmp_path/'calls.jsonl'
     env = {key: value for key, value in os.environ.items()
-           if key not in ('SEEDS', 'MODELS', 'FORECAST_SIGNED_WEIGHT', 'COMPARE', 'EVALUATE_TEST', 'GPU_GUARD')}
+           if key not in ('SEEDS', 'MODELS', 'ARMS', 'FORECAST_SIGNED_WEIGHT', 'COMPARE', 'EVALUATE_TEST', 'GPU_GUARD')}
     env.update(PYTHON=str(stub), CALLS=str(calls), ARCHIVE='a.npz', INFO='i.npz',
                RUN=str(tmp_path/'run'), SEEDS='7', MODELS='mlp', **settings)
     script = Path(__file__).resolve().parents[1]/'scripts/run_guided_fusion_comparison.sh'
@@ -107,3 +107,13 @@ def test_runner_applies_weight_to_every_arm_and_compare_toggle(tmp_path):
     assert any(c[1] == 'climate_manifold.downstream.compare' for c in commands)
     result, _ = _runner(tmp_path/'bad', FORECAST_SIGNED_WEIGHT='-1')
     assert result.returncode == 2
+
+
+def test_runner_arms_subset(tmp_path):
+    result, commands = _runner(tmp_path, ARMS='latent guided_zero', COMPARE='0', STATISTICAL_LOSS='kl_entropy')
+    assert result.returncode == 0, result.stderr
+    fits = [c for c in commands if c[1] == 'climate_manifold.downstream.train']
+    assert [c[c.index('--bridge')+1] for c in fits] == ['latent', 'guided']
+    assert fits[1][fits[1].index('--guide-mode')+1] == 'zero'
+    (tmp_path/'bad').mkdir()
+    assert _runner(tmp_path/'bad', ARMS='decoded')[0].returncode == 2
