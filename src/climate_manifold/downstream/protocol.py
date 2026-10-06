@@ -30,7 +30,7 @@ def experiment_contract(config):
     guided = (bridge == 'guided' and cfg['model'] == 'transformer' and not fusion and _sequence_supported(cfg))
     primary = ((cfg['model'] in ('mlp', 'neural_ode', 'persistence') or latent_climode or matched_raw or sequence or fusion)
                and bridge in ('raw', 'latent', 'guided') and cfg['anchor'] == 'none')
-    return {
+    contract = {
         'suite': 'primary' if primary else 'auxiliary',
         'representation': representation,
         'prediction_space': 'latent' if bridge == 'latent' else 'field',
@@ -52,6 +52,23 @@ def experiment_contract(config):
         'representation_frozen': bridge != 'raw' and training_mode == 'frozen',
         'origin_residual_bypass': cfg['anchor'] != 'none',
     }
+    if cfg.get('dynamics_encoder', 'off') != 'off':
+        contract.update(
+            dynamics_encoder=cfg['dynamics_encoder'],
+            dynamics_mode=cfg.get('dynamics_mode', 'learned'),
+            path=('statistical encoder + dynamics encoder -> latent residual fusion -> predictor -> decoder'
+                  if bridge == 'latent' else
+                  'statistical encoder + dynamics encoder -> fusion transformer(raw, statistical guide, dynamics guide) -> raw-grid predictor -> fields'),
+            predictor_variant=contract['predictor_variant'] + '_dual_encoder',
+        )
+    return contract
+
+
+def dynamics_identity(row):
+    """Off/missing metadata preserves the historical experiment identity."""
+    cfg = row.get('config', row)
+    encoder = cfg.get('dynamics_encoder', 'off')
+    return (encoder, cfg.get('dynamics_mode', 'learned')) if encoder != 'off' else ('off', None)
 
 
 def validate_experiment(config, requested):
@@ -63,6 +80,14 @@ def validate_experiment(config, requested):
     if cfg['bridge'] == 'guided' and (not (cfg['model'] == 'transformer' or _guide_fusion(cfg))
                                       or not _sequence_supported(cfg)):
         raise ValueError('Guided forecasts require a joint spatial climate_manifold transformer or guide fusion, anchor=none')
+    if cfg.get('dynamics_encoder', 'off') != 'off':
+        if (cfg.get('dynamics_encoder') not in ('conv_gru', 'temporal_conv')
+                or cfg.get('dynamics_mode', 'learned') not in ('learned', 'zero')
+                or cfg.get('training_mode') != 'joint' or cfg.get('latent_layout') != 'spatial'
+                or cfg.get('representation', 'climate_manifold') != 'climate_manifold'
+                or cfg.get('anchor') != 'none'
+                or not (cfg['bridge'] == 'latent' or _guide_fusion(cfg))):
+            raise ValueError('Dynamics encoder requires joint spatial climate_manifold latent or guided fusion, anchor=none')
     contract = experiment_contract(config)
     if requested == 'primary' and contract['suite'] != 'primary':
         raise ValueError('Primary experiments require raw or encoder -> latent model -> decoder, '

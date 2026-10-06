@@ -71,6 +71,9 @@ if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
     tests/test_runtime_guards.py)
   if [[ "$SUITE" == manifold_fusion ]]; then
     preflight+=(tests/test_guided_fusion.py tests/test_fusion_runner.py tests/test_comparison_plots.py)
+    if [[ "${INCLUDE_DYNAMICS:-0}" == 1 ]]; then
+      preflight+=(tests/test_dynamics_guide.py tests/test_dual_dynamics_training.py tests/test_dynamics_runner.py)
+    fi
   fi
   CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 "$PYTHON" -m pytest -q \
     "${preflight[@]}" --basetemp "$test_tmp" -o "cache_dir=$DAILY_WORK/cache/pytest" \

@@ -26,6 +26,15 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
         raise ValueError('Forecast path must be a distinct .npz file')
     model,p=load_predictor(checkpoint,device)
     statistical_config=statistical_config_from_payload(p)
+    dynamics_latent_audit = ({
+        'reference_encoder': 'statistical_encoder_E_s',
+        'origin_latent': 'E_s_of_observed_origin_with_origin_information',
+        'forecast_history_latent': 'actual_predictor_input_E_s_history_plus_projected_E_d_history',
+        'diagnostic_target_latent': 'post_forecast_E_s_of_future_truth_with_origin_information',
+        'interpretation': 'E_s coordinate/reconstruction audit, not a direct E_d trajectory score',
+        'primary_comparison': 'physical_field_RMSE_and_ACC',
+        'limits': 'Latent tendencies start from E_s origin, not the mixed predictor input; do not rank different encoders by these coordinate errors.',
+    } if p.get('dynamics_contract') is not None and model.config.bridge == 'latent' else None)
     a=p['a_metadata'];data=data_contract(archive,information,a['mode'],model.a_config,a)
     ds=windows(data,model.a_config,split,origin_stride,max_cases)
     leads=torch.tensor(p['lead_hours'],device=device,dtype=torch.float32)
@@ -84,6 +93,16 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                 if model.config.bridge == 'guided' and prediction.get('history_latent') is not None:
                     values['guide_history_latent'] = prediction['history_latent'][0].cpu().numpy()
                     values['guide_contract_json'] = json.dumps(p.get('guide_contract'), sort_keys=True)
+                if p.get('dynamics_contract') is not None:
+                    for name in ('dynamics_history_latent', 'forecast_history_latent', 'fused_history'):
+                        if prediction.get(name) is not None:
+                            values[name] = prediction[name][0].cpu().numpy()
+                    if p.get('dynamics_latent_shape') is not None:
+                        values['dynamics_latent_shape'] = np.asarray(p['dynamics_latent_shape'], dtype=np.int64)
+                    if dynamics_latent_audit is not None:
+                        values['latent_diagnostic_semantics_json'] = json.dumps(dynamics_latent_audit, sort_keys=True)
+                    values['dynamics_contract_json'] = json.dumps(p['dynamics_contract'], sort_keys=True)
+                    values['dynamics_auxiliary_config_json'] = json.dumps(p.get('dynamics_auxiliary_config'), sort_keys=True)
                 np.savez_compressed(path,**values);saved=True
     if str(device).startswith('cuda'):torch.cuda.synchronize()
     report={'format':'climate_manifold.downstream_evaluation.v1','checkpoint_sha256':digest(checkpoint),
@@ -100,6 +119,10 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'transport_contract':p.get('transport_contract'),
             'predictor_provenance':p.get('predictor_provenance'),
             'guide_contract':p.get('guide_contract'),
+            'dynamics_contract':p.get('dynamics_contract'),
+            'dynamics_auxiliary_config':p.get('dynamics_auxiliary_config'),
+            'dynamics_latent_shape':p.get('dynamics_latent_shape'),
+            'latent_diagnostic_semantics':dynamics_latent_audit,
             'regularization':p.get('regularization','legacy'),
             'objective_weights':p.get('objective_weights',{}),
             'constraint_pair':p.get('constraint_pair'),

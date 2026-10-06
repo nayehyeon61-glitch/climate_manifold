@@ -34,6 +34,10 @@ def _identity(report):
                 guide_mode=(cfg.get('guide_mode','learned')
                             if not pure_a and cfg['bridge']=='guided' else None),
                 guide_contract=report.get('guide_contract'),
+                dynamics_encoder=cfg.get('dynamics_encoder', 'off'),
+                dynamics_mode=cfg.get('dynamics_mode', 'learned') if cfg.get('dynamics_encoder', 'off') != 'off' else None,
+                dynamics_contract=report.get('dynamics_contract'),
+                dynamics_auxiliary_config=report.get('dynamics_auxiliary_config'),
                 constraint_pair=report.get('constraint_pair'),
                 constraint_path=report.get('constraint_path','forecast_trajectory'),
                 constraint_decoder=constraint_decoder_from_payload(report),

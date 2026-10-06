@@ -4,6 +4,15 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
+**선택형 dynamics 보강 — `feature/dual-dynamics-manifold`.**
+기존 공간 Encoder `E_s`에 관측 history를 읽는 별도 `E_d`를 추가할 수 있습니다.
+`conv_gru|temporal_conv`를 선택하고, **Latent: `(E_s + P(E_d)) → M → D`**와
+**Guided: `Fusion(Raw, E_s, E_d) → M`**를 독립 비교합니다. 동일한 `E_d`가 미래 장·통계
+보조 decoder와 예측 경로에서 공동 학습되며, 미래 자료는 학습 label로만 사용합니다.
+기본 기존 runner의 dynamics는 꺼져 있고, 새 `run_dynamics_manifold_comparison.sh`는
+활성화된 dynamics와 zero-dynamics 대조까지 포함해 기본 192회(batch 16)를 실행합니다.
+[구조·선택 옵션·새 브랜치부터 full 학습/test/그래프까지](docs/dual_dynamics_manifold.md).
+
 **현재 주실험 — 통계 guide + Raw를 결합한 manifold → 별도 예측 모델 M.**
 브랜치 `feature/manifold-fusion-experiments`는 기존 Fusion 구현을 보강합니다.
 `guide=E(X,I)`와 Raw를 **Fusion Transformer T**에 함께 넣어 관측 격자 표현

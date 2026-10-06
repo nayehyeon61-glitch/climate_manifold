@@ -11,7 +11,7 @@ from ..train import write_json
 from .statistical_objective import statistical_config_from_payload
 from .statistical_flow import statistical_flow_config_from_payload
 from .conditional_flow import conditional_flow_config_from_payload
-from .protocol import experiment_contract,validate_experiment
+from .protocol import experiment_contract,validate_experiment,dynamics_identity
 from .climode_benchmark import benchmark,write_table
 from .constraint_protocol import constraint_decoder_from_payload, normalize_constraint_contract
 
@@ -44,7 +44,7 @@ def _fusion(row):
     return isinstance(contract, dict) and contract.get('version') == 'climate_manifold.statistical_guide_fusion.v1'
 
 
-def _arm(row):
+def _base_arm(row):
     guided = 'guided_fusion' if _fusion(row) else 'guided'
     if row.get('constraint_pair'):
         name=row['constraint_pair'] + (':'+row['statistical_loss'] if row.get('statistical_loss') not in (None, 'w2') else '')
@@ -62,6 +62,42 @@ def _arm(row):
             and row['regularization']=='none'):
         return 'forecast_only'
     return row['representation']
+
+
+def _arm(row):
+    name = _base_arm(row)
+    encoder, mode = dynamics_identity(row)
+    return name + (':dynamics='+encoder+':'+mode if encoder != 'off' else '')
+
+
+def _validate_dynamics(group):
+    """Keep enabled/off controls explicit and reject undocumented temporal inputs."""
+    enabled = []
+    for row in group:
+        cfg = row['config']
+        contract = row.get('dynamics_contract')
+        auxiliary = row.get('dynamics_auxiliary_config')
+        if dynamics_identity(row)[0] == 'off':
+            if contract is not None or auxiliary is not None:
+                raise ValueError('Disabled dynamics encoder must not declare dynamics metadata')
+            continue
+        from .pipeline import PredictorConfig
+        from .train import dynamics_contract
+        expected = dynamics_contract(PredictorConfig(**cfg))
+        if contract != expected:
+            raise ValueError('Invalid dynamics_contract')
+        from .dynamics_objective import validate_dynamics_auxiliary_config
+        validate_dynamics_auxiliary_config(auxiliary)
+        enabled.append(row)
+    if not enabled:
+        return
+    first = enabled[0]
+    for row in enabled[1:]:
+        for key, default in (('dynamics_encoder', 'off'), ('dynamics_hidden_dim', 32), ('dynamics_channels', 8)):
+            if row['config'].get(key, default) != first['config'].get(key, default):
+                raise ValueError('Unfair comparison: mismatched '+key+'; compare dynamics architectures in separate suites')
+        if row['dynamics_auxiliary_config'] != first['dynamics_auxiliary_config']:
+            raise ValueError('Unfair comparison: mismatched dynamics_auxiliary_config')
 
 
 def _validate_constraint_pairs(group):
@@ -88,7 +124,8 @@ def _validate_constraint_pairs(group):
                            or not math.isfinite(value) or value != 0 for value in weights.values())):
                 raise ValueError('Guided forecast-only controls require zero effective objective_weights')
             for candidate in split:
-                if candidate['config']['bridge'] != 'guided':
+                if (candidate['config']['bridge'] != 'guided'
+                        or dynamics_identity(candidate) != dynamics_identity(row)):
                     continue
                 for key in ('forecast_parameters','implementation','conditioning'):
                     if row.get(key) is None or row.get(key) != candidate.get(key):
@@ -160,7 +197,8 @@ def _validate_constraint_pairs(group):
         if common_contract is not None and common != common_contract:
             raise ValueError('Unfair comparison: mismatched constraint_contract')
         common_contract = common
-        route_first = next(r for r in split if r['config']['bridge'] == row['config']['bridge'])
+        route_first = next(r for r in split if r['config']['bridge'] == row['config']['bridge']
+                           and dynamics_identity(r) == dynamics_identity(row))
         if row.get('forecast_parameters') is None or row['forecast_parameters'] != route_first.get('forecast_parameters'):
             raise ValueError('Unfair comparison: mismatched forecast_parameters')
         weights = row.get('split_objective_weights')
@@ -183,7 +221,8 @@ def _validate_constraint_pairs(group):
         same_pair = [r for r in split if r['constraint_pair']==pair
                      and r['config']['bridge']==row['config']['bridge']
                      and r['config'].get('guide_mode', 'learned')==row['config'].get('guide_mode', 'learned')
-                     and bool(r.get('conditional_flow_config'))==bool(row.get('conditional_flow_config'))]
+                     and bool(r.get('conditional_flow_config'))==bool(row.get('conditional_flow_config'))
+                     and dynamics_identity(r) == dynamics_identity(row)]
         for name in ('total_parameters','trainable_parameters','constraint_parameters','implementation'):
             if row.get(name) != same_pair[0].get(name):
                 raise ValueError('Cannot pool different '+name+' as constraint_pair seeds')
@@ -297,7 +336,12 @@ def _validate_weather_provenance(group):
                 raise ValueError('Invalid predictor_provenance.'+key)
         if provenance['family'] != family:
             raise ValueError('predictor_provenance.family differs from model')
-        if provenance['implementation'] != (row.get('implementation') or '').removeprefix('guide_fusion_v1+'):
+        implementation = row.get('implementation') or ''
+        if dynamics_identity(row)[0] != 'off':
+            if not implementation.startswith('dual_dynamics_v1+'):
+                raise ValueError('Enabled dynamics report requires dual_dynamics_v1 implementation wrapper')
+            implementation = implementation.removeprefix('dual_dynamics_v1+')
+        if provenance['implementation'] != implementation.removeprefix('guide_fusion_v1+'):
             raise ValueError('predictor_provenance.implementation differs from report')
         if re.fullmatch(r'[0-9a-fA-F]{40}', provenance['upstream_commit']) is None:
             raise ValueError('predictor_provenance.upstream_commit must pin a full commit SHA')
@@ -425,7 +469,7 @@ def _constraint_field_effects(identity, candidate, baseline):
 
 def compare(reports,output,climode_reference_reports=None):
     output=Path(output)
-    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv','.guide-effects.csv','.route-effects.csv')) or output.exists():
+    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv','.guide-effects.csv','.route-effects.csv','.dynamics-effects.csv')) or output.exists():
         raise FileExistsError('Choose a new comparison path')
     data=[json.loads(Path(path).read_text()) for path in reports]
     if not data:raise ValueError('At least one evaluation report is required')
@@ -445,6 +489,7 @@ def compare(reports,output,climode_reference_reports=None):
         group=[row for row in data if row['config']['model']==family]
         _validate_weather_provenance(group)
         _validate_guides(group)
+        _validate_dynamics(group)
         _validate_constraint_pairs(group)
         _validate_family_inputs(group)
         _validate_transport(group)
@@ -475,10 +520,11 @@ def compare(reports,output,climode_reference_reports=None):
                     raise ValueError('Joint latent comparison requires representation_config')
                 if row['representation_config']!=latent[0]['representation_config']:
                     raise ValueError('Unfair comparison: mismatched representation_config')
+                same_dynamics = next(r for r in latent if dynamics_identity(r) == dynamics_identity(row))
                 for key in ('conditioning','total_parameters','trainable_parameters'):
                     if row.get('constraint_pair') and key in ('total_parameters','trainable_parameters'):
                         continue  # PINN closure is auxiliary capacity, reported separately.
-                    if row.get(key)!=latent[0].get(key):
+                    if row.get(key)!=same_dynamics.get(key):
                         raise ValueError('Unfair comparison: mismatched '+key)
                 if row.get('regularization') not in ('none','full'):
                     raise ValueError('Joint latent comparison requires regularization=none or full')
@@ -492,6 +538,9 @@ def compare(reports,output,climode_reference_reports=None):
             latent_layout=cfg.get('latent_layout','global') if cfg['bridge'] in ('latent','guided') else None,
             guide_mode=cfg.get('guide_mode','learned') if cfg['bridge']=='guided' else None,
             guide_contract=report.get('guide_contract'),
+            dynamics_encoder=dynamics_identity(report)[0], dynamics_mode=dynamics_identity(report)[1],
+            dynamics_contract=report.get('dynamics_contract'),
+            dynamics_auxiliary_config=report.get('dynamics_auxiliary_config'),
             latent_shape=report.get('latent_shape'),implementation=report.get('implementation'),
             predictor_provenance=report.get('predictor_provenance'),
             raw_backend=cfg.get('raw_backend','legacy') if cfg['bridge']=='raw' else None,
@@ -514,8 +563,12 @@ def compare(reports,output,climode_reference_reports=None):
     groups={}
     for row in rows:
         key='/'.join(row[k] for k in ('model','representation','bridge','anchor','training_mode','regularization','initialization'))
-        if row['constraint_pair'] or row['bridge']=='guided':
+        if row['constraint_pair'] or row['bridge']=='guided' or row['dynamics_encoder'] != 'off':
             key += '/'+row['candidate_arm']
+        if groups.get(key) and row['dynamics_contract'] != groups[key][0]['dynamics_contract']:
+            raise ValueError('Cannot pool different dynamics_contract as seeds within '+key)
+        if groups.get(key) and row['dynamics_auxiliary_config'] != groups[key][0]['dynamics_auxiliary_config']:
+            raise ValueError('Cannot pool different dynamics_auxiliary_config as seeds within '+key)
         if groups.get(key) and row['guide_contract'] != groups[key][0]['guide_contract']:
             raise ValueError('Cannot pool different guide_contract as seeds within '+key)
         if groups.get(key) and row['conditional_flow_config']!=groups[key][0]['conditional_flow_config']:
@@ -536,9 +589,9 @@ def compare(reports,output,climode_reference_reports=None):
                       'scored_runs':len(scores)} if scores else {'seeds':[x['seed'] for x in group],
                       'mean_normalized_rmse':None,'sample_std_normalized_rmse':None,'scored_runs':0}
     ranking_allowed=same_cases and all(r['finite_forecast_fraction']==1 for r in rows)
-    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[];guide_physical=[];route_physical=[]
+    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[];guide_physical=[];route_physical=[];dynamics_physical=[]
     if ranking_allowed and contracts[0]['suite']=='primary':
-        indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization']):r
+        indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization'],dynamics_identity(r)):r
                  for r in rows if not r['constraint_pair'] and r['bridge'] != 'guided'}
         source={id(row):report for row,report in zip(rows,data)}
         for row in rows:
@@ -554,7 +607,8 @@ def compare(reports,output,climode_reference_reports=None):
             else:
                 controls=[(name,name,row['regularization']) for name in ('raw','plain_ae')]
             for control,representation,regularization in controls:
-                baseline=indexed.get((row['model'],row['seed'],representation,mode,regularization))
+                baseline=indexed.get((row['model'],row['seed'],representation,mode,regularization,
+                    ('off', None) if representation == 'raw' else dynamics_identity(row)))
                 if baseline is None:continue
                 identity={'model':row['model'],'seed':row['seed'],'control':control,
                           'candidate_arm':row['candidate_arm'],'training_mode':mode,
@@ -576,13 +630,13 @@ def compare(reports,output,climode_reference_reports=None):
                                'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
         # Hold the guided forecasting path fixed when adding observed encoder
         # constraints. Auxiliary decoder parameters can differ and stay explicit.
-        guide_controls={(row['model'],row['seed'],row['guide_mode']):row for row in rows
+        guide_controls={(row['model'],row['seed'],row['guide_mode'],dynamics_identity(row)):row for row in rows
                         if row['bridge']=='guided' and not row['constraint_pair']
                         and row['regularization']=='none'}
         for candidate in rows:
             if candidate['bridge']!='guided' or not candidate['constraint_pair']:
                 continue
-            baseline=guide_controls.get((candidate['model'],candidate['seed'],candidate['guide_mode']))
+            baseline=guide_controls.get((candidate['model'],candidate['seed'],candidate['guide_mode'],dynamics_identity(candidate)))
             if baseline is None:
                 continue
             identity={'model':candidate['model'],'seed':candidate['seed'],
@@ -609,6 +663,8 @@ def compare(reports,output,climode_reference_reports=None):
                               (r['conditional_flow_config'] or {}).get('weight',0.)))
             for baseline,candidate in combinations(variants,2):
                 baseline_arm,candidate_arm=baseline['candidate_arm'],candidate['candidate_arm']
+                if dynamics_identity(baseline) != dynamics_identity(candidate):
+                    continue  # Dynamics changes have their own matched effect table.
                 if baseline['bridge'] != candidate['bridge']:
                     if (baseline['constraint_pair'] != candidate['constraint_pair']
                             or baseline['statistical_loss_config'] != candidate['statistical_loss_config']
@@ -694,6 +750,37 @@ def compare(reports,output,climode_reference_reports=None):
                 destination=guide_physical if guide_effect else conditional_physical if conditional_effect else flow_physical if flow_effect else statistical_physical if same_pair else constraint_physical
                 destination.extend(_constraint_field_effects(
                     identity,source[id(candidate)],source[id(baseline)]))
+        # Isolate dynamics presence/mode while holding the statistical route,
+        # decoder objective and downstream predictor fixed. Off changes capacity;
+        # zero preserves the auxiliary dynamics network and its supervision.
+        for candidate in rows:
+            encoder, dynamics_mode = dynamics_identity(candidate)
+            if encoder == 'off' or dynamics_mode != 'learned':
+                continue
+            for baseline in rows:
+                base_encoder, base_mode = dynamics_identity(baseline)
+                if not (base_encoder == 'off' or base_encoder == encoder and base_mode == 'zero'):
+                    continue
+                if any(candidate.get(key) != baseline.get(key) for key in (
+                        'model','seed','bridge','representation','training_mode','regularization',
+                        'guide_mode','constraint_pair','constraint_path','constraint_contract',
+                        'constraint_decoder','statistical_loss_config','statistical_flow_config',
+                        'conditional_flow_config','objective_weights','split_objective_weights')):
+                    continue
+                identity={'model':candidate['model'],'seed':candidate['seed'],
+                    'control':baseline['candidate_arm'],'candidate_arm':candidate['candidate_arm'],
+                    'training_mode':candidate['training_mode'],
+                    'pair_key':candidate['model']+'/'+candidate['candidate_arm']+'/vs_'+baseline['candidate_arm'],
+                    'interpretation':'add_dynamics_encoder' if base_encoder == 'off' else 'change_dynamics_input',
+                    'baseline_dynamics_encoder':base_encoder,'candidate_dynamics_encoder':encoder,
+                    'baseline_dynamics_mode':base_mode,'candidate_dynamics_mode':dynamics_mode,
+                    'baseline_parameters':baseline['total_parameters'],'candidate_parameters':candidate['total_parameters']}
+                error, ours = baseline['normalized_rmse'], candidate['normalized_rmse']
+                if error is not None and ours is not None:
+                    paired.append({**identity,'rmse_reduction':error-ours,
+                        'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
+                dynamics_physical.extend(_constraint_field_effects(
+                    identity,source[id(candidate)],source[id(baseline)]))
         for row in paired:
             key=row['pair_key'] if row['training_mode']=='joint' else row['model']+'/vs_'+row['control']
             paired_summary.setdefault(key,[]).append(row)
@@ -708,6 +795,7 @@ def compare(reports,output,climode_reference_reports=None):
         'statistical_flow_effects':flow_physical,
         'conditional_flow_effects':conditional_physical,
         'guide_effects':guide_physical,'route_effects':route_physical,
+        'dynamics_effects':dynamics_physical,
         'direct_comparison':_direct_effects(direct_pairs),
         'same_successful_origins':same_cases,'ranking_allowed':ranking_allowed,
         'notes':['Inspect per-variable and per-lead physical scores in the original reports.',
@@ -725,6 +813,7 @@ def compare(reports,output,climode_reference_reports=None):
                  'Guided versus raw or latent comparisons change routes and parameter counts; matched Transformer width/depth does not imply equal capacity.',
                  'Guided forecast-only versus constrained guide holds the forecasting path fixed; the effect includes observed reconstruction/statistical supervision and any added auxiliary decoder capacity, not the statistical loss alone.',
                  'Zero-guide ablations replace guide tokens by zero but retain the same information-route supervision; they do not constitute stochastic encoder experiments.',
+                 'Dynamics-off versus learned changes encoder/auxiliary capacity and supervision; zero-dynamics versus learned holds the temporal encoder and auxiliary training fixed and changes forecast access to its features.',
                  'Raw-versus-latent and plain-AE comparisons change representation or supervision and are whole-model comparisons, not causal evidence for physical constraints.',
                  'Latent coordinate errors are within-representation diagnostics, never cross-encoder rankings.',
                  'Enriched A supplies extra dynamic information to decoded ClimODE; use surface A to isolate representation alone.']}
@@ -744,10 +833,11 @@ def compare(reports,output,climode_reference_reports=None):
     write_table(output.with_suffix('.conditional-flow-effects.csv'),result['conditional_flow_effects'])
     write_table(output.with_suffix('.guide-effects.csv'),result['guide_effects'])
     write_table(output.with_suffix('.route-effects.csv'),result['route_effects'])
+    write_table(output.with_suffix('.dynamics-effects.csv'),result['dynamics_effects'])
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
         for row in rows:
-            structured = ('guide_contract','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
+            structured = ('guide_contract','dynamics_contract','dynamics_auxiliary_config','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
             writer.writerow({**row,**{key:json.dumps(row[key],sort_keys=True) for key in structured}})
     return result
 

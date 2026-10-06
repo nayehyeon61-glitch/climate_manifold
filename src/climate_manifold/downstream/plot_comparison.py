@@ -10,6 +10,7 @@ import re
 import numpy as np
 
 from .compare import _arm, _fusion
+from .protocol import dynamics_identity
 
 
 MODEL_ORDER = ('transformer', 'mlp', 'neural_ode', 'climode', 'convlstm', 'simvp', 'fourcastnet', 'climax')
@@ -20,6 +21,8 @@ METRIC_LABELS = {
     'rmse_skill_percent': 'RMSE reduction vs Raw (%)',
     'guide_gain_percent': 'RMSE reduction vs Zero guide (%)',
     'constraint_gain_percent': 'RMSE reduction vs No observed constraints (%)',
+    'dynamics_gain_percent': 'RMSE reduction vs Dynamics off (%)',
+    'dynamics_input_gain_percent': 'RMSE reduction vs Zero dynamics (%)',
 }
 
 
@@ -33,6 +36,9 @@ def _label(row):
     route = 'Manifold' if _fusion(row) else 'Joint guided predictor' if row['bridge'] == 'guided' else 'Latent'
     if row['bridge'] == 'guided' and row.get('guide_mode') == 'zero':
         route += ' / Zero guide'
+    encoder, dynamics_mode = dynamics_identity(row)
+    if encoder != 'off':
+        route += ' / '+('Zero dynamics' if dynamics_mode == 'zero' else 'Dynamics')+' ('+encoder+')'
     if row.get('regularization') == 'none':
         return route+' / No observed constraints'
     loss = {'w2': 'W2', 'kl_entropy': 'KL-entropy', 'signed_measure': 'signed measure'}.get(row.get('statistical_loss'))
@@ -49,12 +55,17 @@ def _physical_identity(row, rows):
     identify a legacy row. If they cannot, regenerate comparison JSON from the
     original reports; guessing could swap learned and zero-guide scores.
     """
-    if row['bridge'] != 'guided' or 'guide_mode' in row:
+    missing_guide = row['bridge'] == 'guided' and 'guide_mode' not in row
+    missing_dynamics = ('dynamics_encoder' not in row and any(
+        candidate['model'] == row['model'] and candidate['bridge'] == row['bridge']
+        and dynamics_identity(candidate)[0] != 'off' for candidate in rows))
+    if not missing_guide and not missing_dynamics:
         return _identity(row)
     fields = ('model', 'bridge', 'seed', 'representation', 'training_mode', 'regularization',
               'constraint_pair', 'constraint_decoder', 'statistical_loss',
               'statistical_loss_config', 'statistical_flow_config', 'conditional_flow_config',
-              'initialization', 'implementation', 'representation_sha256')
+              'initialization', 'implementation', 'representation_sha256',
+              'dynamics_encoder', 'dynamics_mode', 'dynamics_contract', 'dynamics_auxiliary_config')
     matches = [candidate for candidate in rows
                if all(candidate.get(key) == row[key] for key in fields if key in row)]
     if len(matches) != 1:
@@ -150,6 +161,16 @@ def summarize_comparison(data):
             add_effect(row, 'guide_gain_percent', 'rmse_skill_vs_baseline')
         elif row.get('interpretation') == 'add_observed_encoder_constraints':
             add_effect(row, 'constraint_gain_percent', 'rmse_skill_vs_baseline')
+    for row in data.get('dynamics_effects', []):
+        interpretation = row.get('interpretation')
+        if interpretation == 'add_dynamics_encoder':
+            if row.get('baseline_dynamics_encoder') != 'off':
+                raise ValueError('Dynamics gain must compare against dynamics off')
+            add_effect(row, 'dynamics_gain_percent', 'rmse_skill_vs_baseline')
+        elif interpretation == 'change_dynamics_input':
+            if row.get('baseline_dynamics_mode') != 'zero' or row.get('candidate_dynamics_mode') != 'learned':
+                raise ValueError('Dynamics input gain must compare learned dynamics against zero dynamics')
+            add_effect(row, 'dynamics_input_gain_percent', 'rmse_skill_vs_baseline')
     for identity in groups:
         if identity[1] != 'raw' and any(key[1] == 'raw' and key[0] == identity[0] for key in groups):
             for variable, lead in axes:
@@ -303,6 +324,7 @@ def plot_comparison(comparison, output):
               'interpretation':('Manifold = encoder + Fusion Transformer(raw, guide); panel names identify the separate downstream forecast model. '
                   'Raw-relative scores compare whole systems, including extra parameters. Guide gain compares learned against zero guide. '
                   'Constraint gain holds the guided forecast route fixed and adds observed encoder constraints; auxiliary parameters may differ. '
+                  'Dynamics gain compares enabled versus off (capacity and auxiliary supervision change); dynamics input gain compares learned versus zero dynamics features. '
                   'Seed SD is training variability, not predictive uncertainty.')}
     (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest

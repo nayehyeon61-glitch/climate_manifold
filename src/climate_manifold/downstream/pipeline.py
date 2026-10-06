@@ -52,8 +52,29 @@ class PredictorConfig:
     # maps (raw, guide) history to raw-grid history for any matched-raw family.
     guide_architecture: str = 'joint'
     guide_fusion_depth: int = 2
+    # Optional temporal representation: independent of the spatial encoder,
+    # shared between forecasting and a training-only future-field objective.
+    dynamics_encoder: str = 'off'
+    dynamics_mode: str = 'learned'
+    dynamics_hidden_dim: int = 32
+    dynamics_channels: int = 8
 
     def __post_init__(self):
+        if self.dynamics_encoder not in ('off', 'conv_gru', 'temporal_conv'):
+            raise ValueError('Dynamics encoder must be off, conv_gru or temporal_conv')
+        if self.dynamics_mode not in ('learned', 'zero'):
+            raise ValueError('Dynamics mode must be learned or zero')
+        if any(isinstance(v, bool) or not isinstance(v, int) or v < 1
+               for v in (self.dynamics_hidden_dim, self.dynamics_channels)):
+            raise ValueError('Dynamics widths must be positive integers')
+        if self.dynamics_encoder == 'off' and self.dynamics_mode != 'learned':
+            raise ValueError('Dynamics zero control requires an enabled dynamics encoder')
+        if self.dynamics_encoder != 'off' and (
+                self.training_mode != 'joint' or self.latent_layout != 'spatial'
+                or self.representation != 'climate_manifold' or self.anchor != 'none'
+                or self.bridge not in ('latent', 'guided')
+                or self.bridge == 'guided' and self.guide_architecture != 'fusion'):
+            raise ValueError('Dynamics requires joint spatial latent or guided fusion forecasting')
         if self.model not in ('mlp','neural_ode','climode','persistence','transformer',*SPATIAL_IMPLEMENTATIONS):
             raise ValueError('Unknown downstream model')
         if self.bridge not in ManifoldBridge.MODES or self.anchor not in ('none','origin'):
@@ -275,6 +296,8 @@ class ForecastPipeline(nn.Module):
         else:self.predictor = None
         # Built after F so the family predictor is initialized as in its raw arm.
         self.guide_fusion = None
+        dynamics_grid = ((config.dynamics_channels, *selected.config.latent_grid[1:])
+                         if config.dynamics_encoder != 'off' else None)
         if fusion:
             from .guided_fusion import GuidedFusion
             self.guide_fusion = GuidedFusion(
@@ -282,7 +305,8 @@ class ForecastPipeline(nn.Module):
                 hidden=config.hidden_dim, depth=config.guide_fusion_depth,
                 patch_size=config.weather_patch_size, heads=config.transformer_heads,
                 history_dt_hours=selected.config.history_stride*selected.config.step_hours,
-                guide_mode=config.guide_mode, periodic_lon=periodic_lon)
+                guide_mode=config.guide_mode, periodic_lon=periodic_lon,
+                dynamics_grid=dynamics_grid, dynamics_mode=config.dynamics_mode)
         # Create the observed-field head after F so enabling it cannot change
         # the forecast model's random initialization. Historical checkpoints
         # omit it completely and retain their original state-dict contract.
@@ -299,6 +323,24 @@ class ForecastPipeline(nn.Module):
             from .conditional_flow import ObservedConditionalFlow
             self.conditional_flow = ObservedConditionalFlow(
                 selected, conditional_flow_config, constraint_decoder_mode)
+        # Optional modules are constructed after the existing forecast and
+        # observed reconstruction modules. Off adds no checkpoint parameters.
+        self.dynamics_encoder = self.dynamics_adapter = self.dynamics_auxiliary_head = None
+        if dynamics_grid is not None:
+            from .dynamics_guide import DynamicsGuide, LatentDynamicsAdapter, DynamicsAuxiliaryHead
+            if selected.config.history_steps < 2:
+                raise ValueError('Dynamics encoder requires at least two observed history states')
+            periodic = periodic_lon if fusion else selected.core.physics.periodic_lon
+            self.dynamics_encoder = DynamicsGuide(
+                selected.config.grid, dynamics_grid, selected.config.history_steps,
+                hidden=config.dynamics_hidden_dim, kind=config.dynamics_encoder,
+                history_dt_hours=selected.config.history_stride*selected.config.step_hours,
+                periodic_lon=periodic)
+            if config.bridge == 'latent':
+                self.dynamics_adapter = LatentDynamicsAdapter(selected.config.latent_grid, dynamics_grid)
+            self.dynamics_auxiliary_head = DynamicsAuxiliaryHead(
+                dynamics_grid, selected.config.grid, hidden=config.dynamics_hidden_dim,
+                periodic_lon=periodic)
         self.train(self.training)
 
     def forward(self, history, information, origin_ns, lead_hours, *, reconstruct_origin=True):
@@ -306,10 +348,21 @@ class ForecastPipeline(nn.Module):
                 or lead_hours[0] <= 0 or not (lead_hours[1:] > lead_hours[:-1]).all()):
             raise ValueError('Lead hours must be finite, positive and strictly increasing')
         features = self.bridge.encode_history(history,information)
+        dynamics = self.dynamics_encoder(history) if self.dynamics_encoder is not None else None
+        forecast_features = features
+        if self.dynamics_adapter is not None:
+            forecast_features = self.dynamics_adapter(features, dynamics, mode=self.config.dynamics_mode)
+        dynamics_output = ({'dynamics_history_latent': dynamics,
+                            'forecast_history_latent': forecast_features}
+                           if dynamics is not None else {})
         if self.config.bridge == 'guided':
             direct_information = information if self.config.guide_direct_information else None
             if self.guide_fusion is not None:
-                fused = self.guide_fusion(history, features)
+                fused = self.guide_fusion(history, features, dynamics_history=dynamics)
+                if dynamics is not None:
+                    # Guided fusion emits raw-grid history, not an E_s latent.
+                    dynamics_output['fused_history'] = fused
+                    dynamics_output.pop('forecast_history_latent')
                 mean, std = self.predictor(fused, lead_hours, origin_ns, direct_information)
             else:
                 mean, std = self.predictor(history, lead_hours, origin_ns, direct_information,
@@ -318,7 +371,7 @@ class ForecastPipeline(nn.Module):
                 raise FloatingPointError('Nonfinite guided downstream prediction')
             return {'mean': mean, 'std': std, 'reconstructed_origin': None,
                     'history_latent': features, 'predicted_latent': None,
-                    'origin_latent': features[:, -1]}
+                    'origin_latent': features[:, -1], **dynamics_output}
         if self.predictor is None:
             predicted = features[:,-1,None].expand(-1,len(lead_hours),-1);std=None
         else:
@@ -329,7 +382,7 @@ class ForecastPipeline(nn.Module):
             direct_information = information if self.config.bridge == 'raw' else None
             if self.config.raw_backend == 'matched' and not self.config.condition_information:
                 direct_information = None
-            predicted,std = self.predictor(features,lead_hours,origin_ns,direct_information)
+            predicted,std = self.predictor(forecast_features,lead_hours,origin_ns,direct_information)
         if self.config.bridge == 'latent' and std is not None:
             raise ValueError('Latent variance cannot be treated as physical-field Gaussian variance through a nonlinear decoder')
         mean = self.bridge.to_fields(predicted,history[:,-1],features[:,-1])
@@ -342,4 +395,5 @@ class ForecastPipeline(nn.Module):
         return {'mean':mean,'std':std,'reconstructed_origin':reconstruction,
                 'history_latent':features if self.config.bridge == 'latent' else None,
                 'predicted_latent':predicted if self.config.bridge == 'latent' else None,
-                'origin_latent':features[:,-1] if self.config.bridge == 'latent' else None}
+                'origin_latent':features[:,-1] if self.config.bridge == 'latent' else None,
+                **dynamics_output}

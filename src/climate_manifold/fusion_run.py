@@ -53,6 +53,9 @@ def source_identity(root):
         'run_guided_fusion_comparison.sh', 'run_daily_manifold_fusion.sh',
         'run_daily_guided_transformer.sh')]
     paths += [root/'pyproject.toml']
+    dynamics_runner = root/'scripts'/'run_dynamics_manifold_comparison.sh'
+    if dynamics_runner.is_file():
+        paths.append(dynamics_runner)
     return {str(path.relative_to(root)): digest(path) for path in paths}
 
 

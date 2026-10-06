@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Per forecast family: raw -> F, E -> F -> D, and
 # E -> Fusion Transformer(raw, guide) -> F (guide fusion, plus zero-guide control).
+# Optional temporal encoder arms compare E_s+E_d in latent and guided routes.
 # RESUME=1 skips completed fits only after checking settings, data and source.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -41,6 +42,20 @@ INCLUDE_ZERO_GUIDE="${INCLUDE_ZERO_GUIDE:-1}"
 [[ "$INCLUDE_ZERO_GUIDE" == 0 || "$INCLUDE_ZERO_GUIDE" == 1 ]] || { echo 'INCLUDE_ZERO_GUIDE must be 0 or 1' >&2; exit 2; }
 INCLUDE_GUIDED_FORECAST_ONLY="${INCLUDE_GUIDED_FORECAST_ONLY:-0}"
 [[ "$INCLUDE_GUIDED_FORECAST_ONLY" == 0 || "$INCLUDE_GUIDED_FORECAST_ONLY" == 1 ]] || { echo 'INCLUDE_GUIDED_FORECAST_ONLY must be 0 or 1' >&2; exit 2; }
+# Preserve the established four-arm experiment unless explicitly enabled.
+INCLUDE_DYNAMICS="${INCLUDE_DYNAMICS:-0}"
+INCLUDE_ZERO_DYNAMICS="${INCLUDE_ZERO_DYNAMICS:-1}"
+for name in INCLUDE_DYNAMICS INCLUDE_ZERO_DYNAMICS; do
+  [[ "${!name}" == 0 || "${!name}" == 1 ]] || { echo "$name must be 0 or 1" >&2; exit 2; }
+done
+DYNAMICS_ENCODER="${DYNAMICS_ENCODER:-conv_gru}"
+case "$DYNAMICS_ENCODER" in conv_gru|temporal_conv) ;;
+  *) echo 'DYNAMICS_ENCODER must be conv_gru or temporal_conv; disable with INCLUDE_DYNAMICS=0' >&2; exit 2;;
+esac
+DYNAMICS_STATISTICAL_LOSS="${DYNAMICS_STATISTICAL_LOSS:-$STATISTICAL_LOSS}"
+case "$DYNAMICS_STATISTICAL_LOSS" in w2|kl_entropy|signed_measure) ;;
+  *) echo 'Unknown DYNAMICS_STATISTICAL_LOSS' >&2; exit 2;;
+esac
 GUIDE_DIRECT_INFORMATION="${GUIDE_DIRECT_INFORMATION:-1}"
 [[ "$GUIDE_DIRECT_INFORMATION" == 0 || "$GUIDE_DIRECT_INFORMATION" == 1 ]] || { echo 'GUIDE_DIRECT_INFORMATION must be 0 or 1' >&2; exit 2; }
 VARIABLE_CONDITIONING="${VARIABLE_CONDITIONING:-0}"
@@ -100,9 +115,24 @@ fi
 # Optionally give guided arms the same direct origin-information tokens as raw.
 guide_information=(--guide-architecture fusion --guide-fusion-depth "${GUIDE_FUSION_DEPTH:-2}")
 if [[ "$GUIDE_DIRECT_INFORMATION" == 1 ]]; then guide_information+=(--guide-direct-information); fi
+dynamics=(--dynamics-encoder "$DYNAMICS_ENCODER"
+  --dynamics-hidden-dim "${DYNAMICS_HIDDEN_DIM:-32}" --dynamics-channels "${DYNAMICS_CHANNELS:-8}"
+  --dynamics-statistical-loss "$DYNAMICS_STATISTICAL_LOSS"
+  --dynamics-reconstruction-weight "${DYNAMICS_RECONSTRUCTION_WEIGHT:-0.1}"
+  --dynamics-statistical-weight "${DYNAMICS_STATISTICAL_WEIGHT:-0.1}"
+  --dynamics-tendency-weight "${DYNAMICS_TENDENCY_WEIGHT:-0.0}")
+# Record only effective optional settings; inactive knobs do not alter a run.
+effective_dynamics=()
+if [[ "$INCLUDE_DYNAMICS" == 1 ]]; then effective_dynamics=("${dynamics[@]}"); fi
 arms=(raw latent guided)
 if [[ "$INCLUDE_ZERO_GUIDE" == 1 ]]; then arms+=(guided_zero); fi
 if [[ "$INCLUDE_GUIDED_FORECAST_ONLY" == 1 ]]; then arms+=(guided_forecast_only); fi
+if [[ "$INCLUDE_DYNAMICS" == 1 ]]; then
+  arms+=(latent_dynamics guided_dynamics)
+  if [[ "$INCLUDE_ZERO_DYNAMICS" == 1 ]]; then
+    arms+=(latent_dynamics_zero guided_dynamics_zero)
+  fi
+fi
 # Capture actual effective arguments, not just exported overrides. Fingerprints
 # cover prepared inputs and code; original daily ERA5 files are never hashed.
 "$PYTHON" -m climate_manifold.fusion_run --archive "$ARCHIVE" --information "$INFO" \
@@ -111,7 +141,7 @@ if [[ "$INCLUDE_GUIDED_FORECAST_ONLY" == 1 ]]; then arms+=(guided_forecast_only)
   --setting evaluate_test "$EVALUATE_TEST" --setting make_plots "$MAKE_PLOTS" \
   --setting max_cases "${MAX_CASES:-0}" --setting origin_stride "${ORIGIN_STRIDE:-1}" \
   --setting device "$([[ "$GPU_GUARD" == 1 ]] && echo cuda:0 || echo "${DEVICE:-cpu}")" \
-  -- setup "${setup[@]}" statistical "${statistical[@]}" guide "${guide_information[@]}"
+  -- setup "${setup[@]}" statistical "${statistical[@]}" guide "${guide_information[@]}" dynamics "${effective_dynamics[@]}"
 printf 'Run: %s\nFits: %s\n' "$RUN" "$(( ${#models[@]} * ${#arms[@]} * ${#seeds[@]} ))"
 # Analysis is written to fresh staging paths. Publish the comparison JSON last
 # and the plot directory only after success, so interrupted analysis is resumable.
@@ -137,6 +167,7 @@ try:
         '.conditional-flow-effects.csv': data.get('conditional_flow_effects'),
         '.guide-effects.csv': data.get('guide_effects'),
         '.route-effects.csv': data.get('route_effects'),
+        '.dynamics-effects.csv': data.get('dynamics_effects'),
     }
     complete = path.with_suffix('.csv').is_file() and all(
         not rows or path.with_suffix(suffix).is_file() for suffix, rows in tables.items())
@@ -177,13 +208,17 @@ for seed in "${seeds[@]}"; do
     reports+=("$prefix.validation.json")
     [[ ! -f "$prefix.validation.json" ]] || { echo "skip $prefix (done)"; continue; }
     case "$arm" in
-      raw) route=(--bridge raw --regularization none) ;;
-      latent) route=(--bridge latent "${statistical[@]}") ;;
-      guided) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}") ;;
-      guided_zero) route=(--bridge guided --guide-mode zero "${guide_information[@]}" "${statistical[@]}") ;;
+      raw) route=(--bridge raw --regularization none --dynamics-encoder off) ;;
+      latent) route=(--bridge latent --dynamics-encoder off "${statistical[@]}") ;;
+      guided) route=(--bridge guided --guide-mode learned --dynamics-encoder off "${guide_information[@]}" "${statistical[@]}") ;;
+      guided_zero) route=(--bridge guided --guide-mode zero --dynamics-encoder off "${guide_information[@]}" "${statistical[@]}") ;;
       # Same learned-guide Fusion and M, without either observed auxiliary loss.
       # This is a combined reconstruction+statistics ablation, not statistics alone.
-      guided_forecast_only) route=(--bridge guided --guide-mode learned "${guide_information[@]}" --regularization none) ;;
+      guided_forecast_only) route=(--bridge guided --guide-mode learned --dynamics-encoder off "${guide_information[@]}" --regularization none) ;;
+      latent_dynamics) route=(--bridge latent "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned) ;;
+      guided_dynamics) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned) ;;
+      latent_dynamics_zero) route=(--bridge latent "${statistical[@]}" "${dynamics[@]}" --dynamics-mode zero) ;;
+      guided_dynamics_zero) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode zero) ;;
     esac
     if [[ ! -f "$prefix.manifest.json" ]]; then
       run_model climate_manifold.downstream.train --model "$family" "${setup[@]}" "${route[@]}" \

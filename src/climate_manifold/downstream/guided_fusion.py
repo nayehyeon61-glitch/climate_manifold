@@ -1,4 +1,4 @@
-"""Fuse observed raw history with a statistics-supervised latent guide.
+"""Fuse observed raw history with statistical and optional dynamics guides.
 
 E(history) -> guide latent; FusionTransformer(raw, guide) -> raw + delta; then
 any matched-raw forecast family consumes the fused history unchanged and emits
@@ -26,7 +26,7 @@ class GuidedFusion(nn.Module):
 
     def __init__(self, raw_grid, guide_grid, history_steps, hidden=128, depth=2,
                  patch_size=2, heads=4, history_dt_hours=24., guide_mode='learned',
-                 periodic_lon=False):
+                 periodic_lon=False, dynamics_grid=None, dynamics_mode='learned'):
         super().__init__()
         self.raw_grid = _positive_grid(raw_grid, 'Raw grid')
         self.guide_grid = _positive_grid(guide_grid, 'Guide grid')
@@ -37,11 +37,19 @@ class GuidedFusion(nn.Module):
             raise ValueError('Hidden width must be divisible by attention heads')
         if guide_mode not in ('learned', 'zero'):
             raise ValueError('Guide mode must be learned or zero')
+        if dynamics_mode not in ('learned', 'zero'):
+            raise ValueError('Dynamics mode must be learned or zero')
+        if (isinstance(history_dt_hours, bool) or not math.isfinite(history_dt_hours)
+                or history_dt_hours <= 0):
+            raise ValueError('History spacing must be finite and positive')
         self.dimension = math.prod(self.raw_grid)
         self.guide_dimension = math.prod(self.guide_grid)
         self.history_steps, self.history_dt_hours = history_steps, float(history_dt_hours)
         self.hidden, self.depth, self.patch_size, self.num_heads = hidden, depth, patch_size, heads
         self.guide_mode, self.periodic_lon = guide_mode, bool(periodic_lon)
+        self.dynamics_grid = (None if dynamics_grid is None
+                              else _positive_grid(dynamics_grid, 'Dynamics grid'))
+        self.dynamics_mode = dynamics_mode
         channels, height, width = self.raw_grid
         self.patch_grid = (math.ceil(height / patch_size), math.ceil(width / patch_size))
         self.raw_patch_count = math.prod(self.patch_grid)
@@ -67,7 +75,23 @@ class GuidedFusion(nn.Module):
         nn.init.zeros_(self.head[-1].weight)
         nn.init.zeros_(self.head[-1].bias)
 
-    def forward(self, history, guide_history=None):
+        # Add all optional parameters only after the original module has been
+        # initialized. With dynamics off, old checkpoint keys, parameter shapes
+        # and RNG consumption are exactly preserved. On, the first two token
+        # types retain their original values and dynamics has its own type.
+        if self.dynamics_grid is not None:
+            # Keep later common modules (e.g. the reconstruction decoder)
+            # identically initialized between the dynamics-on/off arms too.
+            with torch.random.fork_rng(devices=[]):
+                self.dynamics_embed = nn.Conv2d(self.dynamics_grid[0], hidden,
+                                                patch_size, stride=patch_size)
+                self.register_buffer('dynamics_coordinates',
+                                     _coordinates(*self.dynamics_grid[1:], patch_size))
+                dynamics_type = torch.empty(1, hidden)
+                nn.init.normal_(dynamics_type, std=.02)
+                self.type_embed = nn.Parameter(torch.cat((self.type_embed.detach(), dynamics_type), dim=0))
+
+    def forward(self, history, guide_history=None, dynamics_history=None):
         batch = len(history)
         if (history.ndim != 3 or history.shape[1:] != (self.history_steps, self.dimension)
                 or not batch or not torch.isfinite(history).all()):
@@ -80,10 +104,23 @@ class GuidedFusion(nn.Module):
             raise ValueError('Learned guide requires the configured finite observed guide history')
         observed = history.reshape(batch, self.history_steps, *self.raw_grid)
         guide = guide_history.reshape(batch, self.history_steps, *self.guide_grid)
-        tokens = torch.cat((
+        chunks = [
             self._patch_tokens(observed, self.raw_embed, self.raw_coordinates, 0, self.history_age_days),
-            self._patch_tokens(guide, self.guide_embed, self.guide_coordinates, 1, self.history_age_days)),
-            dim=1)
+            self._patch_tokens(guide, self.guide_embed, self.guide_coordinates, 1, self.history_age_days)]
+        if self.dynamics_grid is None:
+            if dynamics_history is not None:
+                raise ValueError('Dynamics-disabled fusion cannot receive dynamics history')
+        else:
+            shape = (batch, self.history_steps, math.prod(self.dynamics_grid))
+            if self.dynamics_mode == 'zero':
+                dynamics_history = history.new_zeros(shape)
+            elif (dynamics_history is None or dynamics_history.shape != shape
+                  or not torch.isfinite(dynamics_history).all()):
+                raise ValueError('Learned dynamics requires the configured finite dynamics history')
+            dynamics = dynamics_history.reshape(batch, self.history_steps, *self.dynamics_grid)
+            chunks.append(self._patch_tokens(dynamics, self.dynamics_embed,
+                                             self.dynamics_coordinates, 2, self.history_age_days))
+        tokens = torch.cat(chunks, dim=1)
         memory = self.transformer(tokens)[:, :self.history_steps * self.raw_patch_count]
         patches = self.head(memory)
         ph, pw = self.patch_grid

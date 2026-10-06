@@ -25,13 +25,15 @@ from .statistical_flow import (statistical_flow_config_from_args, statistical_fl
                                forecast_statistical_flow_losses)
 from .conditional_flow import (conditional_flow_config_from_args, conditional_flow_config_from_payload,
                                observed_conditional_flow_losses)
+from .dynamics_objective import (dynamics_contract, dynamics_auxiliary_config_from_args,
+                                 dynamics_auxiliary_config_from_payload, dynamics_auxiliary_losses)
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
 CONSTRAINT_PAIRS = ('pinn_statistical', 'pinn_static', 'statistical_static', 'statistical')
 
 
-def guide_contract(config):
+def _spatial_guide_contract(config):
     if config.bridge != 'guided':
         return None
     if config.guide_architecture == 'fusion':
@@ -53,6 +55,14 @@ def guide_contract(config):
             'forecast_gradient_to_encoder': config.guide_mode == 'learned',
             'stochastic_sampling': False,
             **({'direct_origin_information': True} if config.guide_direct_information else {})}
+
+
+def guide_contract(config):
+    contract = _spatial_guide_contract(config)
+    if contract is not None and config.dynamics_encoder != 'off':
+        contract = dict(contract, dynamics=dynamics_contract(config),
+                        fusion='raw_spatial_dynamics_residual_fusion_transformer_zero_initialized')
+    return contract
 
 
 def sequence_predictor_provenance(model):
@@ -203,6 +213,7 @@ def load_predictor(path,device='cpu'):
     statistical_flow_config_from_payload(p)
     conditional_config=conditional_flow_config_from_payload(p)
     config=PredictorConfig(**p['config'])
+    dynamics_auxiliary_config_from_payload(p, config)
     if p.get('guide_contract') != guide_contract(config):
         raise ValueError('Checkpoint guide_contract disagrees with its predictor config')
     if config.training_mode == 'frozen' and not p.get('a_was_sealed'):
@@ -472,7 +483,11 @@ def train(args):
         transformer_heads=getattr(args,'transformer_heads',4), guide_mode=getattr(args,'guide_mode','learned'),
         guide_direct_information=getattr(args,'guide_direct_information',False),
         guide_architecture=getattr(args,'guide_architecture','joint'),
-        guide_fusion_depth=getattr(args,'guide_fusion_depth',2))
+        guide_fusion_depth=getattr(args,'guide_fusion_depth',2),
+        dynamics_encoder=getattr(args,'dynamics_encoder','off'),
+        dynamics_mode=getattr(args,'dynamics_mode','learned'),
+        dynamics_hidden_dim=getattr(args,'dynamics_hidden_dim',32),
+        dynamics_channels=getattr(args,'dynamics_channels',8))
     experiment=validate_experiment(config,args.experiment)
     if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
         raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
@@ -490,6 +505,7 @@ def train(args):
     split_constraints=args.constraint_pair is not None
     constraint_decoder=args.constraint_decoder if split_constraints else None
     statistical_config=statistical_config_from_args(args,args.constraint_pair)
+    dynamics_config=dynamics_auxiliary_config_from_args(args, config, statistical_config)
     flow_config=statistical_flow_config_from_args(args,args.constraint_pair)
     conditional_config=conditional_flow_config_from_args(args,args.constraint_pair)
     information_only=constraint_decoder=='information_only'
@@ -527,6 +543,10 @@ def train(args):
                     prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads,
                                      reconstruct_origin=not (information_only or separate_decoder))
                     losses=forecast_loss(prediction,batch,temporal,leads,args.tendency_weight)
+                    if dynamics_config is not None:
+                        dynamic_losses=dynamics_auxiliary_losses(model,prediction,batch,leads,dynamics_config)
+                        losses.update(dynamic_losses)
+                        losses['loss']=losses['loss']+dynamic_losses['dynamics_regularization']
                     if config.training_mode == 'joint' and config.bridge != 'raw':
                         if split_constraints:
                             from .reconstruction_objective import reconstruction_constraint_losses
@@ -571,7 +591,8 @@ def train(args):
     constraint_contract=(make_constraint_contract(args.constraint_pair,args.constraint_pair.split('_'),
                          constraint_decoder,step_hours=a.config.step_hours) if split_constraints else None)
     auxiliary_modules=() if model.bridge.manifold is None else (
-        model.bridge.manifold.info_head,model.bridge.manifold.pinn,model.reconstruction_decoder,model.conditional_flow)
+        model.bridge.manifold.info_head,model.bridge.manifold.pinn,model.reconstruction_decoder,
+        model.conditional_flow,model.dynamics_auxiliary_head)
     auxiliary_ids={id(parameter) for module in auxiliary_modules if module is not None
                    for parameter in module.parameters()}
     forecast_parameters=sum(parameter.numel() for parameter in parameters if id(parameter) not in auxiliary_ids)
@@ -668,6 +689,19 @@ def train(args):
         'conditional_flow_training_rng':({'train_seed':args.seed+104729,
             'selection_seed':args.seed+104730,'selection_reset_each_epoch':True} if conditional_config else None),
         'resume':'optimizer/RNG resume not implemented'}
+    if dynamics_config is not None:
+        payload['dynamics_contract']=dynamics_contract(config)
+        payload['dynamics_auxiliary_config']=dynamics_config
+        payload['dynamics_latent_shape']=list(model.dynamics_encoder.dynamics_grid)
+        payload['implementation']='dual_dynamics_v1+'+payload['implementation']
+        payload['objective_semantics']['forecast']=(
+            'shared E_s and independent shared E_d(history) -> Fusion(raw, spatial guide, dynamics guide) -> predictor -> fields'
+            if config.bridge=='guided' else
+            'shared E_s(history) + projected independent E_d(history) -> predictor -> forecast decoder -> fields')
+        payload['objective_semantics']['dynamics']=(
+            'same E_d(history) -> independent lead-conditioned temporal head/decoder -> future surface labels; '
+            'per-lead normalized field reconstruction and selectable spatial statistics, optional physical-time tendency; '
+            'no future encoder input, no predictor/forecast-decoder gradient from dynamics auxiliary objective')
     output.parent.mkdir(parents=True,exist_ok=True)
     torch.save(payload,output)
     write_json(output.with_suffix('.manifest.json'),{'checkpoint_sha256':digest(output),'format':FORMAT})
@@ -750,6 +784,18 @@ def parser():
     p.add_argument('--guide-architecture',choices=['joint','fusion'],default='joint',
                    help='joint: one Transformer attends raw+guide tokens (Transformer only); fusion: residual Fusion Transformer feeds any matched-raw --model')
     p.add_argument('--guide-fusion-depth',type=int,default=2,help='Fusion Transformer block count (guide fusion only)')
+    p.add_argument('--dynamics-encoder',choices=['off','conv_gru','temporal_conv'],default='off',
+                   help='Optional independent temporal encoder, shared by forecast and future-label auxiliary paths')
+    p.add_argument('--dynamics-mode',choices=['learned','zero'],default='learned',
+                   help='zero blocks temporal content only in the forecast path; auxiliary dynamics training is retained')
+    p.add_argument('--dynamics-hidden-dim',type=int,default=32)
+    p.add_argument('--dynamics-channels',type=int,default=8)
+    p.add_argument('--dynamics-statistical-loss',choices=STATISTICAL_LOSSES,default=None,
+                   help='Future dynamics field statistics; default inherits observed statistics, otherwise signed_measure')
+    p.add_argument('--dynamics-reconstruction-weight',type=float,default=.1)
+    p.add_argument('--dynamics-statistical-weight',type=float,default=.1)
+    p.add_argument('--dynamics-tendency-weight',type=float,default=0.,
+                   help='Optional physical-time tendency supervision for independent dynamics predictions')
     p.add_argument('--no-climode-attention',action='store_true')
     p.add_argument('--device',default='cpu')
     return p
