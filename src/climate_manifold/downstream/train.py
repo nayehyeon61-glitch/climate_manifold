@@ -26,7 +26,8 @@ from .statistical_flow import (statistical_flow_config_from_args, statistical_fl
 from .conditional_flow import (conditional_flow_config_from_args, conditional_flow_config_from_payload,
                                observed_conditional_flow_losses)
 from .dynamics_objective import (dynamics_contract, dynamics_auxiliary_config_from_args,
-                                 dynamics_auxiliary_config_from_payload, dynamics_auxiliary_losses)
+                                 dynamics_auxiliary_config_from_payload, dynamics_auxiliary_losses,
+                                 configure_dynamics_supervision)
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
@@ -230,7 +231,7 @@ def load_predictor(path,device='cpu'):
     statistical_flow_config_from_payload(p)
     conditional_config=conditional_flow_config_from_payload(p)
     config=PredictorConfig(**p['config'])
-    dynamics_auxiliary_config_from_payload(p, config)
+    dynamics_config=dynamics_auxiliary_config_from_payload(p, config)
     if p.get('guide_interaction_contract') != guide_interaction_contract(config):
         raise ValueError('Checkpoint guide_interaction_contract disagrees with its predictor config')
     if p.get('guide_contract') != guide_contract(config):
@@ -248,6 +249,13 @@ def load_predictor(path,device='cpu'):
         conditional_flow_config=conditional_config,
         constraint_decoder_mode=constraint_decoder or 'separate_surface_and_information')
     model.load_state_dict(p['model'],strict=True)
+    decoder_contract=configure_dynamics_supervision(model,dynamics_config)
+    if ('dynamics_decoder_contract' in p
+            and p['dynamics_decoder_contract'] != decoder_contract):
+        raise ValueError('Checkpoint dynamics_decoder_contract disagrees with supervision or parameters')
+    if (dynamics_config is not None and dynamics_config.get('supervision') == 'vector_only'
+            and p.get('dynamics_decoder_contract') != decoder_contract):
+        raise ValueError('vector_only checkpoint requires a disabled dynamics_decoder_contract')
     return model.to(device).eval(),p
 
 
@@ -535,7 +543,7 @@ def train(args):
     target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
     loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info,
         reconstruction_constraints=split_constraints,statistical_flow_targets=flow_config is not None or conditional_config is not None,
-        dynamics_target_sequence=dynamics_config is not None and dynamics_config.get('supervision')=='field_latent'),batch_size=args.batch_size,
+        dynamics_target_sequence=dynamics_config is not None and dynamics_config.get('supervision') in ('field_latent','vector_only')),batch_size=args.batch_size,
         shuffle=(name=='train'),generator=torch.Generator().manual_seed(args.seed)) for name in ('train','calibration')]
     # A and AE construction consume different RNG amounts. Reset so equal-size
     # latent predictors start with identical weights for the same forecast seed.
@@ -544,6 +552,7 @@ def train(args):
         separate_reconstruction_decoder=separate_decoder,
         conditional_flow_config=conditional_config,
         constraint_decoder_mode=constraint_decoder or 'separate_surface_and_information').to(args.device)
+    decoder_contract=configure_dynamics_supervision(model,dynamics_config)
     temporal=TemporalObjective(p['schema'],p['mean'],p['scale'],p['statistics']).to(args.device)
     parameters=[x for x in model.parameters() if x.requires_grad]
     optimizer=torch.optim.AdamW(parameters,lr=args.learning_rate) if parameters else None
@@ -727,12 +736,20 @@ def train(args):
             'no future encoder input, no predictor/forecast-decoder gradient from dynamics auxiliary objective')
     if config.dynamics_auxiliary_architecture == 'latent_rollout':
         payload['implementation']='dynamics_rollout_v1+'+payload['implementation']
+        payload['dynamics_decoder_contract']=decoder_contract
         payload['objective_semantics']['dynamics']=(
             'observed history -> shared E_d -> autonomous auxiliary latent transition F_d '
             'at every archive step -> shared D_d -> future surface fields; '
-            'field reconstruction and spatial statistics retained in both supervision modes; '
+            'field reconstruction and spatial statistics retained in field and field_latent; '
             'field_latent additionally matches stop-gradient E_d of same-length strided future truth windows; '
             'future truth is supervision only, no teacher forcing; F_d is separate from the downstream predictor M')
+        if dynamics_config['supervision']=='vector_only':
+            payload['objective_semantics']['dynamics']=(
+                'observed history -> shared E_d -> autonomous auxiliary latent transition F_d; '
+                'only matches stop-gradient E_d of same-length strided future truth windows; '
+                'dynamics field reconstruction/statistical/tendency losses are zero, D_d is frozen and never decoded; '
+                'main M forecast and E_s observed auxiliary losses remain enabled according to their own settings; '
+                'no future truth input or teacher forcing; F_d is separate from downstream M')
     interaction = guide_interaction_contract(config)
     if interaction is not None:
         payload['guide_interaction_contract']=interaction
@@ -835,15 +852,17 @@ def parser():
     p.add_argument('--dynamics-channels',type=int,default=8)
     p.add_argument('--dynamics-auxiliary-architecture',choices=['direct','latent_rollout'],default='direct',
                    help='direct preserves the lead-conditioned field head; latent_rollout adds a shared autonomous F_d and field decoder')
-    p.add_argument('--dynamics-supervision',choices=['field','field_latent'],default='field',
-                   help='Compare field losses against the same losses plus future E_d latent consistency (latent_rollout only)')
+    p.add_argument('--dynamics-supervision',choices=['field','field_latent','vector_only'],default='field',
+                   help='Dynamics auxiliary supervision: future fields, fields+latent, or latent only (latent_rollout only)')
     p.add_argument('--dynamics-latent-weight',type=float,default=None,
-                   help='Positive auxiliary latent consistency coefficient; defaults to 0.1 for field_latent, absent for field/direct')
+                   help='Positive latent coefficient; defaults to 0.1 for field_latent/vector_only, absent for field/direct')
     p.add_argument('--dynamics-statistical-loss',choices=STATISTICAL_LOSSES,default=None,
                    help='Future dynamics field statistics; default inherits observed statistics, otherwise signed_measure')
-    p.add_argument('--dynamics-reconstruction-weight',type=float,default=.1)
-    p.add_argument('--dynamics-statistical-weight',type=float,default=.1)
-    p.add_argument('--dynamics-tendency-weight',type=float,default=0.,
+    p.add_argument('--dynamics-reconstruction-weight',type=float,default=None,
+                   help='Defaults to 0.1, or 0 for vector_only; vector_only rejects nonzero values')
+    p.add_argument('--dynamics-statistical-weight',type=float,default=None,
+                   help='Defaults to 0.1, or 0 for vector_only; vector_only rejects nonzero values')
+    p.add_argument('--dynamics-tendency-weight',type=float,default=None,
                    help='Optional physical-time tendency supervision for independent dynamics predictions')
     p.add_argument('--no-climode-attention',action='store_true')
     p.add_argument('--device',default='cpu')

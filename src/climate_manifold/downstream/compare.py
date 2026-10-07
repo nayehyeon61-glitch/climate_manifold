@@ -12,7 +12,8 @@ from .statistical_objective import statistical_config_from_payload
 from .statistical_flow import statistical_flow_config_from_payload
 from .conditional_flow import conditional_flow_config_from_payload
 from .protocol import (experiment_contract, validate_experiment, dynamics_identity,
-                       guide_interaction_contract, guide_interaction_identity, dynamics_supervision_identity)
+                       guide_interaction_contract, guide_interaction_identity, dynamics_supervision_identity,
+                       validate_dynamics_decoder_contract, dynamics_vector_capacity_matches)
 from .climode_benchmark import benchmark,write_table
 from .constraint_protocol import constraint_decoder_from_payload, normalize_constraint_contract
 
@@ -111,6 +112,7 @@ def _validate_dynamics(group):
         cfg = row['config']
         contract = row.get('dynamics_contract')
         auxiliary = row.get('dynamics_auxiliary_config')
+        validate_dynamics_decoder_contract(row)
         if dynamics_identity(row)[0] == 'off':
             if contract is not None or auxiliary is not None:
                 raise ValueError('Disabled dynamics encoder must not declare dynamics metadata')
@@ -127,6 +129,13 @@ def _validate_dynamics(group):
                             else 'climate_manifold.dynamics_auxiliary.v1')
         if auxiliary['version'] != expected_version:
             raise ValueError('dynamics_auxiliary_config version does not match dynamics_auxiliary_architecture')
+        audit = row.get('dynamics_auxiliary_evaluation')
+        if dynamics_supervision_identity(row)[1] == 'vector_only' and audit is not None:
+            if (not isinstance(audit, dict) or audit.get('scores') is not None
+                    or audit.get('signed_diagnostics') is not None
+                    or audit.get('decoder_status') != 'untrained_frozen_not_evaluated'
+                    or audit.get('evaluated_outputs') != ['latent']):
+                raise ValueError('vector_only auxiliary evaluation must identify an untrained decoder and latent-only outputs')
         enabled.append(row)
     if not enabled:
         return
@@ -135,12 +144,19 @@ def _validate_dynamics(group):
         for key, default in (('dynamics_encoder', 'off'), ('dynamics_hidden_dim', 32), ('dynamics_channels', 8)):
             if row['config'].get(key, default) != first['config'].get(key, default):
                 raise ValueError('Unfair comparison: mismatched '+key+'; compare dynamics architectures in separate suites')
-        # Only the declared representation-consistency supervision may vary.
-        # Field reconstruction/statistic/tendency objectives stay controlled.
-        allowed = {'version', 'supervision', 'latent_weight', 'target_encoder', 'target_semantics'}
+        # Vector-only intentionally disables all three auxiliary field weights.
+        # All other statistical configuration stays controlled across modes.
+        allowed = {'version', 'supervision', 'latent_weight', 'target_encoder', 'target_semantics',
+                   'reconstruction_weight', 'statistical_weight', 'tendency_weight'}
         normalized = [{k:v for k,v in r['dynamics_auxiliary_config'].items() if k not in allowed}
                       for r in (row, first)]
         if normalized[0] != normalized[1]:
+            raise ValueError('Unfair comparison: mismatched dynamics_auxiliary_config')
+    fields = [r['dynamics_auxiliary_config'] for r in enabled
+              if dynamics_supervision_identity(r)[1] != 'vector_only']
+    for objective in fields[1:]:
+        if any(objective[k] != fields[0][k] for k in (
+                'reconstruction_weight', 'statistical_weight', 'tendency_weight')):
             raise ValueError('Unfair comparison: mismatched dynamics_auxiliary_config')
 
 
@@ -527,7 +543,7 @@ def _constraint_field_effects(identity, candidate, baseline):
 
 def compare(reports,output,climode_reference_reports=None):
     output=Path(output)
-    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv','.guide-effects.csv','.route-effects.csv','.dynamics-effects.csv','.guide-interaction-effects.csv','.dynamics-consistency-effects.csv')) or output.exists():
+    if any(output.with_suffix(s).exists() for s in ('.json','.csv','.climode.csv','.climode-effects.csv','.raw-effects.csv','.constraint-effects.csv','.statistical-effects.csv','.flow-effects.csv','.conditional-flow-effects.csv','.guide-effects.csv','.route-effects.csv','.dynamics-effects.csv','.guide-interaction-effects.csv','.dynamics-consistency-effects.csv','.dynamics-vector-effects.csv')) or output.exists():
         raise FileExistsError('Choose a new comparison path')
     data=[json.loads(Path(path).read_text()) for path in reports]
     if not data:raise ValueError('At least one evaluation report is required')
@@ -601,6 +617,7 @@ def compare(reports,output,climode_reference_reports=None):
             dynamics_encoder=dynamics_identity(report)[0], dynamics_mode=dynamics_identity(report)[1],
             dynamics_contract=report.get('dynamics_contract'),
             dynamics_auxiliary_config=report.get('dynamics_auxiliary_config'),
+            dynamics_decoder_contract=report.get('dynamics_decoder_contract'),
             dynamics_auxiliary_architecture=cfg.get('dynamics_auxiliary_architecture', 'direct'),
             dynamics_auxiliary_evaluation=report.get('dynamics_auxiliary_evaluation'),
             dynamics_evaluation_contract=report.get('dynamics_evaluation_contract'),
@@ -659,7 +676,7 @@ def compare(reports,output,climode_reference_reports=None):
                       'scored_runs':len(scores)} if scores else {'seeds':[x['seed'] for x in group],
                       'mean_normalized_rmse':None,'sample_std_normalized_rmse':None,'scored_runs':0}
     ranking_allowed=same_cases and all(r['finite_forecast_fraction']==1 for r in rows)
-    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[];guide_physical=[];route_physical=[];dynamics_physical=[];interaction_physical=[];consistency_physical=[]
+    paired=[];paired_summary={};direct_pairs=[];constraint_physical=[];statistical_physical=[];flow_physical=[];conditional_physical=[];guide_physical=[];route_physical=[];dynamics_physical=[];interaction_physical=[];consistency_physical=[];vector_physical=[]
     if ranking_allowed and contracts[0]['suite']=='primary':
         indexed={(r['model'],r['seed'],r['representation'],r['training_mode'],r['regularization'],dynamics_identity(r),dynamics_supervision_identity(r)):r
                  for r in rows if not r['constraint_pair'] and r['bridge'] != 'guided'}
@@ -956,6 +973,62 @@ def compare(reports,output,climode_reference_reports=None):
                         'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
                 consistency_physical.extend(_constraint_field_effects(
                     identity, source[id(candidate)], source[id(baseline)]))
+        # These pairs deliberately replace/remove field supervision, rather
+        # than identifying the effect of adding latent consistency alone.
+        for candidate in rows:
+            architecture, supervision, latent_weight = dynamics_supervision_identity(candidate)
+            if (architecture, supervision) != ('latent_rollout', 'vector_only'):
+                continue
+            for baseline in rows:
+                base_architecture, base_supervision, base_weight = dynamics_supervision_identity(baseline)
+                if (base_architecture != 'latent_rollout'
+                        or base_supervision not in ('field', 'field_latent')
+                        or base_supervision == 'field_latent' and base_weight != latent_weight):
+                    continue
+                if (dynamics_identity(candidate) != dynamics_identity(baseline)
+                        or guide_interaction_identity(candidate) != guide_interaction_identity(baseline)
+                        or not dynamics_vector_capacity_matches(candidate, baseline)):
+                    continue
+                if any(candidate.get(key) != baseline.get(key) for key in (
+                        'model', 'seed', 'bridge', 'representation', 'training_mode', 'regularization',
+                        'guide_mode', 'constraint_pair', 'constraint_path', 'constraint_contract',
+                        'constraint_decoder', 'statistical_loss_config', 'statistical_flow_config',
+                        'conditional_flow_config', 'objective_weights', 'split_objective_weights',
+                        'conditioning', 'implementation', 'dynamics_contract', 'dynamics_evaluation_contract')):
+                    continue
+                if source[id(candidate)]['config'] != source[id(baseline)]['config']:
+                    continue
+                excluded = {'supervision', 'latent_weight', 'reconstruction_weight',
+                            'statistical_weight', 'tendency_weight'}
+                aux = [{k:v for k,v in r['dynamics_auxiliary_config'].items() if k not in excluded}
+                       for r in (candidate, baseline)]
+                if (aux[0] != aux[1] or any(baseline['dynamics_auxiliary_config'][k] <= 0
+                        for k in ('reconstruction_weight', 'statistical_weight'))):
+                    continue
+                identity = {
+                    'model':candidate['model'], 'seed':candidate['seed'],
+                    'control':baseline['candidate_arm'], 'candidate_arm':candidate['candidate_arm'],
+                    'training_mode':candidate['training_mode'],
+                    'pair_key':candidate['model']+'/'+candidate['candidate_arm']+'/vs_'+baseline['candidate_arm'],
+                    'interpretation':('replace_dynamics_field_with_vector_supervision'
+                                      if base_supervision == 'field' else 'remove_dynamics_field_supervision'),
+                    'auxiliary_architecture':'latent_rollout',
+                    'baseline_supervision':base_supervision, 'candidate_supervision':'vector_only',
+                    'baseline_latent_weight':base_weight, 'candidate_latent_weight':latent_weight,
+                    'supervised_transition':'auxiliary_F_d',
+                    'scored_prediction':'downstream_M_physical_forecast',
+                    'baseline_parameters':baseline['total_parameters'],
+                    'candidate_parameters':candidate['total_parameters'],
+                    'baseline_trainable_parameters':baseline['trainable_parameters'],
+                    'candidate_trainable_parameters':candidate['trainable_parameters'],
+                    'frozen_auxiliary_decoder_parameters':candidate['dynamics_decoder_contract']['total_parameters'],
+                }
+                error, ours = baseline['normalized_rmse'], candidate['normalized_rmse']
+                if error is not None and ours is not None:
+                    paired.append({**identity, 'rmse_reduction':error-ours,
+                        'relative_rmse_reduction':1-ours/error if error>1e-15 else None})
+                vector_physical.extend(_constraint_field_effects(
+                    identity, source[id(candidate)], source[id(baseline)]))
         for row in paired:
             key=row['pair_key'] if row['training_mode']=='joint' else row['model']+'/vs_'+row['control']
             paired_summary.setdefault(key,[]).append(row)
@@ -972,6 +1045,7 @@ def compare(reports,output,climode_reference_reports=None):
         'guide_effects':guide_physical,'route_effects':route_physical,
         'dynamics_effects':dynamics_physical,
         'dynamics_consistency_effects':consistency_physical,
+        'dynamics_vector_effects':vector_physical,
         'guide_interaction_effects':interaction_physical,
         'direct_comparison':_direct_effects(direct_pairs),
         'same_successful_origins':same_cases,'ranking_allowed':ranking_allowed,
@@ -996,6 +1070,7 @@ def compare(reports,output,climode_reference_reports=None):
                  'Raw-versus-latent and plain-AE comparisons change representation or supervision and are whole-model comparisons, not causal evidence for physical constraints.',
                  'Latent coordinate errors are within-representation diagnostics, never cross-encoder rankings.',
                  'Dynamics consistency pairs share the auxiliary latent rollout architecture and field objectives; only auxiliary F_d latent consistency supervision changes. Scores are final downstream M physical forecasts, not auxiliary decoder scores.',
+                 'Vector-only pairs replace auxiliary future-field supervision with latent supervision or remove the field terms from field+latent. The unused auxiliary D_d is frozen; total capacity is retained but trainable auxiliary capacity is lower. Main M physical forecast supervision remains active.',
                  'Enriched A supplies extra dynamic information to decoded ClimODE; use surface A to isolate representation alone.']}
     references = ([json.loads(Path(path).read_text()) for path in climode_reference_reports]
                   if climode_reference_reports is not None else None)
@@ -1015,11 +1090,12 @@ def compare(reports,output,climode_reference_reports=None):
     write_table(output.with_suffix('.route-effects.csv'),result['route_effects'])
     write_table(output.with_suffix('.dynamics-effects.csv'),result['dynamics_effects'])
     write_table(output.with_suffix('.dynamics-consistency-effects.csv'),result['dynamics_consistency_effects'])
+    write_table(output.with_suffix('.dynamics-vector-effects.csv'),result['dynamics_vector_effects'])
     write_table(output.with_suffix('.guide-interaction-effects.csv'),result['guide_interaction_effects'])
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
         for row in rows:
-            structured = ('guide_interaction_contract','guide_interaction_evaluation','guide_contract','dynamics_contract','dynamics_auxiliary_config','dynamics_auxiliary_evaluation','dynamics_evaluation_contract','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
+            structured = ('guide_interaction_contract','guide_interaction_evaluation','guide_contract','dynamics_contract','dynamics_auxiliary_config','dynamics_decoder_contract','dynamics_auxiliary_evaluation','dynamics_evaluation_contract','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
             writer.writerow({**row,**{key:json.dumps(row[key],sort_keys=True) for key in structured}})
     return result
 

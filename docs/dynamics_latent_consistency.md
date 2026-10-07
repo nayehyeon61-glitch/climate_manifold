@@ -1,6 +1,6 @@
-# Dynamics의 미래 장 감독과 latent 일관성 감독 비교
+# Dynamics의 미래 장·hybrid·vector-only 감독 비교
 
-브랜치: `feature/dynamics-latent-consistency`
+브랜치: `feature/dynamics-vector-only`
 
 기존 예측 경로와 Dynamics Encoder `E_d`를 유지하면서 **Dynamics 보조 경로의 감독
 방식**을 선택합니다. 주실험은 `field`와 `field_latent`이며, 두 실험은 동일한
@@ -8,6 +8,11 @@
 일치 손실의 유무뿐입니다. 기존의 lead-conditioned 직접 보조 Decoder는 기본값
 `direct`로 보존합니다. 기존 `direct`와 새 `latent_rollout`을 비교하면 구조도 달라지므로,
 그 차이를 latent 일치 손실만의 효과로 해석하면 안 됩니다.
+
+새 `vector_only`는 **Dynamics 보조 경로에서 미래 latent만 감독**하는 선택입니다.
+기존 `field`/`field_latent` 비교는 유지하며, runner에서는 `INCLUDE_VECTOR_ONLY=1`로
+새 조건을 추가합니다. 전체 모델의 미래 장 학습을 제거하지는 않습니다. 주 예측 모델
+`M`의 미래 장 손실과 `E_s`의 관측 복원·통계 손실은 그대로 공동 학습합니다.
 
 ## 구조와 학습 신호
 
@@ -31,13 +36,16 @@ z_t=E_d(X_{\le t})_{\mathrm{last}},\qquad
 
 `field`는 `D_d`의 미래 장에 기존 면적 가중 L²와 선택 통계 손실을 적용합니다.
 `field_latent`는 동일한 미래 장 손실에 다음 일치 손실을 추가합니다.
+`vector_only`는 Dynamics 보조 경로에서 이 latent 손실만 사용합니다.
 
 \[
 z^*_{t+k}=\operatorname{stopgrad}
 \left[E_d(X^{\mathrm{truth}}_{\le t+k})_{\mathrm{last}}\right],\qquad
 \mathcal L_{\mathrm{latent}}=
-\frac1K\sum_{k=1}^K\|\widehat z_{t+k}-z^*_{t+k}\|_2^2.
+\frac1{KD}\sum_{k=1}^K\|\widehat z_{t+k}-z^*_{t+k}\|_2^2.
 \]
+
+여기서 `D`는 Dynamics 공간 latent tensor의 전체 좌표 수이며, batch에서도 평균합니다.
 
 미래 정답 표현도 **동일한 `E_d`**로 계산합니다. 각 미래 시점을 끝으로 하는 정답 창은
 관측 입력과 같은 길이와 history stride를 사용하며, 창마다 Encoder의 상태를 새로
@@ -46,14 +54,16 @@ z^*_{t+k}=\operatorname{stopgrad}
 같은 하루 간격을 유지합니다. 정답이므로 포함되는 미래 관측은 **손실/진단 전용**이며
 실제 예측 경로와 `F_d`의 입력에는 전달하지 않습니다.
 
-정답 쪽에는 gradient를 끊습니다. 그러나 `E_d`는 실제 예측과 Dynamics 미래 장·통계 손실로 계속
-학습하므로 정답 좌표도 업데이트마다 달라지는 online target입니다. EMA teacher나
+정답 쪽에는 gradient를 끊습니다. 그러나 `E_d`는 실제 예측 경로와 선택한 Dynamics
+보조 손실로 계속 학습하므로 정답 좌표도 업데이트마다 달라지는 online target입니다. EMA teacher나
 고정 Encoder를 사용하지 않으며, stop-gradient만으로 collapse 방지를 보장하지 않습니다.
-따라서 이번 비교는 순수 vector-only 대신 물리장 감독을 유지하는 hybrid입니다.
+`vector_only`에서는 Dynamics 미래 장 감독이 없어지므로 좌표 variance와 RMS norm을
+특히 함께 확인해야 합니다. 주 예측 경로가 Raw나 `E_s`에 의존해도 성능을 낼 수 있어,
+주 예측 손실이 남아 있다는 사실만으로 `E_d`의 collapse가 방지된다고 볼 수 없습니다.
 여기서 vector는 `E_d`의 공간 latent feature tensor를 뜻하며 바람 벡터나
 물리적 시간 미분을 정답으로 두는 방식은 아닙니다. 기존 공간 통계 보조 손실은
 별도 `E_s`를 감독합니다. `E_d`의 표현 의미를 직접 붙잡는 것은 이번 Dynamics
-미래 장·통계 손실과 실제 예측 경로에서 전달되는 gradient입니다.
+미래 장·통계 손실(`field`/`field_latent`)과 실제 예측 경로에서 전달되는 gradient입니다.
 
 \[
 \mathcal L_{\mathrm{total}}=
@@ -61,11 +71,16 @@ z^*_{t+k}=\operatorname{stopgrad}
 +\lambda_f\mathcal L_{d,\mathrm{field}}
 +\lambda_s\mathcal L_{d,\mathrm{stat}}
 +\lambda_\Delta\mathcal L_{d,\mathrm{tendency}}
-+\mathbf1_{\mathrm{field\_latent}}\lambda_z\mathcal L_{\mathrm{latent}}.
++\mathbf1_{\{\mathrm{field\_latent},\mathrm{vector\_only}\}}\lambda_z\mathcal L_{\mathrm{latent}}.
 \]
 
-기본은 `λf=0.1`, `λs=0.1`, `λΔ=0`, hybrid의 `λz=0.1`입니다. 새 rollout 비교에서는
-미래 장·통계 가중치를 모두 양수로 유지합니다. 공간 Encoder·통계 보조 경로의 손실은
+기본은 `λf=0.1`, `λs=0.1`, `λΔ=0`, hybrid/vector-only의 `λz=0.1`입니다.
+`field`/`field_latent`에서는 미래 장·통계 가중치를 모두 양수로 유지합니다.
+`vector_only`에서는 `λf=λs=λΔ=0`이며 보조 `D_d`를 호출하지 않고 동결합니다.
+이 모드의 `D_d`는 학습된 미래 장 Decoder가 아니므로 물리장 예측기로 평가하지 않습니다.
+`E_d/F_d`의 구조는 다른 rollout 조건과 같지만, 보조 Decoder의 학습 여부와 계산량도
+함께 달라집니다. 따라서 vector-only 비교를 latent 손실 하나만 추가한 효과로 해석하지 않습니다.
+공간 Encoder·통계 보조 경로의 손실은
 기존대로입니다. 하나의 optimizer로 공동 학습하며, `F_d`의 다단계 출력에 역전파합니다.
 추론의 일반 예측에서는 학습용 `F_d/D_d`를 호출하지 않습니다. 별도 Dynamics 평가를
 요청했을 때만 보조 rollout을 실행합니다. 추가 latent 손실이 자동으로 추론을 빠르게
@@ -82,13 +97,21 @@ z^*_{t+k}=\operatorname{stopgrad}
 | 기존 직접 미래 장 보조 Decoder 유지 | `--dynamics-auxiliary-architecture direct --dynamics-supervision field` |
 | 새 latent 전이, 미래 장 감독만 | `--dynamics-auxiliary-architecture latent_rollout --dynamics-supervision field` |
 | 동일한 전이 + 미래 latent 감독 | `--dynamics-auxiliary-architecture latent_rollout --dynamics-supervision field_latent --dynamics-latent-weight 0.1` |
+| Dynamics 미래 latent만 감독 | `--dynamics-auxiliary-architecture latent_rollout --dynamics-supervision vector_only --dynamics-latent-weight 0.1` |
 
 `direct`가 기존 기본값입니다. `field`/`direct`에 latent 가중치를 명시하거나
-`direct + field_latent`를 선택하면 오류로 처리합니다. 통계 손실은 여전히
+`direct + field_latent/vector_only`를 선택하면 오류로 처리합니다. `vector_only`를
+CLI로 선택하면 Dynamics의 reconstruction/statistical/tendency 가중치 기본은 모두
+0이 됩니다. 이 세 가중치에 양수를 명시하면 오류로 처리합니다. 다른 두 감독 모드의
+기본 가중치는 유지됩니다. 비교 runner는 vector-only arm에서만 이 세 가중치를
+명시적으로 0으로 덮어씁니다. **전체 forecast/reconstruction/statistical 가중치를 0으로
+바꾸면 다른 실험이 됩니다.** 통계 손실은 여전히
 `--dynamics-statistical-loss w2|kl_entropy|signed_measure`로 선택합니다.
 공간 통계 손실은 별도 `--statistical-loss`입니다. W2는 값의 주변분포,
 KL-entropy는 histogram 분포 비교이고, signed measure는 정규화 기준의 양/음
 공간 모양과 총량을 비교합니다. signed의 기준은 물리적 0 Pa가 아닙니다.
+`vector_only`에서는 Dynamics 통계 손실을 계산하지 않으며, 위 선택은 `E_s`의
+관측 통계 감독과 다른 arm의 미래 장 통계 감독에서 유효합니다.
 
 ## 비교 실행과 평가
 
@@ -106,6 +129,12 @@ KL-entropy는 histogram 분포 비교이고, signed measure는 정규화 기준�
 `guided_dynamics_two_stage_field_latent`도 추가되어 **144회**가 됩니다.
 두 단계 비교에서도 같은 두 손실 조건을 유지합니다.
 
+`INCLUDE_VECTOR_ONLY=1`이면 `latent_dynamics_vector_only`와
+`guided_dynamics_vector_only`를 추가합니다. 따라서 기본 2개 경로에서는
+**6개 arm × 8개 M × 3개 seed = 144회**이며, `INCLUDE_TWO_STAGE=1`이면
+`guided_dynamics_two_stage_vector_only`까지 총 **9개 arm × 8개 M × 3개 seed = 216회**입니다.
+이 옵션의 기본값은 `0`이며 `INCLUDE_DYNAMICS_CONSISTENCY=1`이 필요합니다.
+
 새 wrapper는 `INCLUDE_DYNAMICS=1`, `INCLUDE_DYNAMICS_CONSISTENCY=1`,
 `CONSISTENCY_ONLY=1`, `INCLUDE_TWO_STAGE_BYPASS=0`을 기본으로 사용합니다.
 `CONSISTENCY_ONLY=0`이면 기존 raw·latent·guided·direct dynamics 비교군과 함께
@@ -115,9 +144,12 @@ KL-entropy는 histogram 분포 비교이고, signed measure는 정규화 기준�
 
 주평가는 **기존 예측 모델 `M`의 미래 물리장**에 대해 같은 시점·변수·lead에서
 RMSE·ACC를 비교합니다. 새 arm에는 `--dynamics-diagnostics`를 자동 적용하여
-별도로 보조 `F_d/D_d` rollout의 물리장 오차, signed 모양/총량 및 latent 오차와
+별도로 latent 오차와
 norm·variance를 기록합니다. 서로 학습한 Encoder의 좌표·스케일이 다를 수 있으므로,
 latent 오차만으로 다른 실험의 우열을 판정하지 않습니다.
+`field`/`field_latent`에서는 보조 `F_d/D_d` rollout의 물리장 오차와 signed 모양/총량도
+계산합니다. `vector_only`는 동결된 `D_d`의 물리장 점수를 제공하지 않습니다.
+세 방식의 공통 비교 대상은 **동일한 일반 예측 모델 `M`의 미래 물리장**입니다.
 학습 로그의 latent variance는 한 batch의 표본과 lead를 함께 묶어 계산합니다.
 평가 진단은 각 lead를 고정한 뒤 여러 origin에 걸친 variance를 계산하므로 두 값을
 동일한 지표처럼 직접 비교하지 않습니다. RMS norm과 variance 감소는 collapse나
@@ -141,7 +173,7 @@ bash <<'BASH'
 set -euo pipefail
 cd /lustre/home/yehyeon
 export DAILY_WORK
-DAILY_WORK=$(mktemp -d "$PWD/climate_manifold_consistency_XXXXXXXX")
+DAILY_WORK=$(mktemp -d "$PWD/climate_manifold_vector_XXXXXXXX")
 export ERA5_ROOT=/lustre/home/mahmed/ERA5_0p25_DAILY
 mkdir -p "$DAILY_WORK"/{tmp,cache,logs}
 export TMPDIR="$DAILY_WORK/tmp" TMP="$DAILY_WORK/tmp" TEMP="$DAILY_WORK/tmp"
@@ -151,7 +183,7 @@ export CUDA_CACHE_PATH="$DAILY_WORK/cache/cuda" TRITON_CACHE_DIR="$DAILY_WORK/ca
 export PYTHONPYCACHEPREFIX="$DAILY_WORK/cache/pycache" MPLCONFIGDIR="$DAILY_WORK/cache/matplotlib"
 export NUMBA_CACHE_DIR="$DAILY_WORK/cache/numba" PYTHONNOUSERSITE=1
 
-git clone --single-branch --branch feature/dynamics-latent-consistency \
+git clone --single-branch --branch feature/dynamics-vector-only \
   https://github.com/nayehyeon61-glitch/climate_manifold.git "$DAILY_WORK/code"
 cd "$DAILY_WORK/code"
 python3 -m venv "$DAILY_WORK/venv"
@@ -164,6 +196,7 @@ export PYTHON="$DAILY_WORK/venv/bin/python" DEVICE=cuda
 export MODELS="mlp neural_ode climode convlstm simvp fourcastnet climax transformer"
 export SEEDS="7 19 43" EPOCHS=20 BATCH_SIZE=16
 export INCLUDE_DYNAMICS=1 INCLUDE_DYNAMICS_CONSISTENCY=1 CONSISTENCY_ONLY=1
+export INCLUDE_VECTOR_ONLY=1
 export INCLUDE_ZERO_DYNAMICS=0 INCLUDE_TWO_STAGE=0 INCLUDE_TWO_STAGE_BYPASS=0
 export DYNAMICS_ENCODER=conv_gru DYNAMICS_HIDDEN_DIM=32 DYNAMICS_CHANNELS=8
 export DYNAMICS_LATENT_WEIGHT=0.1
@@ -186,6 +219,8 @@ BASH
 ```
 
 이중 Transformer도 비교하려면 위의 `INCLUDE_TWO_STAGE=0`을 `1`로 바꾸세요.
+위 명령은 vector-only를 포함한 144회 학습입니다. `INCLUDE_VECTOR_ONLY=0`이면
+기존 field/hybrid의 96회 비교로 돌아갑니다.
 장기 진단은 마지막 `unset`에서 `AUX_ROLLOUT_STEPS`를 제외하고, 예를 들어
 `export AUX_ROLLOUT_STEPS=10`을 추가하면 됩니다.
 
@@ -209,6 +244,9 @@ bash scripts/run_dynamics_consistency_comparison.sh
 - `comparison.json`, `comparison.test.json`: validation/test 비교.
 - `comparison*.dynamics-consistency-effects.csv`: 같은 예측 모델·경로·구조에서
   field 대비 field_latent의 효과. 기존 direct dynamics와 합쳐 집계하지 않습니다.
+- `comparison*.dynamics-vector-effects.csv`: vector-only와 field/hybrid 사이의
+  **주 예측 모델 `M`의 물리장 점수** 비교. `dynamics_vector_gain_percent` 그래프와
+  함께 보며, 서로 다른 감독·Decoder 학습 조건의 비교로 해석합니다.
 - `plots/validation/`, `plots/test/`: 비교 PNG/PDF와 manifest.
 - 각 평가 JSON의 `dynamics_evaluation_contract`: 실제 보조 rollout 기간과 시간 간격.
   `dynamics_auxiliary_config`에는 감독 방식·가중치·target semantics가 저장됩니다.

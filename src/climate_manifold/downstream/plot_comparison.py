@@ -10,7 +10,8 @@ import re
 import numpy as np
 
 from .compare import _arm, _fusion
-from .protocol import dynamics_identity, guide_interaction_identity, dynamics_supervision_identity
+from .protocol import (dynamics_identity, guide_interaction_identity, dynamics_supervision_identity,
+                       dynamics_vector_capacity_matches)
 
 
 MODEL_ORDER = ('transformer', 'mlp', 'neural_ode', 'climode', 'convlstm', 'simvp', 'fourcastnet', 'climax')
@@ -23,6 +24,7 @@ METRIC_LABELS = {
     'constraint_gain_percent': 'RMSE reduction vs No observed constraints (%)',
     'dynamics_gain_percent': 'RMSE reduction vs Dynamics off (%)',
     'dynamics_consistency_gain_percent': 'RMSE reduction vs Future-field supervision (%)',
+    'dynamics_vector_gain_percent': 'Vector-only RMSE reduction vs Named supervision control (%)',
     'dynamics_input_gain_percent': 'RMSE reduction vs Zero dynamics (%)',
     'two_stage_gain_percent': 'RMSE reduction vs Trained single-stage (%)',
     'guide_interaction_input_gain_percent': 'RMSE reduction vs Same-checkpoint bypass (%)',
@@ -44,7 +46,8 @@ def _label(row):
         route += ' / '+('Zero dynamics' if dynamics_mode == 'zero' else 'Dynamics')+' ('+encoder+')'
     architecture, supervision, weight = dynamics_supervision_identity(row)
     if architecture == 'latent_rollout':
-        route += ' / Latent rollout / '+('Field + latent ('+format(weight, '.3g')+')' if supervision == 'field_latent' else 'Field only')
+        label = {'field':'Field only', 'field_latent':'Field + latent', 'vector_only':'Vector only'}[supervision]
+        route += ' / Latent rollout / '+label+(' ('+format(weight, '.3g')+')' if supervision != 'field' else '')
     interaction, depth, effective = guide_interaction_identity(row)
     if interaction != 'off':
         route += ' / Two-stage (depth '+str(depth)+')'
@@ -156,11 +159,20 @@ def summarize_comparison(data):
             raise ValueError('Paired effect has an unknown or ambiguous model/route/seed')
         return matches[0]
 
-    def add_effect(row, metric, value_key):
+    effect_groups, effect_labels, effect_controls = {}, {}, {}
+
+    def add_effect(row, metric, value_key, separate_control=False):
         identity = effect_identity(row, 'candidate_arm')
         baseline = effect_identity(row, 'control')
         if groups[identity] != groups[baseline]:
             raise ValueError('Paired effect has unequal training seeds')
+        if separate_control:
+            actual_identity = identity
+            identity = (*identity[:2], identity[2]+'/vs='+baseline[2])
+            effect_groups[identity] = groups[actual_identity]
+            control_label = 'Field only' if row['baseline_supervision'] == 'field' else 'Field + latent'
+            effect_labels[identity] = labels[actual_identity]+' / vs '+control_label
+            effect_controls[identity] = baseline[2]
         key = (*identity, row['variable'], row['lead_hours'], metric)
         if (row['variable'], row['lead_hours']) not in axes:
             raise ValueError('Paired effect has an unknown variable/lead')
@@ -211,6 +223,30 @@ def summarize_comparison(data):
                 or candidate['bridge'] != baseline['bridge']):
             raise ValueError('Dynamics consistency effect labels disagree with compared experiments')
         add_effect(row, 'dynamics_consistency_gain_percent', 'rmse_skill_vs_baseline')
+    for row in data.get('dynamics_vector_effects', []):
+        base_mode = row.get('baseline_supervision')
+        expected = ('replace_dynamics_field_with_vector_supervision' if base_mode == 'field'
+                    else 'remove_dynamics_field_supervision' if base_mode == 'field_latent' else None)
+        if (expected is None or row.get('interpretation') != expected
+                or row.get('auxiliary_architecture') != 'latent_rollout'
+                or row.get('candidate_supervision') != 'vector_only'
+                or row.get('scored_prediction') != 'downstream_M_physical_forecast'
+                or row.get('baseline_parameters') != row.get('candidate_parameters')):
+            raise ValueError('Dynamics vector gain requires vector-only versus named field supervision')
+        candidate_key, baseline_key = [effect_identity(row, key) for key in ('candidate_arm', 'control')]
+        candidate = next(r for r in data['rows'] if _identity(r) == candidate_key and r['seed'] == row['seed'])
+        baseline = next(r for r in data['rows'] if _identity(r) == baseline_key and r['seed'] == row['seed'])
+        if (dynamics_supervision_identity(candidate) != (
+                    'latent_rollout', 'vector_only', row.get('candidate_latent_weight'))
+                or dynamics_supervision_identity(baseline) != (
+                    'latent_rollout', base_mode, row.get('baseline_latent_weight'))
+                or base_mode == 'field_latent' and row.get('candidate_latent_weight') != row.get('baseline_latent_weight')
+                or dynamics_identity(candidate) != dynamics_identity(baseline)
+                or guide_interaction_identity(candidate) != guide_interaction_identity(baseline)
+                or candidate['bridge'] != baseline['bridge']
+                or not dynamics_vector_capacity_matches(candidate, baseline)):
+            raise ValueError('Dynamics vector effect labels disagree with compared experiments or decoder capacity')
+        add_effect(row, 'dynamics_vector_gain_percent', 'rmse_skill_vs_baseline', separate_control=True)
     for row in data.get('guide_interaction_effects', []):
         if row.get('interpretation') == 'add_guide_interaction':
             if (row.get('baseline_guide_interaction') != 'off'
@@ -229,6 +265,10 @@ def summarize_comparison(data):
         if identity[1] != 'raw' and any(key[1] == 'raw' and key[0] == identity[0] for key in groups):
             for variable, lead in axes:
                 bins.setdefault((*identity, variable, lead, 'rmse_skill_percent'), {})
+    # Multiple vector controls are distinct plotted series, never pooled as
+    # duplicate seeds or shown as fictitious additional physical-model arms.
+    groups.update(effect_groups)
+    labels.update(effect_labels)
     # Missing paired leads must be explicit gaps rather than lines joining over
     # an absent result, just as missing seeds never produce partial averages.
     effect_axes = {(key[:3], key[-1]) for key in bins if key[-1].endswith('_percent')}
@@ -242,6 +282,7 @@ def summarize_comparison(data):
         valid = [v for v in values.values() if v is not None]
         complete = set(values) == groups[identity] and len(valid) == len(groups[identity])
         summary.append(dict(model=model, bridge=bridge, arm=arm, label=labels[identity],
+            control=effect_controls.get(identity),
             variable=variable, units=units[variable] if metric == 'rmse' else '%' if metric.endswith('_percent') else '1',
             lead_hours=lead, metric=metric, seeds=sorted(groups[identity]),
             expected_seeds=len(groups[identity]), valid_seeds=len(valid),
@@ -325,19 +366,20 @@ def plot_comparison(comparison, output):
                 save(fig,metric+'_by_lead_'+safe(variable))
 
             rows = [r for r in summary if r['variable']==variable and r['metric']=='rmse']
+            rmse_arms = [a for a in arms if any(r['arm'] == a for r in rows)]
             last = max(r['lead_hours'] for r in rows)
             lookup = {(r['model'],r['arm']):r for r in rows if r['lead_hours']==last}
             fig, ax = plt.subplots(figsize=(max(8,len(models)*1.55),5.1))
             fig.subplots_adjust(top=.76,bottom=.23)
-            width=.78/len(arms); x=np.arange(len(models))
-            for i, arm in enumerate(arms):
+            width=.78/len(rmse_arms); x=np.arange(len(models))
+            for i, arm in enumerate(rmse_arms):
                 entries = [lookup.get((m,arm),{}) for m in models]
                 y = [r.get('mean') if r.get('mean') is not None else np.nan for r in entries]
                 sd = [r.get('sample_std') or 0. for r in entries]
-                ax.bar(x+(i-(len(arms)-1)/2)*width,y,width,yerr=sd,color=colors[arm],capsize=2)
+                ax.bar(x+(i-(len(rmse_arms)-1)/2)*width,y,width,yerr=sd,color=colors[arm],capsize=2)
             ax.set_xticks(x,[MODEL_NAMES.get(m,m) for m in models],rotation=20,ha='right')
             ax.set_ylabel('RMSE ('+rows[0]['units']+')'); ax.grid(axis='y',alpha=.2);ax.set_axisbelow(True)
-            decorate(fig,f'{split.upper()} · {variable} · day {last/24:g} RMSE (lower is better)',arms)
+            decorate(fig,f'{split.upper()} · {variable} · day {last/24:g} RMSE (lower is better)',rmse_arms)
             save(fig,'last_lead_rmse_'+safe(variable))
 
         heat_rows=[r for r in summary if r['metric']=='rmse_skill_percent']
@@ -381,6 +423,7 @@ def plot_comparison(comparison, output):
                   'Dynamics gain compares enabled versus off (capacity and auxiliary supervision change); dynamics input gain compares learned versus zero dynamics features. '
                   'Two-stage gain compares separately trained first-stage attention on/off models; capacity changes. '
                   'Same-checkpoint bypass gain is an inference intervention and is not a separately trained single-stage baseline. '
+                  'Vector-only gains compare main downstream physical forecasts against each named field supervision control. Auxiliary field losses are removed and the unused auxiliary decoder is frozen, reducing trainable capacity. '
                   'Seed SD is training variability, not predictive uncertainty.')}
     (output/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     return manifest

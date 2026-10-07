@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Matched autoregressive dynamics: future fields vs fields + latent consistency.
+# Autoregressive dynamics: fields vs fields + latent; vector-only is opt-in.
 # Existing direct dynamics and baseline runners keep their historical defaults.
 set -euo pipefail
 export INCLUDE_DYNAMICS="${INCLUDE_DYNAMICS:-1}"
 export INCLUDE_DYNAMICS_CONSISTENCY="${INCLUDE_DYNAMICS_CONSISTENCY:-1}"
+export INCLUDE_VECTOR_ONLY="${INCLUDE_VECTOR_ONLY:-0}"
 export CONSISTENCY_ONLY="${CONSISTENCY_ONLY:-1}"
 export INCLUDE_ZERO_DYNAMICS="${INCLUDE_ZERO_DYNAMICS:-0}"
 export INCLUDE_TWO_STAGE="${INCLUDE_TWO_STAGE:-0}"

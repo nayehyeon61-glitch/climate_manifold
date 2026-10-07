@@ -90,7 +90,8 @@ def verify_completed_fits(run, settings):
                     if result.get('checkpoint_sha256') != checksum:
                         raise ValueError(f'Report/checkpoint mismatch: {report}')
                     if arm.endswith(('_dynamics_field', '_dynamics_field_latent',
-                                     '_dynamics_two_stage_field', '_dynamics_two_stage_field_latent')):
+                                     '_dynamics_two_stage_field', '_dynamics_two_stage_field_latent',
+                                     '_dynamics_vector_only', '_dynamics_two_stage_vector_only')):
                         expected_diagnostics = {
                             'version': 'climate_manifold.dynamics_evaluation.v1',
                             'rollout_steps': int(settings['consistency_rollout_steps']),
@@ -98,7 +99,8 @@ def verify_completed_fits(run, settings):
                             'target_semantics': 'same_length_strided_truth_window',
                             'main_forecast_horizon_steps': int(settings['consistency_train_horizon']),
                         }
-                        supervision = 'field_latent' if arm.endswith('_field_latent') else 'field'
+                        supervision = ('vector_only' if arm.endswith('_vector_only') else
+                                       'field_latent' if arm.endswith('_field_latent') else 'field')
                         if (result.get('dynamics_evaluation_contract') != expected_diagnostics
                                 or result.get('config', {}).get('dynamics_auxiliary_architecture') != 'latent_rollout'
                                 or result.get('dynamics_auxiliary_config', {}).get('supervision') != supervision):

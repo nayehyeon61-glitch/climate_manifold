@@ -31,6 +31,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
     if forecast_output and (Path(forecast_output).suffix!='.npz' or Path(forecast_output).resolve()==output.resolve()):
         raise ValueError('Forecast path must be a distinct .npz file')
     model,p=load_predictor(checkpoint,device)
+    vector_only = (p.get('dynamics_auxiliary_config') or {}).get('supervision') == 'vector_only'
     if dynamics_rollout_steps is not None and not dynamics_diagnostics:
         raise ValueError('--dynamics-rollout-steps requires --dynamics-diagnostics')
     if dynamics_diagnostics and getattr(model.config, 'dynamics_auxiliary_architecture', 'direct') != 'latent_rollout':
@@ -78,8 +79,10 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
         }
         auxiliary_leads = torch.arange(1, rollout_steps+1, device=device, dtype=torch.float32)*model.a_config.step_hours
         auxiliary_hours = auxiliary_leads.cpu().tolist()
-        auxiliary_metrics = ForecastMetrics(a['schema'], a['mean'], a['scale'], auxiliary_hours)
-        auxiliary_signed = SignedFieldDiagnostics(a['schema'], auxiliary_hours)
+        # A vector-only checkpoint never trained its independent D_d. Scoring
+        # that frozen readout would misrepresent random fields as predictions.
+        auxiliary_metrics = None if vector_only else ForecastMetrics(a['schema'], a['mean'], a['scale'], auxiliary_hours)
+        auxiliary_signed = None if vector_only else SignedFieldDiagnostics(a['schema'], auxiliary_hours)
         main_signed = SignedFieldDiagnostics(a['schema'], p['lead_hours'])
         auxiliary_latent = DynamicsLatentDiagnostics(auxiliary_hours)
     else:
@@ -126,15 +129,19 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                 auxiliary_start=time.perf_counter()
                 try:
                     auxiliary_prediction=model.dynamics_auxiliary_head.rollout(
-                        prediction['dynamics_history_latent'],auxiliary_leads)
+                        prediction['dynamics_history_latent'],auxiliary_leads,
+                        **({'decode_fields':False} if vector_only else {}))
                     auxiliary_target_latent=future_dynamics_targets(model,batch,auxiliary_leads)
-                    if not all(torch.isfinite(value).all() for value in (
-                            auxiliary_prediction['fields'],auxiliary_prediction['latent'],auxiliary_target_latent)):
+                    checked_values = [auxiliary_prediction['latent'],auxiliary_target_latent]
+                    if not vector_only:
+                        checked_values.append(auxiliary_prediction['fields'])
+                    if not all(torch.isfinite(value).all() for value in checked_values):
                         raise FloatingPointError('Nonfinite auxiliary dynamics rollout or latent targets')
                     auxiliary_latent.update(auxiliary_prediction['latent'],auxiliary_target_latent,
                                             prediction['dynamics_history_latent'][:,-1])
-                    auxiliary_signed.update(auxiliary_prediction['fields'],batch['targets'][:,:rollout_steps])
-                    auxiliary_metrics.update(auxiliary_prediction['fields'],batch['targets'][:,:rollout_steps],batch['origin'])
+                    if not vector_only:
+                        auxiliary_signed.update(auxiliary_prediction['fields'],batch['targets'][:,:rollout_steps])
+                        auxiliary_metrics.update(auxiliary_prediction['fields'],batch['targets'][:,:rollout_steps],batch['origin'])
                     auxiliary_successful.append(label)
                 except FloatingPointError as exc:
                     auxiliary_failures.append({'origin':label,'error':str(exc)})
@@ -193,8 +200,9 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                     if auxiliary_prediction is not None:
                         values['auxiliary_dynamics_predicted_latent']=auxiliary_prediction['latent'][0].cpu().numpy()
                         values['auxiliary_dynamics_teacher_latent']=auxiliary_target_latent[0].cpu().numpy()
-                        values['auxiliary_dynamics_surface_fields']=auxiliary_prediction['fields'][0].cpu().numpy()*np.asarray(a['scale'])+np.asarray(a['mean'])
-                        values['auxiliary_dynamics_surface_truth']=batch['targets'][0,:rollout_steps].cpu().numpy()*np.asarray(a['scale'])+np.asarray(a['mean'])
+                        if not vector_only:
+                            values['auxiliary_dynamics_surface_fields']=auxiliary_prediction['fields'][0].cpu().numpy()*np.asarray(a['scale'])+np.asarray(a['mean'])
+                            values['auxiliary_dynamics_surface_truth']=batch['targets'][0,:rollout_steps].cpu().numpy()*np.asarray(a['scale'])+np.asarray(a['mean'])
                         values['auxiliary_dynamics_lead_hours']=np.asarray(auxiliary_hours)
                 np.savez_compressed(path,**values);saved=True
     if str(device).startswith('cuda'):torch.cuda.synchronize()
@@ -214,6 +222,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'guide_contract':p.get('guide_contract'),
             'dynamics_contract':p.get('dynamics_contract'),
             'dynamics_auxiliary_config':p.get('dynamics_auxiliary_config'),
+            'dynamics_decoder_contract':p.get('dynamics_decoder_contract'),
             'dynamics_latent_shape':p.get('dynamics_latent_shape'),
             'latent_diagnostic_semantics':dynamics_latent_audit,
             'regularization':p.get('regularization','legacy'),
@@ -247,14 +256,18 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
         report['dynamics_origin_selection']=dynamics_origin_selection
         report['main_forecast_signed_diagnostics']=main_signed.result()
         report['dynamics_auxiliary_evaluation']={
-            'path':'E_d_observed_history_to_autoregressive_F_d_to_D_d',
+            'path':('E_d_observed_history_to_autoregressive_F_d' if vector_only
+                    else 'E_d_observed_history_to_autoregressive_F_d_to_D_d'),
+            'evaluated_outputs':['latent'] if vector_only else ['latent','physical_fields'],
+            'decoder_status':'untrained_frozen_not_evaluated' if vector_only else 'trained_field_decoder',
             'downstream_forecast_model_used':False,'teacher_forcing':False,
             'lead_hours':auxiliary_hours,'origin_times':successful,
             'successful_origin_times':auxiliary_successful,
             'attempted_case_count':len(successful),'successful_case_count':len(auxiliary_successful),
             'finite_auxiliary_fraction':len(auxiliary_successful)/len(successful) if successful else None,
             'auxiliary_failed_origins':auxiliary_failures,
-            'scores':auxiliary_metrics.result(),'signed_diagnostics':auxiliary_signed.result(),
+            'scores':auxiliary_metrics.result() if auxiliary_metrics is not None else None,
+            'signed_diagnostics':auxiliary_signed.result() if auxiliary_signed is not None else None,
             'latent_diagnostics':auxiliary_latent.result(),
             'diagnostic_seconds':auxiliary_seconds,
             'cuda_peak_memory_bytes':auxiliary_cuda_peak if str(device).startswith('cuda') else None,
@@ -264,6 +277,13 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                      'Scores are conditional on finite auxiliary forecasts; failure coverage is separate from M. '
                      'Do not compare latent RMSE as a ranking of different trained encoders.',
         }
+        if vector_only:
+            report['dynamics_auxiliary_evaluation']['limits']=(
+                'This is the independent auxiliary F_d latent trajectory, not downstream M. '
+                'D_d was not trained under vector-only supervision and is neither called nor physically scored. '
+                'Main M physical forecasts remain the comparison criterion. '
+                'Latent scores are conditional on finite auxiliary trajectories; failure coverage is separate from M. '
+                'Do not compare latent RMSE as a ranking of different trained encoders.')
         report['inference_scope']='checkpoint_downstream_M_forecast_only_excludes_auxiliary_dynamics_audit'
         report['cuda_peak_memory_scope']='absolute_allocated_peak_during_main_forecast_including_resident_model_and_batch'
     if interaction_evaluation is not None:

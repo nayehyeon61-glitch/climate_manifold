@@ -4,13 +4,16 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
-**Dynamics 미래 장 vs 미래 장+latent 일관성 — `feature/dynamics-latent-consistency`.**
+**Dynamics 미래 장·hybrid·vector-only 선택 — `feature/dynamics-vector-only`.**
 선택형 `--dynamics-auxiliary-architecture latent_rollout`에서 동일한 보조 전이 `F_d`와
-Decoder를 사용하고 `--dynamics-supervision field|field_latent`로 감독을 비교합니다.
+`--dynamics-supervision field|field_latent|vector_only`로 감독을 비교합니다.
 미래 latent 정답은 동일 `E_d`의 미래 정답 창을 stop-gradient로 encode하며 예측 입력에
 들어가지 않습니다. 기존 `direct` 보조 Decoder와 일반 예측 모델 `M`은 유지합니다.
-새 runner는 Latent/Guided의 4개 조건 × 8개 M × 3개 seed = 96회(batch 16), 이중
-Transformer를 추가하면 144회입니다. 미래 장·통계 손실은 두 조건 모두 유지합니다.
+runner 기본은 Latent/Guided의 field/hybrid 4개 조건 × 8개 M × 3개 seed = 96회(batch 16)입니다.
+`INCLUDE_VECTOR_ONLY=1`이면 144회, 여기에 이중 Transformer를 추가하면 216회입니다.
+vector-only는 **Dynamics 보조 미래 장 손실만 제거**합니다. 보조 `D_d`는 동결하며
+그 출력의 물리장 점수는 계산하지 않습니다. 주 예측 `M`의 미래 장 손실과 `E_s`의
+관측 복원·통계 손실은 유지하므로 세 감독 조건을 같은 `M`의 미래 장 점수로 비교합니다.
 [구조·선택 옵션·전체 학습/test/진단/그래프 명령](docs/dynamics_latent_consistency.md).
 
 **선택형 이중 Transformer — `feature/two-stage-guide-fusion`.**

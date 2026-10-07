@@ -82,7 +82,7 @@ elif args and args[0] == '-':
         env.pop(name, None)
     env.update(INCLUDE_DYNAMICS='0', INCLUDE_ZERO_DYNAMICS='1', INCLUDE_TWO_STAGE='0',
                INCLUDE_TWO_STAGE_BYPASS='0', GUIDE_INTERACTION_DEPTH='1',
-               INCLUDE_DYNAMICS_CONSISTENCY='0', CONSISTENCY_ONLY='0')
+               INCLUDE_DYNAMICS_CONSISTENCY='0', INCLUDE_VECTOR_ONLY='0', CONSISTENCY_ONLY='0')
     return env, log
 
 

@@ -1,6 +1,7 @@
 """Autoregressive dynamics-latent auxiliary forecast, with no future inputs.
 
-The same architecture supports field-only and field-plus-latent supervision.
+The same architecture supports field-only, field-plus-latent, and vector-only
+supervision. Vector-only retains but freezes/skips the auxiliary field decoder.
 Unlike the legacy direct auxiliary decoder, every decoded forecast is produced
 from the explicitly rolled-out latent. There is no lead-time shortcut to D_d.
 This auxiliary F_d is independent of the downstream forecast model M.
@@ -81,7 +82,10 @@ class DynamicsLatentRolloutHead(nn.Module):
             fields = F.interpolate(fields, size=self.raw_grid[1:], mode='bilinear', align_corners=False)
         return fields.reshape(*prefix, math.prod(self.raw_grid))
 
-    def rollout(self, dynamics_history, lead_hours):
+    def rollout(self, dynamics_history, lead_hours, *, decode_fields=True):
+        """Advance latent states; optionally omit the independent field readout."""
+        if not isinstance(decode_fields, bool):
+            raise ValueError('decode_fields must be boolean')
         _history(dynamics_history, math.prod(self.dynamics_grid), 'Dynamics history')
         steps = lead_steps(lead_hours, self.step_hours)
         requested = set(steps.detach().cpu().tolist())
@@ -96,7 +100,7 @@ class DynamicsLatentRolloutHead(nn.Module):
         latent = torch.stack(selected, dim=1)
         if not torch.isfinite(latent).all():
             raise FloatingPointError('Nonfinite auxiliary dynamics latent rollout')
-        return {'latent': latent, 'fields': self.decode(latent)}
+        return {'latent': latent, 'fields': self.decode(latent) if decode_fields else None}
 
     def forward(self, dynamics_history, lead_hours):
         return self.rollout(dynamics_history, lead_hours)['fields']

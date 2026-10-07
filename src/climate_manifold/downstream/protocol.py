@@ -94,6 +94,46 @@ def dynamics_supervision_identity(row):
             auxiliary.get('latent_weight', 0.))
 
 
+def validate_dynamics_decoder_contract(row):
+    """Identify an untrained auxiliary decoder without changing old reports."""
+    architecture, supervision, _ = dynamics_supervision_identity(row)
+    contract = row.get('dynamics_decoder_contract')
+    if contract is None:
+        if supervision == 'vector_only':
+            raise ValueError('vector_only requires dynamics_decoder_contract')
+        return None
+    keys = {'version', 'trained', 'total_parameters', 'trainable_parameters'}
+    if (architecture != 'latent_rollout' or not isinstance(contract, dict)
+            or set(contract) != keys
+            or contract['version'] != 'climate_manifold.dynamics_decoder.v1'
+            or type(contract['trained']) is not bool
+            or any(type(contract[k]) is not int or contract[k] < 0
+                   for k in ('total_parameters', 'trainable_parameters'))
+            or contract['total_parameters'] <= 0):
+        raise ValueError('Invalid dynamics_decoder_contract')
+    trained = supervision != 'vector_only'
+    if (contract['trained'] != trained or contract['trainable_parameters'] != (
+            contract['total_parameters'] if trained else 0)):
+        raise ValueError('dynamics_decoder_contract disagrees with supervision')
+    return contract
+
+
+def dynamics_vector_capacity_matches(candidate, baseline):
+    """Only the unused D_d freezes; the forecast model and total capacity match."""
+    ours, control = [validate_dynamics_decoder_contract(row) for row in (candidate, baseline)]
+    if ours is None or control is None or ours['trained'] or not control['trained']:
+        return False
+    count = ours['total_parameters']
+    if count != control['total_parameters']:
+        return False
+    if any(candidate.get(k) is None or candidate[k] != baseline.get(k)
+           for k in ('total_parameters', 'forecast_parameters')):
+        return False
+    return all(type(candidate.get(k)) is int and type(baseline.get(k)) is int
+               and candidate[k] == baseline[k] - count
+               for k in ('trainable_parameters', 'constraint_parameters'))
+
+
 def guide_interaction_contract(config):
     """Describe the independent guide-only first attention stage."""
     cfg = vars(config) if not isinstance(config, dict) else config

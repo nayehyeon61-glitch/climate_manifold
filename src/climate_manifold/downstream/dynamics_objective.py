@@ -65,15 +65,18 @@ def validate_dynamics_auxiliary_config(config):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
             raise ValueError('Dynamics objective weights must be finite and nonnegative: '+name)
     if extra:
-        if config['supervision'] not in ('field', 'field_latent'):
-            raise ValueError('Dynamics supervision must be field or field_latent')
+        if config['supervision'] not in ('field', 'field_latent', 'vector_only'):
+            raise ValueError('Dynamics supervision must be field, field_latent or vector_only')
         if config['target_encoder'] != 'online_stop_gradient' or config['target_semantics'] != 'same_length_strided_truth_window':
             raise ValueError('Invalid dynamics latent target semantics')
-        if config['reconstruction_weight'] <= 0 or config['statistical_weight'] <= 0:
+        if config['supervision'] == 'vector_only':
+            if any(config[name] != 0 for name in weight_names):
+                raise ValueError('vector_only requires zero dynamics field, statistical and tendency weights')
+        elif config['reconstruction_weight'] <= 0 or config['statistical_weight'] <= 0:
             raise ValueError('Latent rollout comparison requires positive field reconstruction and statistical weights')
         if ((config['supervision'] == 'field' and config['latent_weight'] != 0)
-                or (config['supervision'] == 'field_latent' and config['latent_weight'] <= 0)):
-            raise ValueError('Dynamics latent weight must be zero for field and positive for field_latent')
+                or (config['supervision'] in ('field_latent', 'vector_only') and config['latent_weight'] <= 0)):
+            raise ValueError('Dynamics latent weight must be zero for field and positive for field_latent/vector_only')
     validate_statistical_config(config['statistical_loss_config'])
     return dict(config)
 
@@ -83,14 +86,16 @@ def dynamics_auxiliary_config_from_args(args, predictor_config, spatial_statisti
     architecture = getattr(predictor_config, 'dynamics_auxiliary_architecture', 'direct')
     supervision = getattr(args, 'dynamics_supervision', 'field')
     latent_weight = getattr(args, 'dynamics_latent_weight', None)
-    if supervision not in ('field', 'field_latent'):
-        raise ValueError('Dynamics supervision must be field or field_latent')
+    if supervision not in ('field', 'field_latent', 'vector_only'):
+        raise ValueError('Dynamics supervision must be field, field_latent or vector_only')
     if architecture == 'direct' and (supervision != 'field' or latent_weight is not None):
         raise ValueError('Dynamics latent supervision requires --dynamics-auxiliary-architecture latent_rollout')
     if supervision == 'field' and latent_weight is not None:
-        raise ValueError('--dynamics-latent-weight is only valid with field_latent supervision')
-    weights = {key: getattr(args, 'dynamics_'+key, default) for key, default in (
-        ('reconstruction_weight', .1), ('statistical_weight', .1), ('tendency_weight', 0.))}
+        raise ValueError('--dynamics-latent-weight is only valid with field_latent or vector_only supervision')
+    weights = {}
+    for key, default in (('reconstruction_weight', .1), ('statistical_weight', .1), ('tendency_weight', 0.)):
+        value = getattr(args, 'dynamics_'+key, None)
+        weights[key] = (0. if supervision == 'vector_only' else default) if value is None else value
     for key, value in weights.items():
         if not math.isfinite(value) or value < 0:
             raise ValueError('Dynamics objective weights must be finite and nonnegative: '+key)
@@ -130,6 +135,26 @@ def dynamics_auxiliary_config_from_payload(payload, predictor_config):
     if (config['version'] == 'climate_manifold.dynamics_auxiliary.v2') != rollout:
         raise ValueError('Dynamics auxiliary config version disagrees with predictor architecture')
     return config
+
+
+def configure_dynamics_supervision(pipeline, config):
+    """Keep D_d state-compatible, but exclude it from vector-only optimization.
+
+    Called after pipeline construction both when training and reloading. The
+    main M/D_forecast and observed E_s decoders are not affected.
+    """
+    if config is None or config['version'] != 'climate_manifold.dynamics_auxiliary.v2':
+        return None
+    config = validate_dynamics_auxiliary_config(config)
+    trained = config['supervision'] != 'vector_only'
+    decoder = pipeline.dynamics_auxiliary_head.decoder
+    decoder.requires_grad_(trained)
+    return {
+        'version': 'climate_manifold.dynamics_decoder.v1',
+        'trained': trained,
+        'total_parameters': sum(p.numel() for p in decoder.parameters()),
+        'trainable_parameters': sum(p.numel() for p in decoder.parameters() if p.requires_grad),
+    }
 
 
 def future_dynamics_targets(pipeline, batch, lead_hours):
@@ -217,6 +242,16 @@ the main forecast objective does. Nonuniform supported leads use their own dt.
     zero = history.new_zeros(())
     result = {name: zero for name in ('dynamics_reconstruction', 'dynamics_statistical',
                                       'dynamics_tendency', 'dynamics_regularization')}
+    if rollout and config['supervision'] == 'vector_only':
+        # A frozen/untrained D_d must never affect this objective, including
+        # through its validation checks or an unnecessary decoder invocation.
+        trajectory = pipeline.dynamics_auxiliary_head.rollout(history, lead_hours, decode_fields=False)
+        latent_target = future_dynamics_targets(pipeline, batch, lead_hours)
+        result.update(dynamics_latent_diagnostics(trajectory['latent'], latent_target))
+        result['dynamics_regularization'] = config['latent_weight'] * result['dynamics_latent']
+        if not torch.isfinite(result['dynamics_regularization']):
+            raise FloatingPointError('Nonfinite dynamics auxiliary loss')
+        return result
     if not any(config[key] for key in ('reconstruction_weight', 'statistical_weight', 'tendency_weight')):
         return result
     indices = lead_steps(lead_hours, pipeline.a_config.step_hours)-1

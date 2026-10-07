@@ -83,13 +83,17 @@ if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
         tests/test_dynamics_consistency_evaluation.py tests/test_dynamics_consistency_reporting.py
         tests/test_dynamics_consistency_runner.py)
     fi
+    if [[ "${INCLUDE_VECTOR_ONLY:-0}" == 1 ]]; then
+      preflight+=(tests/test_dynamics_vector_training.py tests/test_dynamics_vector_evaluation.py
+        tests/test_dynamics_vector_reporting.py tests/test_dynamics_vector_runner.py)
+    fi
   fi
   # Tests explicitly select their optional arms. Do not let this experiment's
   # exported activation flags silently change their default comparison matrix.
   CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 \
     INCLUDE_DYNAMICS=0 INCLUDE_ZERO_DYNAMICS=1 INCLUDE_TWO_STAGE=0 \
     INCLUDE_TWO_STAGE_BYPASS=0 GUIDE_INTERACTION_DEPTH=1 \
-    INCLUDE_DYNAMICS_CONSISTENCY=0 CONSISTENCY_ONLY=0 "$PYTHON" -m pytest -q \
+    INCLUDE_DYNAMICS_CONSISTENCY=0 INCLUDE_VECTOR_ONLY=0 CONSISTENCY_ONLY=0 "$PYTHON" -m pytest -q \
     "${preflight[@]}" --basetemp "$test_tmp" -o "cache_dir=$DAILY_WORK/cache/pytest" \
     2>&1 | tee "$DAILY_WORK/logs/tests-$(date +%Y%m%d-%H%M%S).log"
 fi

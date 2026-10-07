@@ -46,8 +46,9 @@ INCLUDE_GUIDED_FORECAST_ONLY="${INCLUDE_GUIDED_FORECAST_ONLY:-0}"
 INCLUDE_DYNAMICS="${INCLUDE_DYNAMICS:-0}"
 INCLUDE_ZERO_DYNAMICS="${INCLUDE_ZERO_DYNAMICS:-1}"
 INCLUDE_DYNAMICS_CONSISTENCY="${INCLUDE_DYNAMICS_CONSISTENCY:-0}"
+INCLUDE_VECTOR_ONLY="${INCLUDE_VECTOR_ONLY:-0}"
 CONSISTENCY_ONLY="${CONSISTENCY_ONLY:-0}"
-for name in INCLUDE_DYNAMICS INCLUDE_ZERO_DYNAMICS INCLUDE_DYNAMICS_CONSISTENCY CONSISTENCY_ONLY; do
+for name in INCLUDE_DYNAMICS INCLUDE_ZERO_DYNAMICS INCLUDE_DYNAMICS_CONSISTENCY INCLUDE_VECTOR_ONLY CONSISTENCY_ONLY; do
   [[ "${!name}" == 0 || "${!name}" == 1 ]] || { echo "$name must be 0 or 1" >&2; exit 2; }
 done
 INCLUDE_TWO_STAGE="${INCLUDE_TWO_STAGE:-0}"
@@ -58,6 +59,7 @@ done
 [[ "$INCLUDE_TWO_STAGE" == 0 || "$INCLUDE_DYNAMICS" == 1 ]] || { echo 'INCLUDE_TWO_STAGE=1 requires INCLUDE_DYNAMICS=1' >&2; exit 2; }
 [[ "$INCLUDE_TWO_STAGE_BYPASS" == 0 || "$INCLUDE_TWO_STAGE" == 1 ]] || { echo 'INCLUDE_TWO_STAGE_BYPASS=1 requires INCLUDE_TWO_STAGE=1' >&2; exit 2; }
 [[ "$INCLUDE_DYNAMICS_CONSISTENCY" == 0 || "$INCLUDE_DYNAMICS" == 1 ]] || { echo 'INCLUDE_DYNAMICS_CONSISTENCY=1 requires INCLUDE_DYNAMICS=1' >&2; exit 2; }
+[[ "$INCLUDE_VECTOR_ONLY" == 0 || "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]] || { echo 'INCLUDE_VECTOR_ONLY=1 requires INCLUDE_DYNAMICS_CONSISTENCY=1' >&2; exit 2; }
 [[ "$CONSISTENCY_ONLY" == 0 || "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]] || { echo 'CONSISTENCY_ONLY=1 requires INCLUDE_DYNAMICS_CONSISTENCY=1' >&2; exit 2; }
 [[ "$CONSISTENCY_ONLY" == 0 || "$INCLUDE_TWO_STAGE_BYPASS" == 0 ]] || { echo 'CONSISTENCY_ONLY=1 requires INCLUDE_TWO_STAGE_BYPASS=0' >&2; exit 2; }
 GUIDE_INTERACTION_DEPTH="${GUIDE_INTERACTION_DEPTH:-1}"
@@ -85,6 +87,7 @@ if [[ "$step" == 24 ]]; then stride=1; horizon=5; window=1
 else stride=4; horizon=20; window=4; fi
 consistency=()
 consistency_latent=()
+vector_only=()
 consistency_evaluation=()
 consistency_settings=()
 if [[ "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]]; then
@@ -111,6 +114,10 @@ if requested:
 PY
   consistency=(--dynamics-auxiliary-architecture latent_rollout)
   consistency_latent=(--dynamics-latent-weight "${DYNAMICS_LATENT_WEIGHT:-0.1}")
+  if [[ "$INCLUDE_VECTOR_ONLY" == 1 ]]; then
+    vector_only=(--dynamics-supervision vector_only "${consistency_latent[@]}"
+      --dynamics-reconstruction-weight 0 --dynamics-statistical-weight 0 --dynamics-tendency-weight 0)
+  fi
   consistency_evaluation=(--dynamics-diagnostics)
   consistency_settings=(--setting consistency_rollout_steps "${AUX_ROLLOUT_STEPS:-${HORIZON_STEPS:-$horizon}}"
     --setting consistency_train_horizon "${HORIZON_STEPS:-$horizon}" --setting consistency_step_hours "$step")
@@ -194,6 +201,10 @@ if [[ "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]]; then
   if [[ "$INCLUDE_TWO_STAGE" == 1 ]]; then
     arms+=(guided_dynamics_two_stage_field guided_dynamics_two_stage_field_latent)
   fi
+  if [[ "$INCLUDE_VECTOR_ONLY" == 1 ]]; then
+    arms+=(latent_dynamics_vector_only guided_dynamics_vector_only)
+    if [[ "$INCLUDE_TWO_STAGE" == 1 ]]; then arms+=(guided_dynamics_two_stage_vector_only); fi
+  fi
 fi
 # Capture actual effective arguments, not just exported overrides. Fingerprints
 # cover prepared inputs and code; original daily ERA5 files are never hashed.
@@ -203,11 +214,12 @@ fi
   --setting evaluate_test "$EVALUATE_TEST" --setting make_plots "$MAKE_PLOTS" \
   --setting include_two_stage "$INCLUDE_TWO_STAGE" --setting include_two_stage_bypass "$INCLUDE_TWO_STAGE_BYPASS" \
   --setting include_dynamics_consistency "$INCLUDE_DYNAMICS_CONSISTENCY" --setting consistency_only "$CONSISTENCY_ONLY" \
+  --setting include_vector_only "$INCLUDE_VECTOR_ONLY" \
   "${consistency_settings[@]}" \
   --setting max_cases "${MAX_CASES:-0}" --setting origin_stride "${ORIGIN_STRIDE:-1}" \
   --setting device "$([[ "$GPU_GUARD" == 1 ]] && echo cuda:0 || echo "${DEVICE:-cpu}")" \
   -- setup "${setup[@]}" statistical "${statistical[@]}" guide "${guide_information[@]}" dynamics "${effective_dynamics[@]}" two_stage "${two_stage[@]}" \
-  consistency "${consistency[@]}" hybrid "${consistency_latent[@]}" consistency_evaluation "${consistency_evaluation[@]}"
+  consistency "${consistency[@]}" hybrid "${consistency_latent[@]}" vector_only "${vector_only[@]}" consistency_evaluation "${consistency_evaluation[@]}"
 printf 'Run: %s\nFits: %s\n' "$RUN" "$(( ${#models[@]} * ${#arms[@]} * ${#seeds[@]} ))"
 # Analysis is written to fresh staging paths. Publish the comparison JSON last
 # and the plot directory only after success, so interrupted analysis is resumable.
@@ -235,6 +247,7 @@ try:
         '.route-effects.csv': data.get('route_effects'),
         '.dynamics-effects.csv': data.get('dynamics_effects'),
         '.dynamics-consistency-effects.csv': data.get('dynamics_consistency_effects'),
+        '.dynamics-vector-effects.csv': data.get('dynamics_vector_effects'),
         '.guide-interaction-effects.csv': data.get('guide_interaction_effects'),
     }
     complete = path.with_suffix('.csv').is_file() and all(
@@ -272,7 +285,7 @@ test_reports=()
 evaluation_options() {
   evaluation=()
   case "$1" in
-    *_dynamics_field|*_dynamics_field_latent|*_dynamics_two_stage_field|*_dynamics_two_stage_field_latent)
+    *_dynamics_field|*_dynamics_field_latent|*_dynamics_two_stage_field|*_dynamics_two_stage_field_latent|*_dynamics_vector_only|*_dynamics_two_stage_vector_only)
       evaluation=("${consistency_evaluation[@]}") ;;
   esac
 }
@@ -295,16 +308,17 @@ for seed in "${seeds[@]}"; do
       latent_dynamics_zero) route=(--bridge latent "${statistical[@]}" "${dynamics[@]}" --dynamics-mode zero) ;;
       guided_dynamics_zero) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode zero) ;;
       guided_dynamics_two_stage) route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned "${two_stage[@]}") ;;
-      latent_dynamics_field|latent_dynamics_field_latent)
+      latent_dynamics_field|latent_dynamics_field_latent|latent_dynamics_vector_only)
         route=(--bridge latent "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned "${consistency[@]}") ;;
-      guided_dynamics_field|guided_dynamics_field_latent)
+      guided_dynamics_field|guided_dynamics_field_latent|guided_dynamics_vector_only)
         route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned "${consistency[@]}") ;;
-      guided_dynamics_two_stage_field|guided_dynamics_two_stage_field_latent)
+      guided_dynamics_two_stage_field|guided_dynamics_two_stage_field_latent|guided_dynamics_two_stage_vector_only)
         route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned "${two_stage[@]}" "${consistency[@]}") ;;
     esac
     case "$arm" in
       *_field) route+=(--dynamics-supervision field) ;;
       *_field_latent) route+=(--dynamics-supervision field_latent "${consistency_latent[@]}") ;;
+      *_vector_only) route+=("${vector_only[@]}") ;;
     esac
     if [[ ! -f "$prefix.manifest.json" ]]; then
       run_model climate_manifold.downstream.train --model "$family" "${setup[@]}" "${route[@]}" \
