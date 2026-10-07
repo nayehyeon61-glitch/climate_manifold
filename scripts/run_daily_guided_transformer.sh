@@ -70,7 +70,8 @@ if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
   preflight=(tests/test_guided_training.py tests/test_guided_comparison.py tests/test_daily_era5.py
     tests/test_runtime_guards.py)
   if [[ "$SUITE" == manifold_fusion ]]; then
-    preflight+=(tests/test_guided_fusion.py tests/test_fusion_runner.py tests/test_comparison_plots.py)
+    preflight+=(tests/test_guided_fusion.py tests/test_fusion_runner.py tests/test_comparison_plots.py
+      tests/test_full_manifold_matrix_runner.py)
     if [[ "${INCLUDE_DYNAMICS:-0}" == 1 ]]; then
       preflight+=(tests/test_dynamics_guide.py tests/test_dual_dynamics_training.py tests/test_dynamics_runner.py)
     fi
@@ -91,7 +92,7 @@ if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
   # Tests explicitly select their optional arms. Do not let this experiment's
   # exported activation flags silently change their default comparison matrix.
   CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 \
-    INCLUDE_DYNAMICS=0 INCLUDE_ZERO_DYNAMICS=1 INCLUDE_TWO_STAGE=0 \
+    INCLUDE_DYNAMICS=0 INCLUDE_LEGACY_DYNAMICS=1 INCLUDE_ZERO_DYNAMICS=1 INCLUDE_TWO_STAGE=0 \
     INCLUDE_TWO_STAGE_BYPASS=0 GUIDE_INTERACTION_DEPTH=1 \
     INCLUDE_DYNAMICS_CONSISTENCY=0 INCLUDE_VECTOR_ONLY=0 CONSISTENCY_ONLY=0 "$PYTHON" -m pytest -q \
     "${preflight[@]}" --basetemp "$test_tmp" -o "cache_dir=$DAILY_WORK/cache/pytest" \

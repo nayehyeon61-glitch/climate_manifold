@@ -4,6 +4,14 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
+**전체 공간·동역학 비교 — `feature/full-manifold-matrix`.**
+Raw, 공간만 Latent/Guided, Dynamics Latent, Dynamics Guided의 T1 OFF/ON을
+`field / vector_only / field_latent`로 비교합니다. 총 12조건 ×
+W2/KL-entropy/signed measure × 8예측 모델 × 3seed = **864회(batch 16)**입니다.
+Dynamics guide는 T1 OFF에도 유지되고, T2에서 Raw와 결합합니다.
+`scripts/run_full_manifold_matrix.sh`가 세 손실 suite의 준비·학습·test·그래프를 순차 실행합니다.
+[브랜치 받기부터 전체 실행하는 한 번의 명령](docs/full_manifold_matrix.md).
+
 **Dynamics 미래 장·hybrid·vector-only 선택 — `feature/dynamics-vector-only`.**
 선택형 `--dynamics-auxiliary-architecture latent_rollout`에서 동일한 보조 전이 `F_d`와
 `--dynamics-supervision field|field_latent|vector_only`로 감독을 비교합니다.

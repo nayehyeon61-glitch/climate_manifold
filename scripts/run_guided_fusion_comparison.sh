@@ -44,11 +44,12 @@ INCLUDE_GUIDED_FORECAST_ONLY="${INCLUDE_GUIDED_FORECAST_ONLY:-0}"
 [[ "$INCLUDE_GUIDED_FORECAST_ONLY" == 0 || "$INCLUDE_GUIDED_FORECAST_ONLY" == 1 ]] || { echo 'INCLUDE_GUIDED_FORECAST_ONLY must be 0 or 1' >&2; exit 2; }
 # Preserve the established four-arm experiment unless explicitly enabled.
 INCLUDE_DYNAMICS="${INCLUDE_DYNAMICS:-0}"
+INCLUDE_LEGACY_DYNAMICS="${INCLUDE_LEGACY_DYNAMICS:-1}"
 INCLUDE_ZERO_DYNAMICS="${INCLUDE_ZERO_DYNAMICS:-1}"
 INCLUDE_DYNAMICS_CONSISTENCY="${INCLUDE_DYNAMICS_CONSISTENCY:-0}"
 INCLUDE_VECTOR_ONLY="${INCLUDE_VECTOR_ONLY:-0}"
 CONSISTENCY_ONLY="${CONSISTENCY_ONLY:-0}"
-for name in INCLUDE_DYNAMICS INCLUDE_ZERO_DYNAMICS INCLUDE_DYNAMICS_CONSISTENCY INCLUDE_VECTOR_ONLY CONSISTENCY_ONLY; do
+for name in INCLUDE_DYNAMICS INCLUDE_LEGACY_DYNAMICS INCLUDE_ZERO_DYNAMICS INCLUDE_DYNAMICS_CONSISTENCY INCLUDE_VECTOR_ONLY CONSISTENCY_ONLY; do
   [[ "${!name}" == 0 || "${!name}" == 1 ]] || { echo "$name must be 0 or 1" >&2; exit 2; }
 done
 INCLUDE_TWO_STAGE="${INCLUDE_TWO_STAGE:-0}"
@@ -62,6 +63,9 @@ done
 [[ "$INCLUDE_VECTOR_ONLY" == 0 || "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]] || { echo 'INCLUDE_VECTOR_ONLY=1 requires INCLUDE_DYNAMICS_CONSISTENCY=1' >&2; exit 2; }
 [[ "$CONSISTENCY_ONLY" == 0 || "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]] || { echo 'CONSISTENCY_ONLY=1 requires INCLUDE_DYNAMICS_CONSISTENCY=1' >&2; exit 2; }
 [[ "$CONSISTENCY_ONLY" == 0 || "$INCLUDE_TWO_STAGE_BYPASS" == 0 ]] || { echo 'CONSISTENCY_ONLY=1 requires INCLUDE_TWO_STAGE_BYPASS=0' >&2; exit 2; }
+[[ "$INCLUDE_LEGACY_DYNAMICS" == 1 || "$INCLUDE_DYNAMICS" == 0 || "$INCLUDE_ZERO_DYNAMICS" == 0 ]] || { echo 'INCLUDE_LEGACY_DYNAMICS=0 requires INCLUDE_ZERO_DYNAMICS=0 when Dynamics is enabled' >&2; exit 2; }
+[[ "$INCLUDE_LEGACY_DYNAMICS" == 1 || "$INCLUDE_TWO_STAGE_BYPASS" == 0 ]] || { echo 'INCLUDE_TWO_STAGE_BYPASS=1 requires INCLUDE_LEGACY_DYNAMICS=1' >&2; exit 2; }
+[[ "$INCLUDE_LEGACY_DYNAMICS" == 1 || "$INCLUDE_DYNAMICS" == 0 || "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]] || { echo 'INCLUDE_LEGACY_DYNAMICS=0 requires INCLUDE_DYNAMICS_CONSISTENCY=1 when Dynamics is enabled' >&2; exit 2; }
 GUIDE_INTERACTION_DEPTH="${GUIDE_INTERACTION_DEPTH:-1}"
 [[ "$GUIDE_INTERACTION_DEPTH" =~ ^[1-9][0-9]*$ ]] || { echo 'GUIDE_INTERACTION_DEPTH must be a positive integer' >&2; exit 2; }
 DYNAMICS_ENCODER="${DYNAMICS_ENCODER:-conv_gru}"
@@ -187,13 +191,15 @@ fi
 arms=(raw latent guided)
 if [[ "$INCLUDE_ZERO_GUIDE" == 1 ]]; then arms+=(guided_zero); fi
 if [[ "$INCLUDE_GUIDED_FORECAST_ONLY" == 1 ]]; then arms+=(guided_forecast_only); fi
-if [[ "$INCLUDE_DYNAMICS" == 1 ]]; then
+effective_legacy_dynamics=0
+if [[ "$INCLUDE_DYNAMICS" == 1 && "$INCLUDE_LEGACY_DYNAMICS" == 1 && "$CONSISTENCY_ONLY" == 0 ]]; then
+  effective_legacy_dynamics=1
   arms+=(latent_dynamics guided_dynamics)
   if [[ "$INCLUDE_ZERO_DYNAMICS" == 1 ]]; then
     arms+=(latent_dynamics_zero guided_dynamics_zero)
   fi
+  if [[ "$INCLUDE_TWO_STAGE" == 1 ]]; then arms+=(guided_dynamics_two_stage); fi
 fi
-if [[ "$INCLUDE_TWO_STAGE" == 1 ]]; then arms+=(guided_dynamics_two_stage); fi
 if [[ "$CONSISTENCY_ONLY" == 1 ]]; then arms=(); fi
 if [[ "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]]; then
   arms+=(latent_dynamics_field latent_dynamics_field_latent
@@ -215,6 +221,7 @@ fi
   --setting include_two_stage "$INCLUDE_TWO_STAGE" --setting include_two_stage_bypass "$INCLUDE_TWO_STAGE_BYPASS" \
   --setting include_dynamics_consistency "$INCLUDE_DYNAMICS_CONSISTENCY" --setting consistency_only "$CONSISTENCY_ONLY" \
   --setting include_vector_only "$INCLUDE_VECTOR_ONLY" \
+  --setting include_legacy_dynamics "$effective_legacy_dynamics" \
   "${consistency_settings[@]}" \
   --setting max_cases "${MAX_CASES:-0}" --setting origin_stride "${ORIGIN_STRIDE:-1}" \
   --setting device "$([[ "$GPU_GUARD" == 1 ]] && echo cuda:0 || echo "${DEVICE:-cpu}")" \
