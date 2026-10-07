@@ -38,6 +38,7 @@ def _identity(report):
                 dynamics_mode=cfg.get('dynamics_mode', 'learned') if cfg.get('dynamics_encoder', 'off') != 'off' else None,
                 dynamics_contract=report.get('dynamics_contract'),
                 dynamics_auxiliary_config=report.get('dynamics_auxiliary_config'),
+                dynamics_auxiliary_architecture=cfg.get('dynamics_auxiliary_architecture', 'direct'),
                 guide_interaction=cfg.get('guide_interaction', 'off'),
                 guide_interaction_depth=cfg.get('guide_interaction_depth', 1),
                 guide_interaction_contract=report.get('guide_interaction_contract'),

@@ -77,10 +77,12 @@ elif args and args[0] == '-':
     # production experiment. Optional knobs must be explicit test settings.
     for name in ('DYNAMICS_ENCODER', 'DYNAMICS_STATISTICAL_LOSS', 'DYNAMICS_HIDDEN_DIM',
                  'DYNAMICS_CHANNELS', 'DYNAMICS_RECONSTRUCTION_WEIGHT',
-                 'DYNAMICS_STATISTICAL_WEIGHT', 'DYNAMICS_TENDENCY_WEIGHT'):
+                 'DYNAMICS_STATISTICAL_WEIGHT', 'DYNAMICS_TENDENCY_WEIGHT',
+                 'DYNAMICS_LATENT_WEIGHT', 'AUX_ROLLOUT_STEPS'):
         env.pop(name, None)
     env.update(INCLUDE_DYNAMICS='0', INCLUDE_ZERO_DYNAMICS='1', INCLUDE_TWO_STAGE='0',
-               INCLUDE_TWO_STAGE_BYPASS='0', GUIDE_INTERACTION_DEPTH='1')
+               INCLUDE_TWO_STAGE_BYPASS='0', GUIDE_INTERACTION_DEPTH='1',
+               INCLUDE_DYNAMICS_CONSISTENCY='0', CONSISTENCY_ONLY='0')
     return env, log
 
 

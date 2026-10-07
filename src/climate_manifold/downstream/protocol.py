@@ -79,6 +79,21 @@ def dynamics_identity(row):
     return (encoder, cfg.get('dynamics_mode', 'learned')) if encoder != 'off' else ('off', None)
 
 
+def dynamics_supervision_identity(row):
+    """Separate auxiliary architectures/objectives without changing encoder identity.
+
+    Missing metadata is the historical direct future-field head. This identity is
+    for matching experiments; latent errors never enter physical forecast ranks.
+    """
+    cfg = row.get('config', row)
+    if dynamics_identity(row)[0] == 'off':
+        return ('off', None, None)
+    auxiliary = row.get('dynamics_auxiliary_config') or {}
+    architecture = cfg.get('dynamics_auxiliary_architecture', 'direct')
+    return (architecture, auxiliary.get('supervision', 'field'),
+            auxiliary.get('latent_weight', 0.))
+
+
 def guide_interaction_contract(config):
     """Describe the independent guide-only first attention stage."""
     cfg = vars(config) if not isinstance(config, dict) else config
@@ -107,6 +122,11 @@ def validate_experiment(config, requested):
     if requested not in ('primary', 'auxiliary'):
         raise ValueError('Experiment must be primary or auxiliary')
     cfg = vars(config) if not isinstance(config, dict) else config
+    auxiliary_architecture = cfg.get('dynamics_auxiliary_architecture', 'direct')
+    if auxiliary_architecture not in ('direct', 'latent_rollout'):
+        raise ValueError('dynamics_auxiliary_architecture must be direct or latent_rollout')
+    if auxiliary_architecture != 'direct' and cfg.get('dynamics_encoder', 'off') == 'off':
+        raise ValueError('dynamics_auxiliary_architecture=latent_rollout requires dynamics encoder')
     interaction = cfg.get('guide_interaction', 'off')
     if interaction not in ('off', 'transformer'):
         raise ValueError('guide_interaction must be off or transformer')

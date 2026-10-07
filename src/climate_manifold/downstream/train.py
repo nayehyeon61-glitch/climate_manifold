@@ -133,11 +133,13 @@ class RawFieldContract:
 
 class CausalWindows(TemporalWindowDataset):
     def __init__(self,*args,information=None,information_targets=False,
-                 reconstruction_constraints=False,statistical_flow_targets=False,**kwargs):
+                 reconstruction_constraints=False,statistical_flow_targets=False,
+                 dynamics_target_sequence=False,**kwargs):
         super().__init__(*args,**kwargs);self.information=information
         self.information_targets=information_targets
         self.reconstruction_constraints=reconstruction_constraints
         self.statistical_flow_targets=statistical_flow_targets
+        self.dynamics_target_sequence=bool(dynamics_target_sequence)
         if statistical_flow_targets and (not reconstruction_constraints or information is None):
             raise ValueError('Statistical flow targets require reconstruction constraints and information')
         if reconstruction_constraints:
@@ -148,6 +150,15 @@ class CausalWindows(TemporalWindowDataset):
 
     def __getitem__(self,index):
         row=super().__getitem__(index)
+        if self.dynamics_target_sequence:
+            # Label-only dense span supports a same-length strided teacher
+            # window ending at every future archive step. It is never an
+            # argument to ForecastPipeline.forward or the auxiliary rollout.
+            start=self.starts[index]
+            stop=start+self.config.history_span_steps+self.config.horizon_steps
+            raw=self.states[start:stop]
+            row['dynamics_target_sequence']=torch.as_tensor(
+                (raw-self.mean)/self.scale,dtype=torch.float32)
         if self.information is not None:
             origin=self.starts[index]+self.config.history_span_steps-1
             row['information']=torch.from_numpy(self.information[origin].copy())
@@ -172,13 +183,15 @@ class CausalWindows(TemporalWindowDataset):
 
 
 def windows(data,config,split,stride=1,max_windows=0,*,information_targets=False,
-            reconstruction_constraints=False,statistical_flow_targets=False):
+            reconstruction_constraints=False,statistical_flow_targets=False,
+            dynamics_target_sequence=False):
     starts=data['split'][split][::stride]
     if max_windows:starts=starts[:max_windows]
     if not len(starts):raise ValueError('Forecast training/evaluation requires nonempty windows')
     return CausalWindows(data['states'],data['times'],config,starts,data['mean'],data['scale'],data['schema'],
         information=data['information'],information_targets=information_targets,
-        reconstruction_constraints=reconstruction_constraints,statistical_flow_targets=statistical_flow_targets)
+        reconstruction_constraints=reconstruction_constraints,statistical_flow_targets=statistical_flow_targets,
+        dynamics_target_sequence=dynamics_target_sequence)
 
 
 def new_a(metadata, sealed=True, raw=False):
@@ -495,7 +508,8 @@ def train(args):
         dynamics_encoder=getattr(args,'dynamics_encoder','off'),
         dynamics_mode=getattr(args,'dynamics_mode','learned'),
         dynamics_hidden_dim=getattr(args,'dynamics_hidden_dim',32),
-        dynamics_channels=getattr(args,'dynamics_channels',8))
+        dynamics_channels=getattr(args,'dynamics_channels',8),
+        dynamics_auxiliary_architecture=getattr(args,'dynamics_auxiliary_architecture','direct'))
     experiment=validate_experiment(config,args.experiment)
     if args.experiment == 'primary' and p['mode'] == 'enriched' and not config.condition_information:
         raise ValueError('Primary enriched comparisons require equal origin information access; use auxiliary for this ablation')
@@ -520,7 +534,8 @@ def train(args):
     separate_decoder=constraint_decoder=='separate_surface_and_information'
     target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
     loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info,
-        reconstruction_constraints=split_constraints,statistical_flow_targets=flow_config is not None or conditional_config is not None),batch_size=args.batch_size,
+        reconstruction_constraints=split_constraints,statistical_flow_targets=flow_config is not None or conditional_config is not None,
+        dynamics_target_sequence=dynamics_config is not None and dynamics_config.get('supervision')=='field_latent'),batch_size=args.batch_size,
         shuffle=(name=='train'),generator=torch.Generator().manual_seed(args.seed)) for name in ('train','calibration')]
     # A and AE construction consume different RNG amounts. Reset so equal-size
     # latent predictors start with identical weights for the same forecast seed.
@@ -710,6 +725,14 @@ def train(args):
             'same E_d(history) -> independent lead-conditioned temporal head/decoder -> future surface labels; '
             'per-lead normalized field reconstruction and selectable spatial statistics, optional physical-time tendency; '
             'no future encoder input, no predictor/forecast-decoder gradient from dynamics auxiliary objective')
+    if config.dynamics_auxiliary_architecture == 'latent_rollout':
+        payload['implementation']='dynamics_rollout_v1+'+payload['implementation']
+        payload['objective_semantics']['dynamics']=(
+            'observed history -> shared E_d -> autonomous auxiliary latent transition F_d '
+            'at every archive step -> shared D_d -> future surface fields; '
+            'field reconstruction and spatial statistics retained in both supervision modes; '
+            'field_latent additionally matches stop-gradient E_d of same-length strided future truth windows; '
+            'future truth is supervision only, no teacher forcing; F_d is separate from the downstream predictor M')
     interaction = guide_interaction_contract(config)
     if interaction is not None:
         payload['guide_interaction_contract']=interaction
@@ -810,6 +833,12 @@ def parser():
                    help='zero blocks temporal content only in the forecast path; auxiliary dynamics training is retained')
     p.add_argument('--dynamics-hidden-dim',type=int,default=32)
     p.add_argument('--dynamics-channels',type=int,default=8)
+    p.add_argument('--dynamics-auxiliary-architecture',choices=['direct','latent_rollout'],default='direct',
+                   help='direct preserves the lead-conditioned field head; latent_rollout adds a shared autonomous F_d and field decoder')
+    p.add_argument('--dynamics-supervision',choices=['field','field_latent'],default='field',
+                   help='Compare field losses against the same losses plus future E_d latent consistency (latent_rollout only)')
+    p.add_argument('--dynamics-latent-weight',type=float,default=None,
+                   help='Positive auxiliary latent consistency coefficient; defaults to 0.1 for field_latent, absent for field/direct')
     p.add_argument('--dynamics-statistical-loss',choices=STATISTICAL_LOSSES,default=None,
                    help='Future dynamics field statistics; default inherits observed statistics, otherwise signed_measure')
     p.add_argument('--dynamics-reconstruction-weight',type=float,default=.1)

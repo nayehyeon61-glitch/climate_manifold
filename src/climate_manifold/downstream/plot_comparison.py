@@ -10,7 +10,7 @@ import re
 import numpy as np
 
 from .compare import _arm, _fusion
-from .protocol import dynamics_identity, guide_interaction_identity
+from .protocol import dynamics_identity, guide_interaction_identity, dynamics_supervision_identity
 
 
 MODEL_ORDER = ('transformer', 'mlp', 'neural_ode', 'climode', 'convlstm', 'simvp', 'fourcastnet', 'climax')
@@ -22,6 +22,7 @@ METRIC_LABELS = {
     'guide_gain_percent': 'RMSE reduction vs Zero guide (%)',
     'constraint_gain_percent': 'RMSE reduction vs No observed constraints (%)',
     'dynamics_gain_percent': 'RMSE reduction vs Dynamics off (%)',
+    'dynamics_consistency_gain_percent': 'RMSE reduction vs Future-field supervision (%)',
     'dynamics_input_gain_percent': 'RMSE reduction vs Zero dynamics (%)',
     'two_stage_gain_percent': 'RMSE reduction vs Trained single-stage (%)',
     'guide_interaction_input_gain_percent': 'RMSE reduction vs Same-checkpoint bypass (%)',
@@ -41,6 +42,9 @@ def _label(row):
     encoder, dynamics_mode = dynamics_identity(row)
     if encoder != 'off':
         route += ' / '+('Zero dynamics' if dynamics_mode == 'zero' else 'Dynamics')+' ('+encoder+')'
+    architecture, supervision, weight = dynamics_supervision_identity(row)
+    if architecture == 'latent_rollout':
+        route += ' / Latent rollout / '+('Field + latent ('+format(weight, '.3g')+')' if supervision == 'field_latent' else 'Field only')
     interaction, depth, effective = guide_interaction_identity(row)
     if interaction != 'off':
         route += ' / Two-stage (depth '+str(depth)+')'
@@ -69,13 +73,17 @@ def _physical_identity(row, rows):
     missing_interaction = ('guide_interaction' not in row and any(
         candidate['model'] == row['model'] and candidate['bridge'] == row['bridge']
         and guide_interaction_identity(candidate)[0] != 'off' for candidate in rows))
-    if not missing_guide and not missing_dynamics and not missing_interaction:
+    missing_supervision = ('dynamics_auxiliary_architecture' not in row and any(
+        candidate['model'] == row['model'] and candidate['bridge'] == row['bridge']
+        and dynamics_supervision_identity(candidate)[0] == 'latent_rollout' for candidate in rows))
+    if not missing_guide and not missing_dynamics and not missing_interaction and not missing_supervision:
         return _identity(row)
     fields = ('model', 'bridge', 'seed', 'representation', 'training_mode', 'regularization',
               'constraint_pair', 'constraint_decoder', 'statistical_loss',
               'statistical_loss_config', 'statistical_flow_config', 'conditional_flow_config',
               'initialization', 'implementation', 'representation_sha256',
               'dynamics_encoder', 'dynamics_mode', 'dynamics_contract', 'dynamics_auxiliary_config',
+              'dynamics_auxiliary_architecture',
               'guide_interaction', 'guide_interaction_depth', 'guide_interaction_contract',
               'guide_interaction_evaluation')
     matches = [candidate for candidate in rows
@@ -183,6 +191,26 @@ def summarize_comparison(data):
             if row.get('baseline_dynamics_mode') != 'zero' or row.get('candidate_dynamics_mode') != 'learned':
                 raise ValueError('Dynamics input gain must compare learned dynamics against zero dynamics')
             add_effect(row, 'dynamics_input_gain_percent', 'rmse_skill_vs_baseline')
+    for row in data.get('dynamics_consistency_effects', []):
+        if (row.get('interpretation') != 'add_dynamics_latent_consistency'
+                or row.get('auxiliary_architecture') != 'latent_rollout'
+                or row.get('baseline_supervision') != 'field'
+                or row.get('candidate_supervision') != 'field_latent'
+                or row.get('scored_prediction') != 'downstream_M_physical_forecast'
+                or row.get('baseline_parameters') != row.get('candidate_parameters')):
+            raise ValueError('Dynamics consistency gain requires matched field versus field+latent supervision')
+        candidate_key = effect_identity(row, 'candidate_arm')
+        baseline_key = effect_identity(row, 'control')
+        candidate = next(r for r in data['rows'] if _identity(r) == candidate_key and r['seed'] == row['seed'])
+        baseline = next(r for r in data['rows'] if _identity(r) == baseline_key and r['seed'] == row['seed'])
+        if (dynamics_supervision_identity(baseline) != ('latent_rollout', 'field', 0.)
+                or dynamics_supervision_identity(candidate) != (
+                    'latent_rollout', 'field_latent', row.get('candidate_latent_weight'))
+                or dynamics_identity(candidate) != dynamics_identity(baseline)
+                or guide_interaction_identity(candidate) != guide_interaction_identity(baseline)
+                or candidate['bridge'] != baseline['bridge']):
+            raise ValueError('Dynamics consistency effect labels disagree with compared experiments')
+        add_effect(row, 'dynamics_consistency_gain_percent', 'rmse_skill_vs_baseline')
     for row in data.get('guide_interaction_effects', []):
         if row.get('interpretation') == 'add_guide_interaction':
             if (row.get('baseline_guide_interaction') != 'off'

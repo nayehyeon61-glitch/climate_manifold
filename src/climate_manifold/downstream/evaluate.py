@@ -14,11 +14,16 @@ from .constraint_protocol import constraint_decoder_from_payload
 from .statistical_objective import statistical_config_from_payload
 from .statistical_flow import statistical_flow_config_from_payload
 from .conditional_flow import conditional_flow_config_from_payload
+from .dynamics_diagnostics import (dynamics_evaluation_windows, SignedFieldDiagnostics,
+                                   DynamicsLatentDiagnostics)
+from .dynamics_objective import future_dynamics_targets
+from .dynamics_rollout import lead_steps
 
 
 def evaluate(checkpoint,archive,output,*,information=None,split='validation',max_cases=0,
              origin_stride=1,device='cpu',forecast_output=None,
-             guide_interaction_override='checkpoint'):
+             guide_interaction_override='checkpoint',dynamics_diagnostics=False,
+             dynamics_rollout_steps=None):
     output=Path(output)
     if split not in ('calibration','validation','test'):raise ValueError('Use a held-out downstream split')
     if max_cases<0 or origin_stride<1:raise ValueError('Invalid evaluation counts')
@@ -26,6 +31,10 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
     if forecast_output and (Path(forecast_output).suffix!='.npz' or Path(forecast_output).resolve()==output.resolve()):
         raise ValueError('Forecast path must be a distinct .npz file')
     model,p=load_predictor(checkpoint,device)
+    if dynamics_rollout_steps is not None and not dynamics_diagnostics:
+        raise ValueError('--dynamics-rollout-steps requires --dynamics-diagnostics')
+    if dynamics_diagnostics and getattr(model.config, 'dynamics_auxiliary_architecture', 'direct') != 'latent_rollout':
+        raise ValueError('Dynamics diagnostics require a latent_rollout auxiliary checkpoint')
     if guide_interaction_override not in ('checkpoint', 'off'):
         raise ValueError('Guide interaction override must be checkpoint or off; an untrained module cannot be enabled at evaluation')
     interaction_evaluation = None
@@ -50,12 +59,38 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
         'limits': 'Latent tendencies start from E_s origin, not the mixed predictor input; do not rank different encoders by these coordinate errors.',
     } if p.get('dynamics_contract') is not None and model.config.bridge == 'latent' else None)
     a=p['a_metadata'];data=data_contract(archive,information,a['mode'],model.a_config,a)
-    ds=windows(data,model.a_config,split,origin_stride,max_cases)
+    dynamics_evaluation_contract = None
+    dynamics_origin_selection = None
+    if dynamics_diagnostics:
+        # The A data contract can reserve 120 h while M/F_d were trained for a
+        # shorter horizon. Preserve A for split validation, but use actual saved
+        # forecast leads for the trained-horizon minimum and audit default.
+        trained_steps = int(lead_steps(torch.as_tensor(p['lead_hours']),model.a_config.step_hours)[-1])
+        rollout_steps = trained_steps if dynamics_rollout_steps is None else dynamics_rollout_steps
+        ds, dynamics_origin_selection = dynamics_evaluation_windows(
+            data, model.a_config, split, rollout_steps, origin_stride, max_cases,
+            trained_horizon_steps=trained_steps)
+        dynamics_evaluation_contract = {
+            'version': 'climate_manifold.dynamics_evaluation.v1',
+            'rollout_steps': rollout_steps, 'step_hours': float(model.a_config.step_hours),
+            'target_semantics': 'same_length_strided_truth_window',
+            'main_forecast_horizon_steps': trained_steps,
+        }
+        auxiliary_leads = torch.arange(1, rollout_steps+1, device=device, dtype=torch.float32)*model.a_config.step_hours
+        auxiliary_hours = auxiliary_leads.cpu().tolist()
+        auxiliary_metrics = ForecastMetrics(a['schema'], a['mean'], a['scale'], auxiliary_hours)
+        auxiliary_signed = SignedFieldDiagnostics(a['schema'], auxiliary_hours)
+        main_signed = SignedFieldDiagnostics(a['schema'], p['lead_hours'])
+        auxiliary_latent = DynamicsLatentDiagnostics(auxiliary_hours)
+    else:
+        ds=windows(data,model.a_config,split,origin_stride,max_cases)
     leads=torch.tensor(p['lead_hours'],device=device,dtype=torch.float32)
     metrics=ForecastMetrics(a['schema'],a['mean'],a['scale'],p['lead_hours'])
     latent_metrics=LatentDiagnostics(a['schema'],p['lead_hours']) if model.config.bridge=='latent' else None
     diagnostic_failures=[];inference_seconds=0.
     origins=[];successful=[];failures=[];saved=False
+    auxiliary_successful=[];auxiliary_failures=[];auxiliary_seconds=0.
+    main_cuda_peak=0;auxiliary_cuda_peak=0
     if str(device).startswith('cuda'):
         torch.cuda.synchronize();torch.cuda.reset_peak_memory_stats()
     start=time.perf_counter()
@@ -65,17 +100,50 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             origin_ns=int(batch['origin_time_ns'][0].cpu())
             label=str(np.datetime64(origin_ns,'ns'))+'Z';origins.append(label)
             try:
-                if str(device).startswith('cuda'):torch.cuda.synchronize()
+                if str(device).startswith('cuda'):
+                    torch.cuda.synchronize()
+                    if dynamics_diagnostics:torch.cuda.reset_peak_memory_stats()
                 forecast_start=time.perf_counter()
                 prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads)
             except FloatingPointError as exc:
                 failures.append({'origin':label,'error':str(exc)});continue
             finally:
-                if str(device).startswith('cuda'):torch.cuda.synchronize()
+                if str(device).startswith('cuda'):
+                    torch.cuda.synchronize()
+                    if dynamics_diagnostics:main_cuda_peak=max(main_cuda_peak,torch.cuda.max_memory_allocated())
                 inference_seconds+=time.perf_counter()-forecast_start
             metrics.update(prediction['mean'],batch['targets'][:,:len(leads)],batch['origin'],
                            prediction['std'],prediction['reconstructed_origin'])
             successful.append(label)
+            auxiliary_prediction=auxiliary_target_latent=None
+            if dynamics_diagnostics:
+                # M is evaluated first with its checkpoint leads. This independent
+                # F_d audit starts from the same observed E_d features; no teacher
+                # values enter its recurrence or the already-completed M forecast.
+                main_signed.update(prediction['mean'],batch['targets'][:,:len(leads)])
+                if str(device).startswith('cuda'):
+                    torch.cuda.synchronize();torch.cuda.reset_peak_memory_stats()
+                auxiliary_start=time.perf_counter()
+                try:
+                    auxiliary_prediction=model.dynamics_auxiliary_head.rollout(
+                        prediction['dynamics_history_latent'],auxiliary_leads)
+                    auxiliary_target_latent=future_dynamics_targets(model,batch,auxiliary_leads)
+                    if not all(torch.isfinite(value).all() for value in (
+                            auxiliary_prediction['fields'],auxiliary_prediction['latent'],auxiliary_target_latent)):
+                        raise FloatingPointError('Nonfinite auxiliary dynamics rollout or latent targets')
+                    auxiliary_latent.update(auxiliary_prediction['latent'],auxiliary_target_latent,
+                                            prediction['dynamics_history_latent'][:,-1])
+                    auxiliary_signed.update(auxiliary_prediction['fields'],batch['targets'][:,:rollout_steps])
+                    auxiliary_metrics.update(auxiliary_prediction['fields'],batch['targets'][:,:rollout_steps],batch['origin'])
+                    auxiliary_successful.append(label)
+                except FloatingPointError as exc:
+                    auxiliary_failures.append({'origin':label,'error':str(exc)})
+                    auxiliary_prediction=auxiliary_target_latent=None
+                finally:
+                    if str(device).startswith('cuda'):
+                        torch.cuda.synchronize()
+                        auxiliary_cuda_peak=max(auxiliary_cuda_peak,torch.cuda.max_memory_allocated())
+                    auxiliary_seconds+=time.perf_counter()-auxiliary_start
             target_q=None
             if latent_metrics is not None:
                 # Post-forecast audit only: never pass future fields/information to the predictor.
@@ -120,6 +188,14 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                 if interaction_evaluation is not None:
                     values['guide_interaction_contract_json'] = json.dumps(p['guide_interaction_contract'], sort_keys=True)
                     values['guide_interaction_evaluation_json'] = json.dumps(interaction_evaluation, sort_keys=True)
+                if dynamics_diagnostics:
+                    values['dynamics_evaluation_contract_json']=json.dumps(dynamics_evaluation_contract,sort_keys=True)
+                    if auxiliary_prediction is not None:
+                        values['auxiliary_dynamics_predicted_latent']=auxiliary_prediction['latent'][0].cpu().numpy()
+                        values['auxiliary_dynamics_teacher_latent']=auxiliary_target_latent[0].cpu().numpy()
+                        values['auxiliary_dynamics_surface_fields']=auxiliary_prediction['fields'][0].cpu().numpy()*np.asarray(a['scale'])+np.asarray(a['mean'])
+                        values['auxiliary_dynamics_surface_truth']=batch['targets'][0,:rollout_steps].cpu().numpy()*np.asarray(a['scale'])+np.asarray(a['mean'])
+                        values['auxiliary_dynamics_lead_hours']=np.asarray(auxiliary_hours)
                 np.savez_compressed(path,**values);saved=True
     if str(device).startswith('cuda'):torch.cuda.synchronize()
     report={'format':'climate_manifold.downstream_evaluation.v1','checkpoint_sha256':digest(checkpoint),
@@ -163,9 +239,33 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'latent_diagnostic_failures':diagnostic_failures,
             'trainable_parameters':p['trainable_parameters'],'total_parameters':p['total_parameters'],
             'training_seconds':p['training_seconds'],'seed':p['options']['seed'],
-            'cuda_peak_memory_bytes':torch.cuda.max_memory_allocated() if str(device).startswith('cuda') else None,
+            'cuda_peak_memory_bytes':(main_cuda_peak if dynamics_diagnostics else torch.cuda.max_memory_allocated()) if str(device).startswith('cuda') else None,
             'forecast_output_written':saved,
             'limits':'Scores are conditional on finite forecasts; failed origins are explicit. Gaussian uncertainty is marginal, not a coherent stochastic trajectory ensemble.'}
+    if dynamics_diagnostics:
+        report['dynamics_evaluation_contract']=dynamics_evaluation_contract
+        report['dynamics_origin_selection']=dynamics_origin_selection
+        report['main_forecast_signed_diagnostics']=main_signed.result()
+        report['dynamics_auxiliary_evaluation']={
+            'path':'E_d_observed_history_to_autoregressive_F_d_to_D_d',
+            'downstream_forecast_model_used':False,'teacher_forcing':False,
+            'lead_hours':auxiliary_hours,'origin_times':successful,
+            'successful_origin_times':auxiliary_successful,
+            'attempted_case_count':len(successful),'successful_case_count':len(auxiliary_successful),
+            'finite_auxiliary_fraction':len(auxiliary_successful)/len(successful) if successful else None,
+            'auxiliary_failed_origins':auxiliary_failures,
+            'scores':auxiliary_metrics.result(),'signed_diagnostics':auxiliary_signed.result(),
+            'latent_diagnostics':auxiliary_latent.result(),
+            'diagnostic_seconds':auxiliary_seconds,
+            'cuda_peak_memory_bytes':auxiliary_cuda_peak if str(device).startswith('cuda') else None,
+            'runtime_scope':'auxiliary_rollout_plus_detached_truth_encoding_and_auxiliary_metric_accumulation_excludes_main_M_forecast',
+            'memory_scope':'absolute_allocated_peak_during_auxiliary_audit_including_resident_model_batch_and_main_outputs',
+            'limits':'This is the independent auxiliary F_d+D_d, not an autoregressive extension of downstream M. '
+                     'Scores are conditional on finite auxiliary forecasts; failure coverage is separate from M. '
+                     'Do not compare latent RMSE as a ranking of different trained encoders.',
+        }
+        report['inference_scope']='checkpoint_downstream_M_forecast_only_excludes_auxiliary_dynamics_audit'
+        report['cuda_peak_memory_scope']='absolute_allocated_peak_during_main_forecast_including_resident_model_and_batch'
     if interaction_evaluation is not None:
         report['guide_interaction_contract'] = p['guide_interaction_contract']
         report['guide_interaction_evaluation'] = interaction_evaluation
@@ -182,6 +282,10 @@ def main(argv=None):
     p.add_argument('--split',choices=['calibration','validation','test'],default='validation')
     p.add_argument('--max-cases',type=int,default=0);p.add_argument('--origin-stride',type=int,default=1)
     p.add_argument('--device',default='cpu')
+    p.add_argument('--dynamics-diagnostics',action='store_true',
+                   help='Audit the independent latent-rollout dynamics auxiliary head after the main forecast')
+    p.add_argument('--dynamics-rollout-steps',type=int,
+                   help='Optional auxiliary rollout horizon >= checkpoint horizon; restrict origins to original split label coverage')
     p.add_argument('--guide-interaction-override',choices=['checkpoint','off'],default='checkpoint',
                    help='checkpoint keeps the trained architecture; off bypasses T1 of a trained two-stage checkpoint as an inference ablation')
     r=evaluate(**vars(p.parse_args(argv)));print(json.dumps(r['scores']['aggregate']));return 0

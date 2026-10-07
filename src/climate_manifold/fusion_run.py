@@ -53,7 +53,8 @@ def source_identity(root):
         'run_guided_fusion_comparison.sh', 'run_daily_manifold_fusion.sh',
         'run_daily_guided_transformer.sh')]
     paths += [root/'pyproject.toml']
-    for name in ('run_dynamics_manifold_comparison.sh', 'run_two_stage_manifold_comparison.sh'):
+    for name in ('run_dynamics_manifold_comparison.sh', 'run_two_stage_manifold_comparison.sh',
+                 'run_dynamics_consistency_comparison.sh'):
         optional_runner = root/'scripts'/name
         if optional_runner.is_file():
             paths.append(optional_runner)
@@ -88,6 +89,20 @@ def verify_completed_fits(run, settings):
                     result = json.loads(report.read_text())
                     if result.get('checkpoint_sha256') != checksum:
                         raise ValueError(f'Report/checkpoint mismatch: {report}')
+                    if arm.endswith(('_dynamics_field', '_dynamics_field_latent',
+                                     '_dynamics_two_stage_field', '_dynamics_two_stage_field_latent')):
+                        expected_diagnostics = {
+                            'version': 'climate_manifold.dynamics_evaluation.v1',
+                            'rollout_steps': int(settings['consistency_rollout_steps']),
+                            'step_hours': float(settings['consistency_step_hours']),
+                            'target_semantics': 'same_length_strided_truth_window',
+                            'main_forecast_horizon_steps': int(settings['consistency_train_horizon']),
+                        }
+                        supervision = 'field_latent' if arm.endswith('_field_latent') else 'field'
+                        if (result.get('dynamics_evaluation_contract') != expected_diagnostics
+                                or result.get('config', {}).get('dynamics_auxiliary_architecture') != 'latent_rollout'
+                                or result.get('dynamics_auxiliary_config', {}).get('supervision') != supervision):
+                            raise ValueError(f'Dynamics consistency report/configuration mismatch: {report}')
                     if arm == 'guided_dynamics_two_stage':
                         bypassed = report in bypass_reports
                         expected = {'requested': 'off' if bypassed else 'checkpoint',

@@ -4,6 +4,15 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
+**Dynamics 미래 장 vs 미래 장+latent 일관성 — `feature/dynamics-latent-consistency`.**
+선택형 `--dynamics-auxiliary-architecture latent_rollout`에서 동일한 보조 전이 `F_d`와
+Decoder를 사용하고 `--dynamics-supervision field|field_latent`로 감독을 비교합니다.
+미래 latent 정답은 동일 `E_d`의 미래 정답 창을 stop-gradient로 encode하며 예측 입력에
+들어가지 않습니다. 기존 `direct` 보조 Decoder와 일반 예측 모델 `M`은 유지합니다.
+새 runner는 Latent/Guided의 4개 조건 × 8개 M × 3개 seed = 96회(batch 16), 이중
+Transformer를 추가하면 144회입니다. 미래 장·통계 손실은 두 조건 모두 유지합니다.
+[구조·선택 옵션·전체 학습/test/진단/그래프 명령](docs/dynamics_latent_consistency.md).
+
 **선택형 이중 Transformer — `feature/two-stage-guide-fusion`.**
 `T1(E_s, E_d)`로 두 guide를 먼저 상호 작용시킨 뒤 기존 `T2(Raw, guides) → M`에
 연결할 수 있습니다. `--guide-interaction off|transformer`로 선택하며 기존 경로의 기본은

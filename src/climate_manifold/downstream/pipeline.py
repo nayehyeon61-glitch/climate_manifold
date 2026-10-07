@@ -58,6 +58,9 @@ class PredictorConfig:
     dynamics_mode: str = 'learned'
     dynamics_hidden_dim: int = 32
     dynamics_channels: int = 8
+    # Legacy direct lead-conditioned field decoder or explicit E_d-latent
+    # rollout plus a shared field decoder. Supervision is a loss-only option.
+    dynamics_auxiliary_architecture: str = 'direct'
     # T1 optionally mixes spatial/dynamics guides before the existing T2 raw
     # fusion. Off retains the exact one-stage module/checkpoint structure.
     guide_interaction: str = 'off'
@@ -76,6 +79,10 @@ class PredictorConfig:
             raise ValueError('Guide interaction requires guided fusion and an enabled dynamics encoder')
         if self.dynamics_encoder not in ('off', 'conv_gru', 'temporal_conv'):
             raise ValueError('Dynamics encoder must be off, conv_gru or temporal_conv')
+        if self.dynamics_auxiliary_architecture not in ('direct', 'latent_rollout'):
+            raise ValueError('Dynamics auxiliary architecture must be direct or latent_rollout')
+        if self.dynamics_auxiliary_architecture != 'direct' and self.dynamics_encoder == 'off':
+            raise ValueError('Latent rollout auxiliary architecture requires an enabled dynamics encoder')
         if self.dynamics_mode not in ('learned', 'zero'):
             raise ValueError('Dynamics mode must be learned or zero')
         if any(isinstance(v, bool) or not isinstance(v, int) or v < 1
@@ -354,9 +361,15 @@ class ForecastPipeline(nn.Module):
                 periodic_lon=periodic)
             if config.bridge == 'latent':
                 self.dynamics_adapter = LatentDynamicsAdapter(selected.config.latent_grid, dynamics_grid)
-            self.dynamics_auxiliary_head = DynamicsAuxiliaryHead(
-                dynamics_grid, selected.config.grid, hidden=config.dynamics_hidden_dim,
-                periodic_lon=periodic)
+            if config.dynamics_auxiliary_architecture == 'latent_rollout':
+                from .dynamics_rollout import DynamicsLatentRolloutHead
+                self.dynamics_auxiliary_head = DynamicsLatentRolloutHead(
+                    dynamics_grid, selected.config.grid, hidden=config.dynamics_hidden_dim,
+                    periodic_lon=periodic, step_hours=selected.config.step_hours)
+            else:
+                self.dynamics_auxiliary_head = DynamicsAuxiliaryHead(
+                    dynamics_grid, selected.config.grid, hidden=config.dynamics_hidden_dim,
+                    periodic_lon=periodic)
         self.train(self.training)
 
     def forward(self, history, information, origin_ns, lead_hours, *, reconstruct_origin=True):
