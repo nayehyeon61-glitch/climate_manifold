@@ -11,7 +11,7 @@ from .statistical_objective import make_statistical_config, spatial_signed_measu
 
 
 def dynamics_evaluation_windows(data, config, split, rollout_steps, stride=1, max_cases=0,
-                                *, trained_horizon_steps=None):
+                                *, trained_horizon_steps=None, dynamics_information='off'):
     """Preserve checkpoint splits and restrict extended labels to that split's coverage.
 
     Selection precedes stride/count truncation so independently trained field and
@@ -36,7 +36,8 @@ def dynamics_evaluation_windows(data, config, split, rollout_steps, stride=1, ma
     from .train import windows
     selected_data = {**data, 'split': {**data['split'], split: selected.tolist()}}
     extended = replace(config, horizon_steps=rollout_steps)
-    ds = windows(selected_data, extended, split, dynamics_target_sequence=True)
+    ds = windows(selected_data, extended, split, dynamics_target_sequence=True,
+                 **({'dynamics_information': dynamics_information} if dynamics_information != 'off' else {}))
     def label(index):
         return str(np.datetime64(data['times'][int(index)], 'ns')) + 'Z'
     metadata = {

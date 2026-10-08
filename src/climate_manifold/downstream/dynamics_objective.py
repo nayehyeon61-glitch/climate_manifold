@@ -43,6 +43,27 @@ def dynamics_contract(config):
             'target_semantics': 'same_length_strided_truth_window',
             'future_target_encoding': 'loss_or_diagnostics_only_never_forecast_input',
         })
+    if getattr(config, 'dynamics_version', 'v1') == 'v2':
+        result.update({
+            'encoder_training_version': 'observed_transition_measure_v2',
+            'transition_retrieval': 'training_only_from_actual_training_window_bank',
+            'transition_target': 'weighted_empirical_distribution_of_past_history_latents',
+            'transition_relation': 'observed_history_and_future_change_similarity',
+            'transition_target_encoder': 'online_stop_gradient',
+            'transition_inference_used': False,
+            'inverse_physical_solver': False,
+        })
+    if getattr(config, 'dynamics_information', 'off') == 'geopotential_terrain':
+        result.update({
+            'input': 'observed_raw_and_aligned_geopotential_history_with_fixed_terrain',
+            'information_fields': ['z500', 'z850', 'terrain_height'],
+            'information_dynamic_fields': ['z500', 'z850'],
+            'information_static_fields': ['terrain_height'],
+            'information_time_differences': 'geopotential_only_per_physical_day',
+            'information_temporal_alignment': 'actual_observed_timestamps_no_origin_replication',
+            'future_information_input': False,
+            'future_information_target': 'transition_relation_and_optional_detached_latent_teacher_only',
+        })
     return result
 
 
@@ -195,13 +216,40 @@ def future_dynamics_targets(pipeline, batch, lead_hours):
     if not torch.equal(sequence[:, last_history+1:last_history+1+max_step],
                        targets[:, :max_step].detach().to(sequence)):
         raise ValueError('Dynamics target sequence future suffix disagrees with future labels')
+    information_sequence = None
+    if getattr(pipeline.dynamics_encoder, 'information_mode', 'off') != 'off':
+        information_sequence = batch.get('dynamics_information_target_sequence')
+        information_history = batch.get('dynamics_information_history')
+        dimension = pipeline.dynamics_encoder.information_dimension
+        if (not isinstance(information_sequence, torch.Tensor) or information_sequence.ndim != 3
+                or information_sequence.shape[0] != history.shape[0]
+                or information_sequence.shape[1] < required
+                or information_sequence.shape[2] != dimension
+                or not torch.isfinite(information_sequence).all()
+                or not isinstance(information_history, torch.Tensor)
+                or not torch.equal(information_sequence.index_select(1,prefix_indices),
+                                   information_history.detach().to(information_sequence))):
+            raise ValueError('Dynamics information target sequence must cover and match the observed history')
+        future_information = batch.get('dynamics_information_targets')
+        if (not isinstance(future_information, torch.Tensor)
+                or future_information.ndim != 3
+                or future_information.shape[0] != len(history)
+                or future_information.shape[1] < max_step
+                or future_information.shape[2] != dimension
+                or not torch.equal(information_sequence[:,last_history+1:last_history+1+max_step],
+                                   future_information[:,:max_step].detach().to(information_sequence))):
+            raise ValueError('Dynamics information target sequence disagrees with future information labels')
     outputs = []
     with torch.no_grad():
         # Iterate over leads rather than stacking B*L whole histories; bounded
         # teacher peak memory and no gradients into labels or the teacher call.
         for step in steps.detach().cpu().tolist():
             window = sequence.detach().index_select(1, prefix_indices + step)
-            outputs.append(pipeline.dynamics_encoder(window)[:, -1])
+            if information_sequence is None:
+                outputs.append(pipeline.dynamics_encoder(window)[:, -1])
+            else:
+                information_window = information_sequence.detach().index_select(1,prefix_indices+step)
+                outputs.append(pipeline.dynamics_encoder(window,information_window)[:, -1])
         latent = torch.stack(outputs, dim=1).detach()
     if not torch.isfinite(latent).all():
         raise FloatingPointError('Nonfinite dynamics latent target')

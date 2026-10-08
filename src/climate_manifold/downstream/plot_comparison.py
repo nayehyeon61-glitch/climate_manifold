@@ -11,7 +11,8 @@ import numpy as np
 
 from .compare import _arm, _fusion
 from .protocol import (dynamics_identity, guide_interaction_identity, dynamics_supervision_identity,
-                       dynamics_vector_capacity_matches)
+                       dynamics_vector_capacity_matches, dynamics_version_identity,
+                       dynamics_information_identity)
 
 
 MODEL_ORDER = ('transformer', 'mlp', 'neural_ode', 'climode', 'convlstm', 'simvp', 'fourcastnet', 'climax')
@@ -44,6 +45,10 @@ def _label(row):
     encoder, dynamics_mode = dynamics_identity(row)
     if encoder != 'off':
         route += ' / '+('Zero dynamics' if dynamics_mode == 'zero' else 'Dynamics')+' ('+encoder+')'
+        if dynamics_version_identity(row) == 'v2':
+            route += ' / Observed-transition v2'
+        if dynamics_information_identity(row) != 'off':
+            route += ' / Z500/Z850/terrain history'
     architecture, supervision, weight = dynamics_supervision_identity(row)
     if architecture == 'latent_rollout':
         label = {'field':'Field only', 'field_latent':'Field + latent', 'vector_only':'Vector only'}[supervision]
@@ -86,6 +91,8 @@ def _physical_identity(row, rows):
               'statistical_loss_config', 'statistical_flow_config', 'conditional_flow_config',
               'initialization', 'implementation', 'representation_sha256',
               'dynamics_encoder', 'dynamics_mode', 'dynamics_contract', 'dynamics_auxiliary_config',
+              'dynamics_version', 'dynamics_information', 'dynamics_information_contract',
+              'dynamics_transition_config', 'dynamics_transition_bank',
               'dynamics_auxiliary_architecture',
               'guide_interaction', 'guide_interaction_depth', 'guide_interaction_contract',
               'guide_interaction_evaluation')

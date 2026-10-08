@@ -44,6 +44,16 @@ INCLUDE_GUIDED_FORECAST_ONLY="${INCLUDE_GUIDED_FORECAST_ONLY:-0}"
 [[ "$INCLUDE_GUIDED_FORECAST_ONLY" == 0 || "$INCLUDE_GUIDED_FORECAST_ONLY" == 1 ]] || { echo 'INCLUDE_GUIDED_FORECAST_ONLY must be 0 or 1' >&2; exit 2; }
 # Preserve the established four-arm experiment unless explicitly enabled.
 INCLUDE_DYNAMICS="${INCLUDE_DYNAMICS:-0}"
+DYNAMICS_VERSION="${DYNAMICS_VERSION:-v1}"
+case "$DYNAMICS_VERSION" in v1|v2) ;; *) echo 'DYNAMICS_VERSION must be v1 or v2' >&2; exit 2;; esac
+[[ "$DYNAMICS_VERSION" == v1 || "$INCLUDE_DYNAMICS" == 1 ]] || { echo 'DYNAMICS_VERSION=v2 requires INCLUDE_DYNAMICS=1' >&2; exit 2; }
+DYNAMICS_INFORMATION="${DYNAMICS_INFORMATION:-auto}"
+case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
+if [[ "$DYNAMICS_INFORMATION" == auto ]]; then
+  if [[ "$DYNAMICS_VERSION" == v2 ]]; then DYNAMICS_INFORMATION=geopotential_terrain
+  else DYNAMICS_INFORMATION=off; fi
+fi
+[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" == off ]] || { echo 'DYNAMICS_INFORMATION=geopotential_terrain requires DYNAMICS_VERSION=v2' >&2; exit 2; }
 INCLUDE_LEGACY_DYNAMICS="${INCLUDE_LEGACY_DYNAMICS:-1}"
 INCLUDE_ZERO_DYNAMICS="${INCLUDE_ZERO_DYNAMICS:-1}"
 INCLUDE_DYNAMICS_CONSISTENCY="${INCLUDE_DYNAMICS_CONSISTENCY:-0}"
@@ -181,6 +191,46 @@ dynamics=(--dynamics-encoder "$DYNAMICS_ENCODER"
   --dynamics-reconstruction-weight "${DYNAMICS_RECONSTRUCTION_WEIGHT:-0.1}"
   --dynamics-statistical-weight "${DYNAMICS_STATISTICAL_WEIGHT:-0.1}"
   --dynamics-tendency-weight "${DYNAMICS_TENDENCY_WEIGHT:-0.0}")
+# v2 adds observed-transition distribution supervision to E_d. It is not a
+# different forecast family and never changes the Raw/spatial-only routes.
+if [[ "$DYNAMICS_VERSION" == v2 ]]; then
+  transition=(--transition-weight "${TRANSITION_WEIGHT:-0.1}"
+    --transition-neighbors "${TRANSITION_NEIGHBORS:-8}" --transition-bank-size "${TRANSITION_BANK_SIZE:-4096}"
+    --transition-endpoint-temperature "${TRANSITION_ENDPOINT_TEMPERATURE:-1}"
+    --transition-relation-temperature "${TRANSITION_RELATION_TEMPERATURE:-1}"
+    --transition-latent-temperature "${TRANSITION_LATENT_TEMPERATURE:-1}"
+    --transition-history-weight "${TRANSITION_HISTORY_WEIGHT:-1}"
+    --transition-future-weight "${TRANSITION_FUTURE_WEIGHT:-1}"
+    --transition-geometry-weight "${TRANSITION_GEOMETRY_WEIGHT:-0.1}"
+    --transition-pool-lat "${TRANSITION_POOL_LAT:-4}" --transition-pool-lon "${TRANSITION_POOL_LON:-8}"
+    --transition-exclusion-steps "${TRANSITION_EXCLUSION_STEPS:-0}")
+  # Validate before fitting any baseline so invalid v2 settings cannot leave a
+  # misleading partially completed comparison. Core validation remains final.
+  "$PYTHON" - "${transition[@]}" <<'PY'
+import math, sys
+options = dict(zip(sys.argv[1::2], sys.argv[2::2]))
+integer = {'neighbors', 'bank-size', 'pool-lat', 'pool-lon', 'exclusion-steps'}
+nonnegative = {'history-weight', 'future-weight', 'geometry-weight', 'exclusion-steps'}
+for flag, value in options.items():
+    name = flag.removeprefix('--transition-')
+    try:
+        number = float(value)
+        valid = math.isfinite(number) and (number >= 0 if name in nonnegative else number > 0)
+        if name in integer:
+            valid = valid and value.isdecimal()
+        if name == 'neighbors':
+            valid = valid and number >= 2
+    except ValueError:
+        valid = False
+    if not valid:
+        raise SystemExit(f'{flag} has an invalid value: {value}')
+if int(options['--transition-neighbors']) > int(options['--transition-bank-size']):
+    raise SystemExit('TRANSITION_NEIGHBORS must not exceed TRANSITION_BANK_SIZE')
+if float(options['--transition-history-weight']) + float(options['--transition-future-weight']) <= 0:
+    raise SystemExit('At least one of TRANSITION_HISTORY_WEIGHT / TRANSITION_FUTURE_WEIGHT must be positive')
+PY
+  dynamics+=(--dynamics-version v2 --dynamics-information "$DYNAMICS_INFORMATION" "${transition[@]}")
+fi
 # Record only effective optional settings; inactive knobs do not alter a run.
 effective_dynamics=()
 if [[ "$INCLUDE_DYNAMICS" == 1 ]]; then effective_dynamics=("${dynamics[@]}"); fi
@@ -222,6 +272,8 @@ fi
   --setting include_dynamics_consistency "$INCLUDE_DYNAMICS_CONSISTENCY" --setting consistency_only "$CONSISTENCY_ONLY" \
   --setting include_vector_only "$INCLUDE_VECTOR_ONLY" \
   --setting include_legacy_dynamics "$effective_legacy_dynamics" \
+  --setting dynamics_version "$DYNAMICS_VERSION" \
+  --setting dynamics_information "$DYNAMICS_INFORMATION" \
   "${consistency_settings[@]}" \
   --setting max_cases "${MAX_CASES:-0}" --setting origin_stride "${ORIGIN_STRIDE:-1}" \
   --setting device "$([[ "$GPU_GUARD" == 1 ]] && echo cuda:0 || echo "${DEVICE:-cpu}")" \

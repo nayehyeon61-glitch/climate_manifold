@@ -28,6 +28,9 @@ from .conditional_flow import (conditional_flow_config_from_args, conditional_fl
 from .dynamics_objective import (dynamics_contract, dynamics_auxiliary_config_from_args,
                                  dynamics_auxiliary_config_from_payload, dynamics_auxiliary_losses,
                                  configure_dynamics_supervision)
+from .transition_measure import (make_transition_config, transition_config_from_payload,
+                                 TransitionBank, transition_measure_losses)
+from .dynamics_information import resolve_dynamics_information, select_dynamics_information
 
 FORMAT = 'climate_manifold.downstream.v3'
 LEGACY_FORMAT = 'climate_manifold.downstream.v1'
@@ -135,12 +138,19 @@ class RawFieldContract:
 class CausalWindows(TemporalWindowDataset):
     def __init__(self,*args,information=None,information_targets=False,
                  reconstruction_constraints=False,statistical_flow_targets=False,
-                 dynamics_target_sequence=False,**kwargs):
+                 dynamics_target_sequence=False,dynamics_information='off',
+                 information_metadata=None,**kwargs):
         super().__init__(*args,**kwargs);self.information=information
         self.information_targets=information_targets
         self.reconstruction_constraints=reconstruction_constraints
         self.statistical_flow_targets=statistical_flow_targets
         self.dynamics_target_sequence=bool(dynamics_target_sequence)
+        self.dynamics_information=dynamics_information
+        self.information_metadata=information_metadata
+        self.dynamics_information_spec=resolve_dynamics_information(
+            information_metadata,dynamics_information,raw_grid=self.config.grid)
+        if self.dynamics_information_spec is not None and information is None:
+            raise ValueError('Dynamics geopotential/terrain requires an aligned information archive')
         if statistical_flow_targets and (not reconstruction_constraints or information is None):
             raise ValueError('Statistical flow targets require reconstruction constraints and information')
         if reconstruction_constraints:
@@ -163,6 +173,23 @@ class CausalWindows(TemporalWindowDataset):
         if self.information is not None:
             origin=self.starts[index]+self.config.history_span_steps-1
             row['information']=torch.from_numpy(self.information[origin].copy())
+            if self.dynamics_information_spec is not None:
+                start=self.starts[index]
+                observed=self.information[start:origin+1][::self.config.history_stride]
+                row['dynamics_information_history']=torch.as_tensor(select_dynamics_information(
+                    observed,self.information_metadata,self.dynamics_information,
+                    raw_grid=self.config.grid),dtype=torch.float32)
+                # Subsequent observations supervise the transition relation;
+                # no future information tensor is passed to the forecast.
+                row['dynamics_information_targets']=torch.as_tensor(select_dynamics_information(
+                    self.information[origin+1:origin+self.config.horizon_steps+1],
+                    self.information_metadata,self.dynamics_information,
+                    raw_grid=self.config.grid),dtype=torch.float32)
+                if self.dynamics_target_sequence:
+                    row['dynamics_information_target_sequence']=torch.as_tensor(select_dynamics_information(
+                        self.information[start:origin+self.config.horizon_steps+1],
+                        self.information_metadata,self.dynamics_information,
+                        raw_grid=self.config.grid),dtype=torch.float32)
             if self.information_targets:
                 row['information_targets']=torch.from_numpy(
                     self.information[origin+1:origin+self.config.horizon_steps+1].copy())
@@ -185,14 +212,15 @@ class CausalWindows(TemporalWindowDataset):
 
 def windows(data,config,split,stride=1,max_windows=0,*,information_targets=False,
             reconstruction_constraints=False,statistical_flow_targets=False,
-            dynamics_target_sequence=False):
+            dynamics_target_sequence=False,dynamics_information='off'):
     starts=data['split'][split][::stride]
     if max_windows:starts=starts[:max_windows]
     if not len(starts):raise ValueError('Forecast training/evaluation requires nonempty windows')
     return CausalWindows(data['states'],data['times'],config,starts,data['mean'],data['scale'],data['schema'],
         information=data['information'],information_targets=information_targets,
         reconstruction_constraints=reconstruction_constraints,statistical_flow_targets=statistical_flow_targets,
-        dynamics_target_sequence=dynamics_target_sequence)
+        dynamics_target_sequence=dynamics_target_sequence,dynamics_information=dynamics_information,
+        information_metadata=data.get('information_metadata'))
 
 
 def new_a(metadata, sealed=True, raw=False):
@@ -231,7 +259,15 @@ def load_predictor(path,device='cpu'):
     statistical_flow_config_from_payload(p)
     conditional_config=conditional_flow_config_from_payload(p)
     config=PredictorConfig(**p['config'])
+    expected_information=resolve_dynamics_information(
+        p['a_metadata'].get('information_metadata'),config.dynamics_information,
+        raw_grid=p['a_metadata']['config']['grid'])
+    if p.get('dynamics_information_contract') != expected_information:
+        raise ValueError('Checkpoint dynamics_information_contract disagrees with its information metadata')
     dynamics_config=dynamics_auxiliary_config_from_payload(p, config)
+    # Verify the training provenance, without loading observations or building
+    # a retrieval bank. V2 has exactly the same causal inference inputs as v1.
+    transition_config_from_payload(p, config)
     if p.get('guide_interaction_contract') != guide_interaction_contract(config):
         raise ValueError('Checkpoint guide_interaction_contract disagrees with its predictor config')
     if p.get('guide_contract') != guide_contract(config):
@@ -514,6 +550,9 @@ def train(args):
         guide_interaction=getattr(args,'guide_interaction','off'),
         guide_interaction_depth=getattr(args,'guide_interaction_depth',1),
         dynamics_encoder=getattr(args,'dynamics_encoder','off'),
+        dynamics_version=getattr(args,'dynamics_version','v1'),
+        dynamics_information=(getattr(args,'dynamics_information',None)
+            or ('geopotential_terrain' if getattr(args,'dynamics_version','v1')=='v2' else 'off')),
         dynamics_mode=getattr(args,'dynamics_mode','learned'),
         dynamics_hidden_dim=getattr(args,'dynamics_hidden_dim',32),
         dynamics_channels=getattr(args,'dynamics_channels',8),
@@ -536,6 +575,7 @@ def train(args):
     constraint_decoder=args.constraint_decoder if split_constraints else None
     statistical_config=statistical_config_from_args(args,args.constraint_pair)
     dynamics_config=dynamics_auxiliary_config_from_args(args, config, statistical_config)
+    transition_config=make_transition_config(args, config)
     flow_config=statistical_flow_config_from_args(args,args.constraint_pair)
     conditional_config=conditional_flow_config_from_args(args,args.constraint_pair)
     information_only=constraint_decoder=='information_only'
@@ -543,8 +583,13 @@ def train(args):
     target_info=not split_constraints and bool(weights.information or weights.static or weights.distribution or weights.pinn)
     loaders=[DataLoader(windows(data,a.config,name,args.window_stride,args.max_windows,information_targets=target_info,
         reconstruction_constraints=split_constraints,statistical_flow_targets=flow_config is not None or conditional_config is not None,
-        dynamics_target_sequence=dynamics_config is not None and dynamics_config.get('supervision') in ('field_latent','vector_only')),batch_size=args.batch_size,
+        dynamics_target_sequence=dynamics_config is not None and dynamics_config.get('supervision') in ('field_latent','vector_only'),
+        dynamics_information=config.dynamics_information),batch_size=args.batch_size,
         shuffle=(name=='train'),generator=torch.Generator().manual_seed(args.seed)) for name in ('train','calibration')]
+    # Respect both --window-stride and --max-windows. Held-out windows never
+    # become transition candidates, nor are they used to select neighbors.
+    transition_bank=(TransitionBank(data,a.config,loaders[0].dataset.starts,transition_config)
+                     if transition_config is not None else None)
     # A and AE construction consume different RNG amounts. Reset so equal-size
     # latent predictors start with identical weights for the same forecast seed.
     torch.manual_seed(args.seed)
@@ -573,12 +618,18 @@ def train(args):
                 for batch in loader:
                     batch={k:v.to(args.device) for k,v in batch.items()}
                     prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads,
-                                     reconstruct_origin=not (information_only or separate_decoder))
+                                     reconstruct_origin=not (information_only or separate_decoder),
+                                     dynamics_information_history=batch.get('dynamics_information_history'))
                     losses=forecast_loss(prediction,batch,temporal,leads,args.tendency_weight)
                     if dynamics_config is not None:
                         dynamic_losses=dynamics_auxiliary_losses(model,prediction,batch,leads,dynamics_config)
                         losses.update(dynamic_losses)
                         losses['loss']=losses['loss']+dynamic_losses['dynamics_regularization']
+                    if training and transition_config is not None:
+                        transition_losses=transition_measure_losses(
+                            model,prediction,batch,transition_bank,transition_config)
+                        losses.update(transition_losses)
+                        losses['loss']=losses['loss']+transition_losses['transition_regularization']
                     if config.training_mode == 'joint' and config.bridge != 'raw':
                         if split_constraints:
                             from .reconstruction_objective import reconstruction_constraint_losses
@@ -758,6 +809,26 @@ def train(args):
             'shared E_s and independent shared E_d(history) -> T1(spatial guide, dynamics guide) '
             '-> T2(raw history, refined guides) -> unchanged predictor -> fields; '
             'T1 sees observed guide tokens only; auxiliary heads use original encoder features')
+    if transition_config is not None:
+        payload['dynamics_transition_config']=transition_config
+        payload['dynamics_transition_bank']=transition_bank.manifest
+        payload['implementation']='observed_transition_measure_v2+'+payload['implementation']
+        payload['objective_semantics']['dynamics_transition']=(
+            'training-only observed transition constraint: retrieve training histories with similar '
+            'observed endpoints; construct a weighted empirical distribution of their stop-gradient '
+            'E_d latents; match relational probabilities using history and subsequent observed-change '
+            'similarity over the requested forecast horizon through KL, with optional latent geometry '
+            'preservation; no single latent barycenter target or guaranteed collapse prevention; '
+            'no inverse PDE solver and no stochastic sampler; '
+            'no retrieval or future labels in forecasting, calibration selection, validation or test')
+    if config.dynamics_information != 'off':
+        payload['dynamics_information_contract']=resolve_dynamics_information(
+            p['information_metadata'],config.dynamics_information,raw_grid=a.config.grid)
+        payload['objective_semantics']['dynamics_information']=(
+            'E_d observes co-located raw surface history and actual time-aligned z500/z850 '
+            'history plus fixed terrain_height; geopotential receives per-day finite differences, '
+            'terrain is a static spatial condition with no time derivative; future geopotential '
+            'is label-only for transition relations and detached future latent targets')
     output.parent.mkdir(parents=True,exist_ok=True)
     torch.save(payload,output)
     write_json(output.with_suffix('.manifest.json'),{'checkpoint_sha256':digest(output),'format':FORMAT})
@@ -846,6 +917,17 @@ def parser():
                    help='Guide-only interaction Transformer block count; independent of --guide-fusion-depth')
     p.add_argument('--dynamics-encoder',choices=['off','conv_gru','temporal_conv'],default='off',
                    help='Optional independent temporal encoder, shared by forecast and future-label auxiliary paths')
+    p.add_argument('--dynamics-version',choices=['v1','v2'],default='v1',
+                   help='v2 adds training-only observed-transition distribution supervision to the same E_d')
+    p.add_argument('--dynamics-information',choices=['off','geopotential_terrain'],default=None,
+                   help='v2 default: aligned z500,z850 and fixed terrain history; off is an explicit raw-only ablation')
+    for name in ('weight','endpoint-temperature','relation-temperature','latent-temperature',
+                 'history-weight','future-weight','geometry-weight'):
+        p.add_argument('--transition-'+name,type=float,default=None,
+                       help='Observed-transition v2 only; omitted values use the v2 defaults')
+    for name in ('neighbors','bank-size','pool-lat','pool-lon','exclusion-steps'):
+        p.add_argument('--transition-'+name,type=int,default=None,
+                       help='Observed-transition v2 only; omitted values use the v2 defaults')
     p.add_argument('--dynamics-mode',choices=['learned','zero'],default='learned',
                    help='zero blocks temporal content only in the forecast path; auxiliary dynamics training is retained')
     p.add_argument('--dynamics-hidden-dim',type=int,default=32)

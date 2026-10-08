@@ -55,6 +55,10 @@ class PredictorConfig:
     # Optional temporal representation: independent of the spatial encoder,
     # shared between forecasting and a training-only future-field objective.
     dynamics_encoder: str = 'off'
+    # Training-only empirical transition supervision; the E_d architecture and
+    # inference signature stay identical to v1.
+    dynamics_version: str = 'v1'
+    dynamics_information: str = 'off'
     dynamics_mode: str = 'learned'
     dynamics_hidden_dim: int = 32
     dynamics_channels: int = 8
@@ -79,6 +83,15 @@ class PredictorConfig:
             raise ValueError('Guide interaction requires guided fusion and an enabled dynamics encoder')
         if self.dynamics_encoder not in ('off', 'conv_gru', 'temporal_conv'):
             raise ValueError('Dynamics encoder must be off, conv_gru or temporal_conv')
+        if self.dynamics_version not in ('v1', 'v2'):
+            raise ValueError('Dynamics version must be v1 or v2')
+        if self.dynamics_version == 'v2' and self.dynamics_encoder == 'off':
+            raise ValueError('Dynamics version v2 requires an enabled dynamics encoder')
+        if self.dynamics_information not in ('off', 'geopotential_terrain'):
+            raise ValueError('Dynamics information must be off or geopotential_terrain')
+        if self.dynamics_information != 'off' and (
+                self.dynamics_version != 'v2' or self.dynamics_encoder == 'off'):
+            raise ValueError('Dynamics geopotential/terrain information requires an enabled v2 encoder')
         if self.dynamics_auxiliary_architecture not in ('direct', 'latent_rollout'):
             raise ValueError('Dynamics auxiliary architecture must be direct or latent_rollout')
         if self.dynamics_auxiliary_architecture != 'direct' and self.dynamics_encoder == 'off':
@@ -351,6 +364,9 @@ class ForecastPipeline(nn.Module):
         self.dynamics_encoder = self.dynamics_adapter = self.dynamics_auxiliary_head = None
         if dynamics_grid is not None:
             from .dynamics_guide import DynamicsGuide, LatentDynamicsAdapter, DynamicsAuxiliaryHead
+            from .dynamics_information import resolve_dynamics_information
+            resolve_dynamics_information(selected.info_metadata,config.dynamics_information,
+                                         raw_grid=selected.config.grid)
             if selected.config.history_steps < 2:
                 raise ValueError('Dynamics encoder requires at least two observed history states')
             periodic = periodic_lon if fusion else selected.core.physics.periodic_lon
@@ -358,7 +374,7 @@ class ForecastPipeline(nn.Module):
                 selected.config.grid, dynamics_grid, selected.config.history_steps,
                 hidden=config.dynamics_hidden_dim, kind=config.dynamics_encoder,
                 history_dt_hours=selected.config.history_stride*selected.config.step_hours,
-                periodic_lon=periodic)
+                periodic_lon=periodic, information_mode=config.dynamics_information)
             if config.bridge == 'latent':
                 self.dynamics_adapter = LatentDynamicsAdapter(selected.config.latent_grid, dynamics_grid)
             if config.dynamics_auxiliary_architecture == 'latent_rollout':
@@ -372,12 +388,16 @@ class ForecastPipeline(nn.Module):
                     periodic_lon=periodic)
         self.train(self.training)
 
-    def forward(self, history, information, origin_ns, lead_hours, *, reconstruct_origin=True):
+    def forward(self, history, information, origin_ns, lead_hours, *, reconstruct_origin=True,
+                dynamics_information_history=None):
         if (lead_hours.ndim != 1 or not len(lead_hours) or not torch.isfinite(lead_hours).all()
                 or lead_hours[0] <= 0 or not (lead_hours[1:] > lead_hours[:-1]).all()):
             raise ValueError('Lead hours must be finite, positive and strictly increasing')
         features = self.bridge.encode_history(history,information)
-        dynamics = self.dynamics_encoder(history) if self.dynamics_encoder is not None else None
+        if self.dynamics_encoder is None and dynamics_information_history is not None:
+            raise ValueError('Dynamics information history requires an enabled dynamics encoder')
+        dynamics = (self.dynamics_encoder(history, dynamics_information_history)
+                    if self.dynamics_encoder is not None else None)
         forecast_features = features
         if self.dynamics_adapter is not None:
             forecast_features = self.dynamics_adapter(features, dynamics, mode=self.config.dynamics_mode)

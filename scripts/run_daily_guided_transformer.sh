@@ -6,6 +6,18 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 : "${DAILY_WORK:?Set a work directory below /lustre/home/yehyeon}"
 SUITE="${SUITE:-guided_transformer}"
 case "$SUITE" in guided_transformer|manifold_fusion) ;; *) echo 'Unknown SUITE' >&2; exit 2;; esac
+DYNAMICS_VERSION="${DYNAMICS_VERSION:-v1}"
+case "$DYNAMICS_VERSION" in v1|v2) ;; *) echo 'DYNAMICS_VERSION must be v1 or v2' >&2; exit 2;; esac
+DYNAMICS_INFORMATION="${DYNAMICS_INFORMATION:-auto}"
+case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
+[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" != geopotential_terrain ]] || {
+  echo 'DYNAMICS_INFORMATION=geopotential_terrain requires DYNAMICS_VERSION=v2' >&2; exit 2;
+}
+if [[ "$DYNAMICS_VERSION" == v2 ]]; then
+  [[ "$SUITE" == manifold_fusion && "${INCLUDE_DYNAMICS:-0}" == 1 ]] || {
+    echo 'DYNAMICS_VERSION=v2 requires SUITE=manifold_fusion and INCLUDE_DYNAMICS=1' >&2; exit 2;
+  }
+fi
 if [[ "$SUITE" == manifold_fusion ]]; then
   RESUME="${RESUME:-0}"
   [[ "$RESUME" == 0 || "$RESUME" == 1 ]] || { echo 'RESUME must be 0 or 1' >&2; exit 2; }
@@ -75,6 +87,11 @@ if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
     if [[ "${INCLUDE_DYNAMICS:-0}" == 1 ]]; then
       preflight+=(tests/test_dynamics_guide.py tests/test_dual_dynamics_training.py tests/test_dynamics_runner.py)
     fi
+    if [[ "${DYNAMICS_VERSION:-v1}" == v2 ]]; then
+      preflight+=(tests/test_transition_measure.py tests/test_transition_v2_training.py
+        tests/test_transition_v2_reporting.py tests/test_transition_v2_runner.py
+        tests/test_dynamics_information.py tests/test_transition_v2_information_training.py)
+    fi
     if [[ "${INCLUDE_TWO_STAGE:-0}" == 1 ]]; then
       preflight+=(tests/test_guide_interaction.py tests/test_two_stage_training.py
         tests/test_two_stage_reporting.py tests/test_two_stage_runner.py)
@@ -91,7 +108,13 @@ if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
   fi
   # Tests explicitly select their optional arms. Do not let this experiment's
   # exported activation flags silently change their default comparison matrix.
-  CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 \
+  # Keep v2 experiment settings out of fixtures, including future transition
+  # knobs added by callers. Child tests explicitly opt into their own v2 case.
+  transition_environment=()
+  while IFS= read -r name; do
+    if [[ "$name" == TRANSITION_* ]]; then transition_environment+=(-u "$name"); fi
+  done < <(compgen -e)
+  env "${transition_environment[@]}" CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 DYNAMICS_VERSION=v1 DYNAMICS_INFORMATION=auto \
     INCLUDE_DYNAMICS=0 INCLUDE_LEGACY_DYNAMICS=1 INCLUDE_ZERO_DYNAMICS=1 INCLUDE_TWO_STAGE=0 \
     INCLUDE_TWO_STAGE_BYPASS=0 GUIDE_INTERACTION_DEPTH=1 \
     INCLUDE_DYNAMICS_CONSISTENCY=0 INCLUDE_VECTOR_ONLY=0 CONSISTENCY_ONLY=0 "$PYTHON" -m pytest -q \

@@ -4,6 +4,14 @@
 `feature/a64-b512-expanded`에서 A에 필요한 부분을 분리했습니다.
 Hydra의 B/C 학습, MoE 전문가, 게이트, 라우터, 전문가 간 결합은 포함하지 않습니다.
 
+**선택형 Dynamics v2 — `feature/dynamics-transition-v2`.**
+`--dynamics-version v2`는 train에서 비슷한 현재에 도달한 사례들을 찾고, 각 과거 이력의
+E_d latent를 가중 분포로 유지하여 관측 이력·후속 변화와 latent 관계를 정합합니다.
+v2 기본은 지표 history에 z500·z850의 관측 history와 고정 지형 조건도 E_d에 넣습니다.
+`--dynamics-information off`로 지표만 사용하는 v2를 비교할 수 있습니다.
+추론에는 bank/미래 정답이 필요 없고, 기본 `v1`은 기존 동작을 유지합니다.
+[설계·누출 방지·옵션·실행 방법](docs/dynamics_transition_v2.md).
+
 **전체 공간·동역학 비교 — `feature/full-manifold-matrix`.**
 Raw, 공간만 Latent/Guided, Dynamics Latent, Dynamics Guided의 T1 OFF/ON을
 `field / vector_only / field_latent`로 비교합니다. 총 12조건 ×

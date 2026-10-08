@@ -61,6 +61,12 @@ def experiment_contract(config):
                   'statistical encoder + dynamics encoder -> fusion transformer(raw, statistical guide, dynamics guide) -> raw-grid predictor -> fields'),
             predictor_variant=contract['predictor_variant'] + '_dual_encoder',
         )
+        if cfg.get('dynamics_version', 'v1') == 'v2':
+            contract.update(dynamics_version='v2',
+                            dynamics_training_semantics='observed_transition_measure_auxiliary',
+                            predictor_variant=contract['predictor_variant'] + '_transition_v2')
+        if cfg.get('dynamics_information', 'off') != 'off':
+            contract['dynamics_information'] = cfg['dynamics_information']
     if cfg.get('guide_interaction', 'off') != 'off':
         contract.update(
             guide_interaction=cfg['guide_interaction'],
@@ -77,6 +83,17 @@ def dynamics_identity(row):
     cfg = row.get('config', row)
     encoder = cfg.get('dynamics_encoder', 'off')
     return (encoder, cfg.get('dynamics_mode', 'learned')) if encoder != 'off' else ('off', None)
+
+
+def dynamics_version_identity(row):
+    """Training v2 is an extra observed-transition objective, not a new seed."""
+    cfg = row.get('config', row)
+    return cfg.get('dynamics_version', 'v1') if dynamics_identity(row)[0] != 'off' else 'off'
+
+
+def dynamics_information_identity(row):
+    cfg = row.get('config', row)
+    return cfg.get('dynamics_information', 'off') if dynamics_identity(row)[0] != 'off' else 'off'
 
 
 def dynamics_supervision_identity(row):

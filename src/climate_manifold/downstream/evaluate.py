@@ -18,6 +18,7 @@ from .dynamics_diagnostics import (dynamics_evaluation_windows, SignedFieldDiagn
                                    DynamicsLatentDiagnostics)
 from .dynamics_objective import future_dynamics_targets
 from .dynamics_rollout import lead_steps
+from .transition_measure import transition_config_from_payload
 
 
 def evaluate(checkpoint,archive,output,*,information=None,split='validation',max_cases=0,
@@ -31,6 +32,16 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
     if forecast_output and (Path(forecast_output).suffix!='.npz' or Path(forecast_output).resolve()==output.resolve()):
         raise ValueError('Forecast path must be a distinct .npz file')
     model,p=load_predictor(checkpoint,device)
+    dynamics_information = getattr(model.config, 'dynamics_information', 'off')
+    # Validate the saved train-only bank provenance. Evaluation does not rebuild
+    # the analogue bank or query future labels to guide the predictor.
+    transition_config = transition_config_from_payload(p, model.config)
+    transition_training_data = ({
+        'config': p['a_metadata']['config'],
+        'split': {'train': p['a_metadata']['split']['train']},
+    } if transition_config is not None else None)
+    if transition_training_data is not None and dynamics_information != 'off':
+        transition_training_data['information_metadata'] = p['a_metadata']['information_metadata']
     vector_only = (p.get('dynamics_auxiliary_config') or {}).get('supervision') == 'vector_only'
     if dynamics_rollout_steps is not None and not dynamics_diagnostics:
         raise ValueError('--dynamics-rollout-steps requires --dynamics-diagnostics')
@@ -70,7 +81,7 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
         rollout_steps = trained_steps if dynamics_rollout_steps is None else dynamics_rollout_steps
         ds, dynamics_origin_selection = dynamics_evaluation_windows(
             data, model.a_config, split, rollout_steps, origin_stride, max_cases,
-            trained_horizon_steps=trained_steps)
+            trained_horizon_steps=trained_steps, dynamics_information=dynamics_information)
         dynamics_evaluation_contract = {
             'version': 'climate_manifold.dynamics_evaluation.v1',
             'rollout_steps': rollout_steps, 'step_hours': float(model.a_config.step_hours),
@@ -86,7 +97,8 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
         main_signed = SignedFieldDiagnostics(a['schema'], p['lead_hours'])
         auxiliary_latent = DynamicsLatentDiagnostics(auxiliary_hours)
     else:
-        ds=windows(data,model.a_config,split,origin_stride,max_cases)
+        ds=windows(data,model.a_config,split,origin_stride,max_cases,
+                   **({'dynamics_information': dynamics_information} if dynamics_information != 'off' else {}))
     leads=torch.tensor(p['lead_hours'],device=device,dtype=torch.float32)
     metrics=ForecastMetrics(a['schema'],a['mean'],a['scale'],p['lead_hours'])
     latent_metrics=LatentDiagnostics(a['schema'],p['lead_hours']) if model.config.bridge=='latent' else None
@@ -107,7 +119,9 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                     torch.cuda.synchronize()
                     if dynamics_diagnostics:torch.cuda.reset_peak_memory_stats()
                 forecast_start=time.perf_counter()
-                prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads)
+                prediction=model(batch['history'],batch.get('information'),batch['origin_time_ns'],leads,
+                                 **({'dynamics_information_history': batch['dynamics_information_history']}
+                                    if dynamics_information != 'off' else {}))
             except FloatingPointError as exc:
                 failures.append({'origin':label,'error':str(exc)});continue
             finally:
@@ -192,6 +206,17 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
                         values['latent_diagnostic_semantics_json'] = json.dumps(dynamics_latent_audit, sort_keys=True)
                     values['dynamics_contract_json'] = json.dumps(p['dynamics_contract'], sort_keys=True)
                     values['dynamics_auxiliary_config_json'] = json.dumps(p.get('dynamics_auxiliary_config'), sort_keys=True)
+                    if dynamics_information != 'off':
+                        values['dynamics_information_history'] = batch['dynamics_information_history'][0].cpu().numpy()
+                        values['dynamics_information_history_space'] = 'checkpoint_train_normalized'
+                        values['dynamics_information_mode'] = dynamics_information
+                        values['dynamics_information_fields_json'] = json.dumps(['z500', 'z850', 'terrain_height'])
+                        values['dynamics_information_contract_json'] = json.dumps(p['dynamics_information_contract'], sort_keys=True)
+                    if transition_config is not None:
+                        values['dynamics_transition_config_json'] = json.dumps(transition_config, sort_keys=True)
+                        values['dynamics_transition_bank_json'] = json.dumps(p['dynamics_transition_bank'], sort_keys=True)
+                        values['dynamics_transition_training_data_json'] = json.dumps(transition_training_data, sort_keys=True)
+                        values['training_contract_json'] = json.dumps(p['training_contract'], sort_keys=True)
                 if interaction_evaluation is not None:
                     values['guide_interaction_contract_json'] = json.dumps(p['guide_interaction_contract'], sort_keys=True)
                     values['guide_interaction_evaluation_json'] = json.dumps(interaction_evaluation, sort_keys=True)
@@ -251,6 +276,14 @@ def evaluate(checkpoint,archive,output,*,information=None,split='validation',max
             'cuda_peak_memory_bytes':(main_cuda_peak if dynamics_diagnostics else torch.cuda.max_memory_allocated()) if str(device).startswith('cuda') else None,
             'forecast_output_written':saved,
             'limits':'Scores are conditional on finite forecasts; failed origins are explicit. Gaussian uncertainty is marginal, not a coherent stochastic trajectory ensemble.'}
+    if transition_config is not None:
+        report['dynamics_transition_config'] = transition_config
+        report['dynamics_transition_bank'] = p['dynamics_transition_bank']
+        # The exact allowed train-window membership is needed to audit a saved
+        # bank against its source split. No training observations are exported.
+        report['a_metadata'] = transition_training_data
+        if dynamics_information != 'off':
+            report['dynamics_information_contract'] = p['dynamics_information_contract']
     if dynamics_diagnostics:
         report['dynamics_evaluation_contract']=dynamics_evaluation_contract
         report['dynamics_origin_selection']=dynamics_origin_selection

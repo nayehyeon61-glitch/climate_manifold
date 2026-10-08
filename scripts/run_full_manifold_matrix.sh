@@ -7,6 +7,20 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 export ERA5_ROOT="${ERA5_ROOT:-/lustre/home/mahmed/ERA5_0p25_DAILY}"
 PYTHON="${PYTHON:-python}"
 export PYTHON
+export DYNAMICS_VERSION="${DYNAMICS_VERSION:-v1}"
+case "$DYNAMICS_VERSION" in v1|v2) ;; *) echo 'DYNAMICS_VERSION must be v1 or v2' >&2; exit 2;; esac
+export DYNAMICS_INFORMATION="${DYNAMICS_INFORMATION:-auto}"
+case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
+if [[ "$DYNAMICS_INFORMATION" == auto ]]; then
+  if [[ "$DYNAMICS_VERSION" == v2 ]]; then DYNAMICS_INFORMATION=geopotential_terrain
+  else DYNAMICS_INFORMATION=off; fi
+fi
+[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" == off ]] || { echo 'DYNAMICS_INFORMATION=geopotential_terrain requires DYNAMICS_VERSION=v2' >&2; exit 2; }
+suite_prefix=full
+if [[ "$DYNAMICS_VERSION" == v2 ]]; then
+  suite_prefix=full-v2
+  if [[ "$DYNAMICS_INFORMATION" == off ]]; then suite_prefix=full-v2-surface; fi
+fi
 read -r -a losses <<< "${FULL_MATRIX_LOSSES:-w2 kl_entropy signed_measure}"
 [[ ${#losses[@]} -gt 0 ]] || { echo 'FULL_MATRIX_LOSSES must be nonempty' >&2; exit 2; }
 declare -A seen=()
@@ -37,7 +51,7 @@ preflight="${RUN_PREFLIGHT_TESTS:-1}"
 unset ARCHIVE INFO A_CHECKPOINT
 for loss in "${losses[@]}"; do
   export STATISTICAL_LOSS="$loss" DYNAMICS_STATISTICAL_LOSS="$loss"
-  export RUN="$DAILY_WORK/runs/full-$loss" RUN_PREFLIGHT_TESTS="$preflight"
+  export RUN="$DAILY_WORK/runs/$suite_prefix-$loss" RUN_PREFLIGHT_TESTS="$preflight"
   printf '\nStatistical suite: %s\nExperiment directory: %s\n' "$loss" "$RUN"
   bash scripts/run_daily_manifold_fusion.sh
   preflight=0
@@ -46,26 +60,32 @@ done
 # Keep loss suites separate: changing both E_s and Dynamics field statistics is
 # a whole-objective comparison, not an isolated E_s intervention. The flat table
 # permits cross-suite inspection without merging physical variables/units.
-"$PYTHON" - "$DAILY_WORK" "$EVALUATE_TEST" "${losses[@]}" <<'PY'
+"$PYTHON" - "$DAILY_WORK" "$EVALUATE_TEST" "$DYNAMICS_VERSION" "$DYNAMICS_INFORMATION" "${losses[@]}" <<'PY'
 import csv, json, sys
 from pathlib import Path
 root=Path(sys.argv[1])
 splits=['validation','test'] if sys.argv[2]=='1' else ['validation']
+version=sys.argv[3]
+information=sys.argv[4]
+prefix=('full-v2-surface-' if information=='off' else 'full-v2-') if version=='v2' else 'full-'
 fields=['statistical_suite','split','model','bridge','candidate_arm','seed',
-        'dynamics_encoder','dynamics_supervision','guide_interaction',
+        'dynamics_encoder','dynamics_version','dynamics_information','dynamics_supervision','guide_interaction',
         'normalized_rmse','wind_speed_rmse_mps','finite_forecast_fraction',
         'total_parameters','trainable_parameters','training_seconds']
 rows=[]
-for loss in sys.argv[3:]:
+for loss in sys.argv[5:]:
     for split in splits:
         name='comparison.test.json' if split=='test' else 'comparison.json'
-        report=json.loads((root/'runs'/('full-'+loss)/name).read_text())
+        report=json.loads((root/'runs'/(prefix+loss)/name).read_text())
         for row in report.get('rows',[]):
             out={key:row.get(key) for key in fields}
             out.update(statistical_suite=loss,split=split,
+                       dynamics_version=row.get('dynamics_version', version if row.get('dynamics_encoder', 'off') != 'off' else 'v1'),
+                       dynamics_information=row.get('dynamics_information', information if row.get('dynamics_encoder', 'off') != 'off' else 'off'),
                        dynamics_supervision=(row.get('dynamics_auxiliary_config') or {}).get('supervision'))
             rows.append(out)
-target=root/'full-matrix-summary.csv'
+summary_name=('full-matrix-v2-surface-summary.csv' if information=='off' else 'full-matrix-v2-summary.csv') if version=='v2' else 'full-matrix-summary.csv'
+target=root/summary_name
 with target.open('w',newline='') as stream:
     writer=csv.DictWriter(stream,fieldnames=fields)
     writer.writeheader();writer.writerows(rows)

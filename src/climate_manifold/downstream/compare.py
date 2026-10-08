@@ -13,7 +13,8 @@ from .statistical_flow import statistical_flow_config_from_payload
 from .conditional_flow import conditional_flow_config_from_payload
 from .protocol import (experiment_contract, validate_experiment, dynamics_identity,
                        guide_interaction_contract, guide_interaction_identity, dynamics_supervision_identity,
-                       validate_dynamics_decoder_contract, dynamics_vector_capacity_matches)
+                       validate_dynamics_decoder_contract, dynamics_vector_capacity_matches,
+                       dynamics_version_identity, dynamics_information_identity)
 from .climode_benchmark import benchmark,write_table
 from .constraint_protocol import constraint_decoder_from_payload, normalize_constraint_contract
 
@@ -70,6 +71,10 @@ def _arm(row):
     name = _base_arm(row)
     encoder, mode = dynamics_identity(row)
     name += ':dynamics='+encoder+':'+mode if encoder != 'off' else ''
+    if dynamics_version_identity(row) == 'v2':
+        name += ':dynamics_version=v2'
+    if dynamics_information_identity(row) != 'off':
+        name += ':dynamics_information='+dynamics_information_identity(row)
     architecture, supervision, latent_weight = dynamics_supervision_identity(row)
     if architecture == 'latent_rollout':
         name += ':auxiliary=latent_rollout:supervision='+supervision+':latent_weight='+format(latent_weight, '.12g')
@@ -79,6 +84,50 @@ def _arm(row):
         if effective == 'off':
             name += ':evaluation_bypass'
     return name
+
+
+def _validate_transition_training(group):
+    """Keep train-only analogue objectives identical within a comparison suite.
+
+    Raw and spatial-only controls have no analogue objective. Dynamics v1 and
+    v2, or different analogue-bank/config choices, require separate suites;
+    their reported RMSEs remain physical forecasts, never latent-loss rankings.
+    """
+    from .pipeline import PredictorConfig
+    from .transition_measure import transition_config_from_payload
+    from .dynamics_information import resolve_dynamics_information
+    enabled = []
+    for row in group:
+        version = row['config'].get('dynamics_version', 'v1')
+        if version not in ('v1', 'v2'):
+            raise ValueError('Invalid dynamics_version')
+        # Historical reports can omit newer predictor fields. Only a declared
+        # transition objective needs its newer checkpoint contract validated.
+        if version == 'v2' or any(row.get(key) is not None for key in (
+                'dynamics_transition_config', 'dynamics_transition_bank')):
+            transition_config_from_payload(row, PredictorConfig(**row['config']))
+            if version == 'v2' and (row.get('a_metadata') or {}).get('config') != row.get('representation_config'):
+                raise ValueError('Transition training data config disagrees with representation_config')
+        information_mode = dynamics_information_identity(row)
+        if information_mode != 'off':
+            expected = resolve_dynamics_information(
+                (row.get('a_metadata') or {}).get('information_metadata'), information_mode,
+                (row.get('representation_config') or {}).get('grid'))
+            if row.get('dynamics_information_contract') != expected:
+                raise ValueError('Invalid dynamics_information_contract')
+        elif row.get('dynamics_information_contract') is not None:
+            raise ValueError('Disabled dynamics information cannot declare dynamics_information_contract')
+        if dynamics_identity(row)[0] != 'off':
+            enabled.append(row)
+    if len({dynamics_version_identity(row) for row in enabled}) > 1:
+        raise ValueError('Unfair comparison: mixed dynamics_version; compare v1 and v2 in separate suites')
+    if len({dynamics_information_identity(row) for row in enabled}) > 1:
+        raise ValueError('Unfair comparison: mixed dynamics_information; compare information inputs in separate suites')
+    if enabled and dynamics_version_identity(enabled[0]) == 'v2':
+        for row in enabled[1:]:
+            for key in ('dynamics_transition_config', 'dynamics_transition_bank'):
+                if row.get(key) != enabled[0].get(key):
+                    raise ValueError('Unfair comparison: mismatched '+key+'; use separate transition suites')
 
 
 def _validate_guide_interactions(group):
@@ -403,6 +452,10 @@ def _validate_weather_provenance(group):
         if provenance['family'] != family:
             raise ValueError('predictor_provenance.family differs from model')
         implementation = row.get('implementation') or ''
+        if dynamics_version_identity(row) == 'v2':
+            if not implementation.startswith('observed_transition_measure_v2+'):
+                raise ValueError('Dynamics v2 requires observed_transition_measure_v2 implementation wrapper')
+            implementation = implementation.removeprefix('observed_transition_measure_v2+')
         if guide_interaction_identity(row)[0] != 'off':
             if not implementation.startswith('two_stage_guide_v1+'):
                 raise ValueError('Enabled guide interaction requires two_stage_guide_v1 implementation wrapper')
@@ -556,6 +609,7 @@ def compare(reports,output,climode_reference_reports=None):
         for key in required:
             if row[key]!=data[0][key]:raise ValueError('Unfair comparison: mismatched '+key)
     same_cases=all(row['successful_origin_times']==data[0]['successful_origin_times'] for row in data)
+    _validate_transition_training(data)
     # Same-family ablations must differ only in their declared representation/objective.
     # Objective weights are reported separately; the common supervision and budget
     # remain part of training_contract.
@@ -615,6 +669,11 @@ def compare(reports,output,climode_reference_reports=None):
             guide_mode=cfg.get('guide_mode','learned') if cfg['bridge']=='guided' else None,
             guide_contract=report.get('guide_contract'),
             dynamics_encoder=dynamics_identity(report)[0], dynamics_mode=dynamics_identity(report)[1],
+            dynamics_version=cfg.get('dynamics_version', 'v1'),
+            dynamics_information=dynamics_information_identity(report),
+            dynamics_information_contract=report.get('dynamics_information_contract'),
+            dynamics_transition_config=report.get('dynamics_transition_config'),
+            dynamics_transition_bank=report.get('dynamics_transition_bank'),
             dynamics_contract=report.get('dynamics_contract'),
             dynamics_auxiliary_config=report.get('dynamics_auxiliary_config'),
             dynamics_decoder_contract=report.get('dynamics_decoder_contract'),
@@ -1095,7 +1154,7 @@ def compare(reports,output,climode_reference_reports=None):
     with output.with_suffix('.csv').open('w',newline='') as stream:
         writer=csv.DictWriter(stream,fieldnames=list(rows[0]));writer.writeheader()
         for row in rows:
-            structured = ('guide_interaction_contract','guide_interaction_evaluation','guide_contract','dynamics_contract','dynamics_auxiliary_config','dynamics_decoder_contract','dynamics_auxiliary_evaluation','dynamics_evaluation_contract','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
+            structured = ('guide_interaction_contract','guide_interaction_evaluation','guide_contract','dynamics_contract','dynamics_auxiliary_config','dynamics_decoder_contract','dynamics_auxiliary_evaluation','dynamics_evaluation_contract','dynamics_information_contract','dynamics_transition_config','dynamics_transition_bank','conditioning','objective_weights','constraint_contract','split_objective_weights','pinn_config','statistical_loss_config','statistical_flow_config','conditional_flow_config')
             writer.writerow({**row,**{key:json.dumps(row[key],sort_keys=True) for key in structured}})
     return result
 
