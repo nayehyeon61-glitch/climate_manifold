@@ -69,6 +69,19 @@ done
 [[ "$DYNAMICS_ONLY_SUITE" == 0 || "$INCLUDE_DYNAMICS_ONLY" == 1 ]] || { echo 'DYNAMICS_ONLY_SUITE=1 requires INCLUDE_DYNAMICS_ONLY=1' >&2; exit 2; }
 [[ "$INCLUDE_DYNAMICS_ONLY" == 0 || ( "$INCLUDE_DYNAMICS" == 1 && "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ) ]] || {
   echo 'INCLUDE_DYNAMICS_ONLY=1 requires INCLUDE_DYNAMICS=1 and INCLUDE_DYNAMICS_CONSISTENCY=1' >&2; exit 2; }
+# Zero-guide capacity controls for every fusion route: T2(Raw, 0) -> M,
+# T2(Raw, 0, 0) -> M and T2(Raw, T1(0, 0)) -> M. With all guides zeroed the
+# forecast cannot depend on E_s/E_d, so one (field) supervision suffices.
+# ZERO_GUIDE_SUITE=1 trains only these arms, as a supplement suite.
+INCLUDE_ZERO_GUIDE_CONTROLS="${INCLUDE_ZERO_GUIDE_CONTROLS:-0}"
+ZERO_GUIDE_SUITE="${ZERO_GUIDE_SUITE:-0}"
+for name in INCLUDE_ZERO_GUIDE_CONTROLS ZERO_GUIDE_SUITE; do
+  [[ "${!name}" == 0 || "${!name}" == 1 ]] || { echo "$name must be 0 or 1" >&2; exit 2; }
+done
+[[ "$ZERO_GUIDE_SUITE" == 0 || "$INCLUDE_ZERO_GUIDE_CONTROLS" == 1 ]] || { echo 'ZERO_GUIDE_SUITE=1 requires INCLUDE_ZERO_GUIDE_CONTROLS=1' >&2; exit 2; }
+[[ "$INCLUDE_ZERO_GUIDE_CONTROLS" == 0 || ( "$INCLUDE_DYNAMICS" == 1 && "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ) ]] || {
+  echo 'INCLUDE_ZERO_GUIDE_CONTROLS=1 requires INCLUDE_DYNAMICS=1 and INCLUDE_DYNAMICS_CONSISTENCY=1' >&2; exit 2; }
+[[ "$DYNAMICS_ONLY_SUITE" == 0 || "$ZERO_GUIDE_SUITE" == 0 ]] || { echo 'Choose one supplement suite' >&2; exit 2; }
 [[ "$INCLUDE_TWO_STAGE_BYPASS" == 0 || "$INCLUDE_TWO_STAGE" == 1 ]] || { echo 'INCLUDE_TWO_STAGE_BYPASS=1 requires INCLUDE_TWO_STAGE=1' >&2; exit 2; }
 [[ "$INCLUDE_DYNAMICS_CONSISTENCY" == 0 || "$INCLUDE_DYNAMICS" == 1 ]] || { echo 'INCLUDE_DYNAMICS_CONSISTENCY=1 requires INCLUDE_DYNAMICS=1' >&2; exit 2; }
 [[ "$INCLUDE_VECTOR_ONLY" == 0 || "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]] || { echo 'INCLUDE_VECTOR_ONLY=1 requires INCLUDE_DYNAMICS_CONSISTENCY=1' >&2; exit 2; }
@@ -233,6 +246,14 @@ if [[ "$INCLUDE_DYNAMICS_ONLY" == 1 ]]; then
   fi
   dynamics_only_settings=(--setting include_dynamics_only 1 --setting dynamics_only_suite "$DYNAMICS_ONLY_SUITE")
 fi
+zero_guide_settings=()
+if [[ "$INCLUDE_ZERO_GUIDE_CONTROLS" == 1 ]]; then
+  if [[ "$ZERO_GUIDE_SUITE" == 1 ]]; then arms=(); fi
+  [[ " ${arms[*]} " == *" guided_zero "* ]] || arms+=(guided_zero)
+  arms+=(guided_dynamics_zero_field)
+  if [[ "$INCLUDE_TWO_STAGE" == 1 ]]; then arms+=(guided_dynamics_two_stage_zero_field); fi
+  zero_guide_settings=(--setting include_zero_guide_controls 1 --setting zero_guide_suite "$ZERO_GUIDE_SUITE")
+fi
 # Capture actual effective arguments, not just exported overrides. Fingerprints
 # cover prepared inputs and code; original daily ERA5 files are never hashed.
 "$PYTHON" -m climate_manifold.fusion_run --archive "$ARCHIVE" --information "$INFO" \
@@ -243,7 +264,7 @@ fi
   --setting include_dynamics_consistency "$INCLUDE_DYNAMICS_CONSISTENCY" --setting consistency_only "$CONSISTENCY_ONLY" \
   --setting include_vector_only "$INCLUDE_VECTOR_ONLY" \
   --setting include_legacy_dynamics "$effective_legacy_dynamics" \
-  "${consistency_settings[@]}" "${dynamics_only_settings[@]}" \
+  "${consistency_settings[@]}" "${dynamics_only_settings[@]}" "${zero_guide_settings[@]}" \
   --setting max_cases "${MAX_CASES:-0}" --setting origin_stride "${ORIGIN_STRIDE:-1}" \
   --setting device "$([[ "$GPU_GUARD" == 1 ]] && echo cuda:0 || echo "${DEVICE:-cpu}")" \
   -- setup "${setup[@]}" statistical "${statistical[@]}" guide "${guide_information[@]}" dynamics "${effective_dynamics[@]}" two_stage "${two_stage[@]}" \
@@ -313,7 +334,7 @@ test_reports=()
 evaluation_options() {
   evaluation=()
   case "$1" in
-    *_dynamics_field|*_dynamics_field_latent|*_dynamics_two_stage_field|*_dynamics_two_stage_field_latent|*_dynamics_vector_only|*_dynamics_two_stage_vector_only|*_dynamics_only_field|*_dynamics_only_field_latent|*_dynamics_only_vector_only)
+    *_dynamics_field|*_dynamics_field_latent|*_dynamics_two_stage_field|*_dynamics_two_stage_field_latent|*_dynamics_vector_only|*_dynamics_two_stage_vector_only|*_dynamics_only_field|*_dynamics_only_field_latent|*_dynamics_only_vector_only|*_dynamics_zero_field|*_dynamics_two_stage_zero_field)
       evaluation=("${consistency_evaluation[@]}") ;;
   esac
 }
@@ -342,6 +363,10 @@ for seed in "${seeds[@]}"; do
         route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned "${consistency[@]}") ;;
       guided_dynamics_two_stage_field|guided_dynamics_two_stage_field_latent|guided_dynamics_two_stage_vector_only)
         route=(--bridge guided --guide-mode learned "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode learned "${two_stage[@]}" "${consistency[@]}") ;;
+      guided_dynamics_zero_field)
+        route=(--bridge guided --guide-mode zero "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode zero "${consistency[@]}") ;;
+      guided_dynamics_two_stage_zero_field)
+        route=(--bridge guided --guide-mode zero "${guide_information[@]}" "${statistical[@]}" "${dynamics[@]}" --dynamics-mode zero "${two_stage[@]}" "${consistency[@]}") ;;
       latent_dynamics_only_field|latent_dynamics_only_field_latent|latent_dynamics_only_vector_only)
         route=(--bridge latent "${statistical[@]}" "${dynamics[@]}" --dynamics-mode only "${consistency[@]}") ;;
       guided_dynamics_only_field|guided_dynamics_only_field_latent|guided_dynamics_only_vector_only)

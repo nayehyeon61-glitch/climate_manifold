@@ -93,7 +93,8 @@ def verify_completed_fits(run, settings):
                                      '_dynamics_two_stage_field', '_dynamics_two_stage_field_latent',
                                      '_dynamics_vector_only', '_dynamics_two_stage_vector_only',
                                      '_dynamics_only_field', '_dynamics_only_field_latent',
-                                     '_dynamics_only_vector_only')):
+                                     '_dynamics_only_vector_only', '_dynamics_zero_field',
+                                     '_dynamics_two_stage_zero_field')):
                         expected_diagnostics = {
                             'version': 'climate_manifold.dynamics_evaluation.v1',
                             'rollout_steps': int(settings['consistency_rollout_steps']),
