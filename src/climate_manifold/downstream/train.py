@@ -63,6 +63,9 @@ def guide_contract(config):
     if contract is not None and config.dynamics_encoder != 'off':
         contract = dict(contract, dynamics=dynamics_contract(config),
                         fusion='raw_spatial_dynamics_residual_fusion_transformer_zero_initialized')
+        if config.dynamics_mode == 'only':
+            contract.update(fusion='raw_dynamics_residual_fusion_transformer_zero_initialized',
+                            spatial_guide_tokens=False, forecast_gradient_to_encoder=False)
     interaction = guide_interaction_contract(config)
     if interaction is not None:
         contract = dict(contract, guide_interaction=interaction,
@@ -846,8 +849,9 @@ def parser():
                    help='Guide-only interaction Transformer block count; independent of --guide-fusion-depth')
     p.add_argument('--dynamics-encoder',choices=['off','conv_gru','temporal_conv'],default='off',
                    help='Optional independent temporal encoder, shared by forecast and future-label auxiliary paths')
-    p.add_argument('--dynamics-mode',choices=['learned','zero'],default='learned',
-                   help='zero blocks temporal content only in the forecast path; auxiliary dynamics training is retained')
+    p.add_argument('--dynamics-mode',choices=['learned','zero','only'],default='learned',
+                   help='zero blocks temporal content only in the forecast path; auxiliary dynamics training is retained; '
+                        'only removes E_s from the forecast path (E_d alone), keeping E_s observed objectives')
     p.add_argument('--dynamics-hidden-dim',type=int,default=32)
     p.add_argument('--dynamics-channels',type=int,default=8)
     p.add_argument('--dynamics-auxiliary-architecture',choices=['direct','latent_rollout'],default='direct',

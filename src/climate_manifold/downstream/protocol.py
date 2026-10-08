@@ -183,7 +183,7 @@ def validate_experiment(config, requested):
         raise ValueError('Guided forecasts require a joint spatial climate_manifold transformer or guide fusion, anchor=none')
     if cfg.get('dynamics_encoder', 'off') != 'off':
         if (cfg.get('dynamics_encoder') not in ('conv_gru', 'temporal_conv')
-                or cfg.get('dynamics_mode', 'learned') not in ('learned', 'zero')
+                or cfg.get('dynamics_mode', 'learned') not in ('learned', 'zero', 'only')
                 or cfg.get('training_mode') != 'joint' or cfg.get('latent_layout') != 'spatial'
                 or cfg.get('representation', 'climate_manifold') != 'climate_manifold'
                 or cfg.get('anchor') != 'none'

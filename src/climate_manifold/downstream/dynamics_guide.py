@@ -135,8 +135,8 @@ class LatentDynamicsAdapter(nn.Module):
 
     def forward(self, spatial_history, dynamics_history, mode='learned'):
         _history(spatial_history, math.prod(self.spatial_grid), 'Spatial history')
-        if mode not in ('learned', 'zero'):
-            raise ValueError('Dynamics mode must be learned or zero')
+        if mode not in ('learned', 'zero', 'only'):
+            raise ValueError('Dynamics mode must be learned, zero or only')
         batch, steps = spatial_history.shape[:2]
         shape = (batch, steps, math.prod(self.dynamics_grid))
         if mode == 'zero':
@@ -148,7 +148,9 @@ class LatentDynamicsAdapter(nn.Module):
         if correction.shape[-2:] != self.spatial_grid[1:]:
             correction = F.interpolate(correction, size=self.spatial_grid[1:],
                                        mode='bilinear', align_corners=False)
-        return spatial_history + correction.reshape(batch, steps, -1)
+        correction = correction.reshape(batch, steps, -1)
+        # only: P(E_d) replaces the E_s latent as the forecast model input.
+        return correction if mode == 'only' else spatial_history + correction
 
 
 class DynamicsAuxiliaryHead(nn.Module):

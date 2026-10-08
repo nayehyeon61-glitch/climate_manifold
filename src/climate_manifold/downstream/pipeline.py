@@ -83,8 +83,8 @@ class PredictorConfig:
             raise ValueError('Dynamics auxiliary architecture must be direct or latent_rollout')
         if self.dynamics_auxiliary_architecture != 'direct' and self.dynamics_encoder == 'off':
             raise ValueError('Latent rollout auxiliary architecture requires an enabled dynamics encoder')
-        if self.dynamics_mode not in ('learned', 'zero'):
-            raise ValueError('Dynamics mode must be learned or zero')
+        if self.dynamics_mode not in ('learned', 'zero', 'only'):
+            raise ValueError('Dynamics mode must be learned, zero or only')
         if any(isinstance(v, bool) or not isinstance(v, int) or v < 1
                for v in (self.dynamics_hidden_dim, self.dynamics_channels)):
             raise ValueError('Dynamics widths must be positive integers')
@@ -96,6 +96,10 @@ class PredictorConfig:
                 or self.bridge not in ('latent', 'guided')
                 or self.bridge == 'guided' and self.guide_architecture != 'fusion'):
             raise ValueError('Dynamics requires joint spatial latent or guided fusion forecasting')
+        # only: the forecast path sees E_d alone; E_s keeps its observed objectives.
+        if self.dynamics_mode == 'only' and (self.guide_mode != 'learned'
+                                             or self.guide_interaction != 'off'):
+            raise ValueError('Dynamics-only forecasting requires guide_mode=learned and guide_interaction=off')
         if self.model not in ('mlp','neural_ode','climode','persistence','transformer',*SPATIAL_IMPLEMENTATIONS):
             raise ValueError('Unknown downstream model')
         if self.bridge not in ManifoldBridge.MODES or self.anchor not in ('none','origin'):

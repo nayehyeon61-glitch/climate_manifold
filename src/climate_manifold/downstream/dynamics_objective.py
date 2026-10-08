@@ -27,10 +27,15 @@ def dynamics_contract(config):
         'integration': ('spatial_latent_plus_projected_dynamics_history'
                         if config.bridge == 'latent' else 'raw_spatial_dynamics_token_fusion'),
         'future_targets_input': False, 'stochastic_sampling': False,
-        'forecast_gradient_to_dynamics_encoder': config.dynamics_mode == 'learned',
+        'forecast_gradient_to_dynamics_encoder': config.dynamics_mode in ('learned', 'only'),
         'auxiliary_head': 'independent_lead_conditioned_future_surface_decoder',
         'auxiliary_inference_used': False,
     }
+    if config.dynamics_mode == 'only':
+        result.update({
+            'integration': ('projected_dynamics_history_only' if config.bridge == 'latent'
+                            else 'raw_dynamics_token_fusion_without_spatial_guide'),
+            'spatial_forecast_input': False})
     if getattr(config, 'dynamics_auxiliary_architecture', 'direct') == 'latent_rollout':
         result.update({
             'version': 'climate_manifold.dual_dynamics.v2',

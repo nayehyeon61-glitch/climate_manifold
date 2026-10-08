@@ -43,7 +43,7 @@ def _label(row):
         route += ' / Zero guide'
     encoder, dynamics_mode = dynamics_identity(row)
     if encoder != 'off':
-        route += ' / '+('Zero dynamics' if dynamics_mode == 'zero' else 'Dynamics')+' ('+encoder+')'
+        route += ' / '+{'zero': 'Zero dynamics', 'only': 'Dynamics only'}.get(dynamics_mode, 'Dynamics')+' ('+encoder+')'
     architecture, supervision, weight = dynamics_supervision_identity(row)
     if architecture == 'latent_rollout':
         label = {'field':'Field only', 'field_latent':'Field + latent', 'vector_only':'Vector only'}[supervision]

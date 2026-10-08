@@ -38,8 +38,11 @@ class GuidedFusion(nn.Module):
             raise ValueError('Hidden width must be divisible by attention heads')
         if guide_mode not in ('learned', 'zero'):
             raise ValueError('Guide mode must be learned or zero')
-        if dynamics_mode not in ('learned', 'zero'):
-            raise ValueError('Dynamics mode must be learned or zero')
+        if dynamics_mode not in ('learned', 'zero', 'only'):
+            raise ValueError('Dynamics mode must be learned, zero or only')
+        if dynamics_mode == 'only' and (dynamics_grid is None or guide_mode != 'learned'
+                                        or guide_interaction != 'off'):
+            raise ValueError('Dynamics-only fusion requires dynamics, a learned guide mode and no guide interaction')
         if guide_interaction not in ('off', 'transformer'):
             raise ValueError('Guide interaction must be off or transformer')
         if (isinstance(guide_interaction_depth, bool)
@@ -121,10 +124,12 @@ class GuidedFusion(nn.Module):
               or not torch.isfinite(guide_history).all()):
             raise ValueError('Learned guide requires the configured finite observed guide history')
         observed = history.reshape(batch, self.history_steps, *self.raw_grid)
-        guide = guide_history.reshape(batch, self.history_steps, *self.guide_grid)
-        chunks = [
-            self._patch_tokens(observed, self.raw_embed, self.raw_coordinates, 0, self.history_age_days),
-            self._patch_tokens(guide, self.guide_embed, self.guide_coordinates, 1, self.history_age_days)]
+        chunks = [self._patch_tokens(observed, self.raw_embed, self.raw_coordinates, 0, self.history_age_days)]
+        # only: T2 sees raw and E_d tokens; spatial guide tokens are removed entirely.
+        if self.dynamics_mode != 'only':
+            guide = guide_history.reshape(batch, self.history_steps, *self.guide_grid)
+            chunks.append(self._patch_tokens(guide, self.guide_embed, self.guide_coordinates,
+                                             1, self.history_age_days))
         if self.dynamics_grid is None:
             if dynamics_history is not None:
                 raise ValueError('Dynamics-disabled fusion cannot receive dynamics history')
