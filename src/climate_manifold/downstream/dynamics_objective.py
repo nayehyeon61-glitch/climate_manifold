@@ -53,6 +53,20 @@ def dynamics_contract(config):
             'transition_inference_used': False,
             'inverse_physical_solver': False,
         })
+    if getattr(config, 'dynamics_information', 'off') == 'pressure_terrain':
+        from .dynamics_information import dynamics_information_counts, dynamics_information_fields
+        fields = dynamics_information_fields('pressure_terrain')
+        dynamic = dynamics_information_counts('pressure_terrain')[0]
+        result.update({
+            'input': 'observed_raw_and_aligned_pressure_level_history_with_fixed_terrain',
+            'information_fields': fields,
+            'information_dynamic_fields': fields[:dynamic],
+            'information_static_fields': fields[dynamic:],
+            'information_time_differences': 'pressure_fields_only_per_physical_day',
+            'information_temporal_alignment': 'actual_observed_timestamps_no_origin_replication',
+            'future_information_input': False,
+            'future_information_target': 'transition_relation_and_optional_detached_latent_teacher_only',
+        })
     if getattr(config, 'dynamics_information', 'off') == 'geopotential_terrain':
         result.update({
             'input': 'observed_raw_and_aligned_geopotential_history_with_fixed_terrain',

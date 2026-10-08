@@ -10,12 +10,12 @@ export PYTHON
 export DYNAMICS_VERSION="${DYNAMICS_VERSION:-v1}"
 case "$DYNAMICS_VERSION" in v1|v2) ;; *) echo 'DYNAMICS_VERSION must be v1 or v2' >&2; exit 2;; esac
 export DYNAMICS_INFORMATION="${DYNAMICS_INFORMATION:-auto}"
-case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
+case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain|pressure_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
 if [[ "$DYNAMICS_INFORMATION" == auto ]]; then
   if [[ "$DYNAMICS_VERSION" == v2 ]]; then DYNAMICS_INFORMATION=geopotential_terrain
   else DYNAMICS_INFORMATION=off; fi
 fi
-[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" == off ]] || { echo 'DYNAMICS_INFORMATION=geopotential_terrain requires DYNAMICS_VERSION=v2' >&2; exit 2; }
+[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" == off ]] || { echo "DYNAMICS_INFORMATION=$DYNAMICS_INFORMATION requires DYNAMICS_VERSION=v2" >&2; exit 2; }
 suite_prefix=full
 if [[ "$DYNAMICS_VERSION" == v2 ]]; then
   suite_prefix=full-v2

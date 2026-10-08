@@ -64,15 +64,17 @@ class DynamicsGuide(nn.Module):
         _positive_integer(hidden, 'Hidden width')
         if kind not in ('conv_gru', 'temporal_conv'):
             raise ValueError('Dynamics kind must be conv_gru or temporal_conv')
-        if information_mode not in ('off', 'geopotential_terrain'):
-            raise ValueError('Dynamics information must be off or geopotential_terrain')
+        from .dynamics_information import dynamics_information_counts, dynamics_information_fields
         self.information_mode = information_mode
-        self.information_fields = (() if information_mode == 'off' else
-                                   ('z500', 'z850', 'terrain_height'))
+        self.information_fields = tuple(dynamics_information_fields(information_mode))
+        self.information_dynamic, self.information_static = dynamics_information_counts(information_mode)
         self.information_dimension = len(self.information_fields)*math.prod(self.raw_grid[1:])
-        self.stem_channels = 2*self.raw_grid[0]+1+(5 if self.information_fields else 0)
-        if self.information_fields:
+        # Each evolving field adds its value and per-day change; static fields add one channel.
+        self.stem_channels = (2*self.raw_grid[0]+1+2*self.information_dynamic+self.information_static)
+        if information_mode == 'geopotential_terrain':
             self.implementation_variant = 'causal_observed_dynamics_guide_geopotential_terrain_v2'
+        elif information_mode != 'off':
+            self.implementation_variant = 'causal_observed_dynamics_guide_'+information_mode+'_v2'
         if (isinstance(history_dt_hours, bool) or not math.isfinite(history_dt_hours)
                 or history_dt_hours <= 0):
             raise ValueError('History spacing must be finite and positive')
@@ -116,19 +118,20 @@ class DynamicsGuide(nn.Module):
                      'Dynamics information history', self.history_steps)
             if information_history.shape[0] != batch:
                 raise ValueError('Dynamics raw and information history batches disagree')
-            information_fields = information_history.reshape(batch, steps, 3, *self.raw_grid[1:])
-            terrain = information_fields[:, :, 2:]
+            count, dynamic = len(self.information_fields), self.information_dynamic
+            information_fields = information_history.reshape(batch, steps, count, *self.raw_grid[1:])
+            terrain = information_fields[:, :, dynamic:]
             if not torch.equal(terrain, terrain[:, :1].expand_as(terrain)):
-                raise ValueError('Dynamics terrain_height must be fixed over the observed history')
+                raise ValueError('Dynamics static terrain fields must be fixed over the observed history')
             information_pooled = F.adaptive_avg_pool2d(
-                information_fields.reshape(batch*steps, 3, *self.raw_grid[1:]),
-                (height, width)).reshape(batch, steps, 3, height, width)
-            geopotential = information_pooled[:, :, :2]
+                information_fields.reshape(batch*steps, count, *self.raw_grid[1:]),
+                (height, width)).reshape(batch, steps, count, height, width)
+            geopotential = information_pooled[:, :, :dynamic]
             geopotential_changes = torch.cat((torch.zeros_like(geopotential[:, :1]),
                 (geopotential[:, 1:]-geopotential[:, :-1])/days), dim=1)
             # Two evolving geopotential fields have physical-day differences;
             # terrain is a fixed spatial condition and has no tendency channel.
-            inputs.extend((geopotential, geopotential_changes, information_pooled[:, :, 2:]))
+            inputs.extend((geopotential, geopotential_changes, information_pooled[:, :, dynamic:]))
         elif information_history is not None:
             raise ValueError('Dynamics information history was supplied while its mode is off')
         embedded = self.stem(torch.cat(inputs, dim=2).reshape(

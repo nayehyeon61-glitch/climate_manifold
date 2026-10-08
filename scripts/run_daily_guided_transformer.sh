@@ -9,9 +9,9 @@ case "$SUITE" in guided_transformer|manifold_fusion) ;; *) echo 'Unknown SUITE' 
 DYNAMICS_VERSION="${DYNAMICS_VERSION:-v1}"
 case "$DYNAMICS_VERSION" in v1|v2) ;; *) echo 'DYNAMICS_VERSION must be v1 or v2' >&2; exit 2;; esac
 DYNAMICS_INFORMATION="${DYNAMICS_INFORMATION:-auto}"
-case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
-[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" != geopotential_terrain ]] || {
-  echo 'DYNAMICS_INFORMATION=geopotential_terrain requires DYNAMICS_VERSION=v2' >&2; exit 2;
+case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain|pressure_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
+[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" == off || "$DYNAMICS_INFORMATION" == auto ]] || {
+  echo "DYNAMICS_INFORMATION=$DYNAMICS_INFORMATION requires DYNAMICS_VERSION=v2" >&2; exit 2;
 }
 if [[ "$DYNAMICS_VERSION" == v2 ]]; then
   [[ "$SUITE" == manifold_fusion && "${INCLUDE_DYNAMICS:-0}" == 1 ]] || {
@@ -117,7 +117,8 @@ if [[ "$RUN_PREFLIGHT_TESTS" == 1 ]]; then
   env "${transition_environment[@]}" CUDA_VISIBLE_DEVICES="" GPU_GUARD=0 OMP_NUM_THREADS=1 DYNAMICS_VERSION=v1 DYNAMICS_INFORMATION=auto \
     INCLUDE_DYNAMICS=0 INCLUDE_LEGACY_DYNAMICS=1 INCLUDE_ZERO_DYNAMICS=1 INCLUDE_TWO_STAGE=0 \
     INCLUDE_TWO_STAGE_BYPASS=0 GUIDE_INTERACTION_DEPTH=1 \
-    INCLUDE_DYNAMICS_CONSISTENCY=0 INCLUDE_VECTOR_ONLY=0 CONSISTENCY_ONLY=0 "$PYTHON" -m pytest -q \
+    INCLUDE_DYNAMICS_CONSISTENCY=0 INCLUDE_VECTOR_ONLY=0 CONSISTENCY_ONLY=0 DYNAMICS_ARMS_ONLY=0 \
+    "$PYTHON" -m pytest -q \
     "${preflight[@]}" --basetemp "$test_tmp" -o "cache_dir=$DAILY_WORK/cache/pytest" \
     2>&1 | tee "$DAILY_WORK/logs/tests-$(date +%Y%m%d-%H%M%S).log"
 fi

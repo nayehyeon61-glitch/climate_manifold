@@ -87,8 +87,9 @@ class PredictorConfig:
             raise ValueError('Dynamics version must be v1 or v2')
         if self.dynamics_version == 'v2' and self.dynamics_encoder == 'off':
             raise ValueError('Dynamics version v2 requires an enabled dynamics encoder')
-        if self.dynamics_information not in ('off', 'geopotential_terrain'):
-            raise ValueError('Dynamics information must be off or geopotential_terrain')
+        from .dynamics_information import DYNAMICS_INFORMATION_MODES
+        if self.dynamics_information not in DYNAMICS_INFORMATION_MODES:
+            raise ValueError('Dynamics information must be one of '+', '.join(DYNAMICS_INFORMATION_MODES))
         if self.dynamics_information != 'off' and (
                 self.dynamics_version != 'v2' or self.dynamics_encoder == 'off'):
             raise ValueError('Dynamics geopotential/terrain information requires an enabled v2 encoder')

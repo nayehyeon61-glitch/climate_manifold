@@ -16,8 +16,9 @@ import numpy as np
 import torch
 
 from ..temporal_supervision import area_weights
-from .dynamics_information import (DYNAMICS_INFORMATION_FIELDS, DYNAMICS_INFORMATION_MODES,
-                                   resolve_dynamics_information, select_dynamics_information)
+from .dynamics_information import (DYNAMICS_INFORMATION_MODES, dynamics_information_counts,
+                                   dynamics_information_fields, resolve_dynamics_information,
+                                   select_dynamics_information)
 
 _VERSION = 'climate_manifold.transition_measure.v1'
 _BANK_VERSION = 'climate_manifold.transition_bank.v1'
@@ -53,8 +54,7 @@ def validate_transition_config(config):
         _integer(config[key], key, 2 if key == 'neighbors' else 0 if key == 'exclusion_steps' else 1)
     _integer(config['forecast_steps'], 'forecast_steps')
     mode = config['information_mode']
-    if mode not in DYNAMICS_INFORMATION_MODES or config['information_fields'] != (
-            list(DYNAMICS_INFORMATION_FIELDS) if mode == 'geopotential_terrain' else []):
+    if mode not in DYNAMICS_INFORMATION_MODES or config['information_fields'] != dynamics_information_fields(mode):
         raise ValueError('Invalid transition dynamics information contract')
     if config['bank_size'] < config['neighbors']:
         raise ValueError('Transition bank_size must be >= neighbors')
@@ -85,7 +85,7 @@ def make_transition_config(args, predictor_config):
         raise ValueError('Transition v2 requires an enabled dynamics encoder')
     mode = getattr(predictor_config, 'dynamics_information', 'off')
     return validate_transition_config({**_SEMANTICS, 'forecast_steps': getattr(args, 'horizon_steps', None),
-        'information_mode': mode, 'information_fields': list(DYNAMICS_INFORMATION_FIELDS) if mode == 'geopotential_terrain' else [], **{
+        'information_mode': mode, 'information_fields': dynamics_information_fields(mode), **{
         key: _DEFAULTS[key] if explicit[key] is None else explicit[key] for key in _DEFAULTS}})
 
 
@@ -244,10 +244,12 @@ class TransitionBank:
         self.information_contract = resolve_dynamics_information(
             data.get('information_metadata'), self.config['information_mode'], a_config.grid)
         self.information = None
+        self._info_count = len(self.config['information_fields'])
+        self._info_dynamic = dynamics_information_counts(self.config['information_mode'])[0]
         if self.information_contract is not None:
             source = data.get('information')
             if source is None:
-                raise ValueError('Transition geopotential_terrain requires normalized information archive')
+                raise ValueError('Transition dynamics information requires normalized information archive')
             chunks = [select_dynamics_information(
                 source[first:min(first+256, prefix)], data['information_metadata'],
                 self.config['information_mode'], raw_grid=a_config.grid)
@@ -255,7 +257,7 @@ class TransitionBank:
             selected = np.concatenate(chunks, axis=0).astype(np.float32, copy=False)
             self.information = torch.from_numpy(selected.copy())
             cells = math.prod(a_config.grid[1:])
-            terrain = self.information[:, 2*cells:]
+            terrain = self.information[:, self._info_dynamic*cells:]
             if not torch.equal(terrain, terrain[:1].expand_as(terrain)):
                 raise ValueError('Dynamics terrain must be constant across training timestamps')
         channels, height, width = a_config.grid
@@ -278,10 +280,11 @@ class TransitionBank:
         if self.information is not None:
             z_pooled = torch.cat([self.describe_geopotential(self.information[i:i+512])
                                   for i in range(0, prefix, 512)])
-            # Equal field weights over the raw channels and two geopotential
-            # heights. Static terrain conditions E_d, never a temporal target.
-            pooled = torch.cat((pooled*math.sqrt(channels/(channels+2)),
-                                z_pooled*math.sqrt(2/(channels+2))), dim=-1)
+            # Equal field weights over the raw channels and the evolving
+            # information fields. Static terrain conditions E_d, never a temporal target.
+            n = self._info_dynamic
+            pooled = torch.cat((pooled*math.sqrt(channels/(channels+n)),
+                                z_pooled*math.sqrt(n/(channels+n))), dim=-1)
         self.current_descriptors = pooled[self.origins]
         history_indices = self.starts[:, None]+torch.arange(a_config.history_steps)[None]*a_config.history_stride
         future_steps = self.config['forecast_steps']
@@ -321,13 +324,16 @@ class TransitionBank:
     def describe_geopotential(self, information):
         information = torch.as_tensor(information).detach().to(device='cpu', dtype=torch.float32)
         height, width = self.a_config.grid[1:]
-        if information.shape[-1] != 3*height*width or not torch.isfinite(information[..., :2*height*width]).all():
-            raise ValueError('Transition dynamics information must contain finite z500,z850,terrain')
+        count, dynamic = self._info_count, self._info_dynamic
+        if (information.shape[-1] != count*height*width
+                or not torch.isfinite(information[..., :dynamic*height*width]).all()):
+            raise ValueError('Transition dynamics information must contain finite '
+                             + ','.join(self.config['information_fields']))
         prefix = information.shape[:-1]
-        z = information.reshape(-1, 3, height, width)[:, :2]
+        z = information.reshape(-1, count, height, width)[:, :dynamic]
         coarse = torch.stack([(z[..., y, x]*weights).sum((-2, -1))
                               for y, x, weights in self._cells], dim=-1)
-        metric = self._metric_sqrt*math.sqrt(self.a_config.grid[0]/2)
+        metric = self._metric_sqrt*math.sqrt(self.a_config.grid[0]/dynamic)
         return (coarse*metric).reshape(*prefix, -1)
 
     def _query_descriptors(self, batch, *, future=False):
@@ -342,8 +348,8 @@ class TransitionBank:
                 or info.shape[1] < expected_time or not future and info.shape[1] != expected_time):
             raise ValueError('Transition requires matching observed/future dynamics information: '+key)
         z = self.describe_geopotential(info[:, :expected_time])
-        channels = self.a_config.grid[0]
-        return torch.cat((raw*math.sqrt(channels/(channels+2)), z*math.sqrt(2/(channels+2))), dim=-1)
+        channels, n = self.a_config.grid[0], self._info_dynamic
+        return torch.cat((raw*math.sqrt(channels/(channels+n)), z*math.sqrt(n/(channels+n))), dim=-1)
 
     def _query_starts(self, batch):
         times = batch.get('origin_time_ns')

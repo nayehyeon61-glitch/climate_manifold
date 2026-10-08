@@ -13,16 +13,41 @@ import numpy as np
 import torch
 
 DYNAMICS_INFORMATION_FIELDS = ('z500', 'z850', 'terrain_height')
-DYNAMICS_INFORMATION_MODES = ('off', 'geopotential_terrain')
+# (name, unit, kind); dynamic fields first, then static spatial conditions.
+_MODE_FIELDS = {
+    'geopotential_terrain': (('z500', 'm', 'dynamic'), ('z850', 'm', 'dynamic'),
+                             ('terrain_height', 'm', 'static')),
+    # Every information-archive channel: all pressure-level fields and both terrain conditions.
+    'pressure_terrain': (('z850', 'm', 'dynamic'), ('z500', 'm', 'dynamic'), ('z250', 'm', 'dynamic'),
+                         ('u850', 'm/s', 'dynamic'), ('v850', 'm/s', 'dynamic'),
+                         ('t850', 'K', 'dynamic'), ('t500', 'K', 'dynamic'),
+                         ('terrain_height', 'm', 'static'), ('terrain_slope', '1', 'static')),
+}
+DYNAMICS_INFORMATION_MODES = ('off', *_MODE_FIELDS)
+
+
+def dynamics_information_fields(mode):
+    """Ordered field names for a mode (empty for off)."""
+    if mode not in DYNAMICS_INFORMATION_MODES:
+        raise ValueError('Dynamics information must be one of '+', '.join(DYNAMICS_INFORMATION_MODES))
+    return [] if mode == 'off' else [name for name, _, _ in _MODE_FIELDS[mode]]
+
+
+def dynamics_information_counts(mode):
+    """(dynamic, static) channel counts for a mode."""
+    if mode == 'off':
+        return 0, 0
+    kinds = [kind for _, _, kind in _MODE_FIELDS[mode]]
+    return kinds.count('dynamic'), kinds.count('static')
 
 
 def resolve_dynamics_information(metadata, mode, raw_grid=None):
     if mode not in DYNAMICS_INFORMATION_MODES:
-        raise ValueError('Dynamics information must be off or geopotential_terrain')
+        raise ValueError('Dynamics information must be one of '+', '.join(DYNAMICS_INFORMATION_MODES))
     if mode == 'off':
         return None
     if not isinstance(metadata, dict):
-        raise ValueError('Dynamics geopotential_terrain requires information metadata')
+        raise ValueError('Dynamics '+mode+' requires information metadata')
     variables, shape, grid = metadata.get('variables'), metadata.get('shape'), metadata.get('grid')
     if (not isinstance(variables, list) or not isinstance(shape, (list, tuple)) or len(shape) != 3
             or any(isinstance(i, bool) or not isinstance(i, Integral) or i < 1 for i in shape)
@@ -37,18 +62,22 @@ def resolve_dynamics_information(metadata, mode, raw_grid=None):
     names = [variable.get('name') for variable in variables]
     if len(names) != len(set(names)):
         raise ValueError('Duplicate dynamics information channel names')
-    missing = set(DYNAMICS_INFORMATION_FIELDS)-set(names)
+    specs = _MODE_FIELDS[mode]
+    fields = [name for name, _, _ in specs]
+    missing = set(fields)-set(names)
     if missing:
         raise ValueError('Missing required dynamics information fields: '+', '.join(sorted(missing)))
-    indices = [names.index(name) for name in DYNAMICS_INFORMATION_FIELDS]
-    for name, index in zip(DYNAMICS_INFORMATION_FIELDS, indices):
+    indices = [names.index(name) for name in fields]
+    for (name, unit, kind), index in zip(specs, indices):
         variable = variables[index]
-        kind = 'static' if name == 'terrain_height' else 'dynamic'
-        if variable.get('unit') != 'm' or variable.get('kind') != kind:
-            raise ValueError(f'Dynamics information {name} requires canonical metres and kind={kind}')
-    return {'mode': mode, 'fields': list(DYNAMICS_INFORMATION_FIELDS), 'indices': indices,
-            'grid': [3, *shape[1:]], 'dynamic_indices': [0, 1], 'static_indices': [2],
-            'units': ['m', 'm', 'm']}
+        if variable.get('unit') != unit or variable.get('kind') != kind:
+            units = 'canonical metres' if unit == 'm' else f'unit={unit}'
+            raise ValueError(f'Dynamics information {name} requires {units} and kind={kind}')
+    dynamic, static = dynamics_information_counts(mode)
+    return {'mode': mode, 'fields': fields, 'indices': indices,
+            'grid': [len(fields), *shape[1:]], 'dynamic_indices': list(range(dynamic)),
+            'static_indices': list(range(dynamic, dynamic+static)),
+            'units': [unit for _, unit, _ in specs]}
 
 
 def select_dynamics_information(values, metadata, mode, *, raw_grid=None):

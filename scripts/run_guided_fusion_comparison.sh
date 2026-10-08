@@ -48,12 +48,12 @@ DYNAMICS_VERSION="${DYNAMICS_VERSION:-v1}"
 case "$DYNAMICS_VERSION" in v1|v2) ;; *) echo 'DYNAMICS_VERSION must be v1 or v2' >&2; exit 2;; esac
 [[ "$DYNAMICS_VERSION" == v1 || "$INCLUDE_DYNAMICS" == 1 ]] || { echo 'DYNAMICS_VERSION=v2 requires INCLUDE_DYNAMICS=1' >&2; exit 2; }
 DYNAMICS_INFORMATION="${DYNAMICS_INFORMATION:-auto}"
-case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
+case "$DYNAMICS_INFORMATION" in auto|off|geopotential_terrain|pressure_terrain) ;; *) echo 'Unknown DYNAMICS_INFORMATION' >&2; exit 2;; esac
 if [[ "$DYNAMICS_INFORMATION" == auto ]]; then
   if [[ "$DYNAMICS_VERSION" == v2 ]]; then DYNAMICS_INFORMATION=geopotential_terrain
   else DYNAMICS_INFORMATION=off; fi
 fi
-[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" == off ]] || { echo 'DYNAMICS_INFORMATION=geopotential_terrain requires DYNAMICS_VERSION=v2' >&2; exit 2; }
+[[ "$DYNAMICS_VERSION" == v2 || "$DYNAMICS_INFORMATION" == off ]] || { echo "DYNAMICS_INFORMATION=$DYNAMICS_INFORMATION requires DYNAMICS_VERSION=v2" >&2; exit 2; }
 INCLUDE_LEGACY_DYNAMICS="${INCLUDE_LEGACY_DYNAMICS:-1}"
 INCLUDE_ZERO_DYNAMICS="${INCLUDE_ZERO_DYNAMICS:-1}"
 INCLUDE_DYNAMICS_CONSISTENCY="${INCLUDE_DYNAMICS_CONSISTENCY:-0}"
@@ -262,6 +262,18 @@ if [[ "$INCLUDE_DYNAMICS_CONSISTENCY" == 1 ]]; then
     if [[ "$INCLUDE_TWO_STAGE" == 1 ]]; then arms+=(guided_dynamics_two_stage_vector_only); fi
   fi
 fi
+# DYNAMICS_ARMS_ONLY=1 keeps only E_d arms: a supplement suite whose non-dynamics
+# routes are identical to (and reported from) a completed suite with the same settings.
+DYNAMICS_ARMS_ONLY="${DYNAMICS_ARMS_ONLY:-0}"
+[[ "$DYNAMICS_ARMS_ONLY" == 0 || "$DYNAMICS_ARMS_ONLY" == 1 ]] || { echo 'DYNAMICS_ARMS_ONLY must be 0 or 1' >&2; exit 2; }
+dynamics_arms_settings=()
+if [[ "$DYNAMICS_ARMS_ONLY" == 1 ]]; then
+  [[ "$INCLUDE_DYNAMICS" == 1 ]] || { echo 'DYNAMICS_ARMS_ONLY=1 requires INCLUDE_DYNAMICS=1' >&2; exit 2; }
+  kept=()
+  for arm in "${arms[@]}"; do [[ "$arm" != *_dynamics* ]] || kept+=("$arm"); done
+  arms=("${kept[@]}")
+  dynamics_arms_settings=(--setting dynamics_arms_only 1)
+fi
 # Capture actual effective arguments, not just exported overrides. Fingerprints
 # cover prepared inputs and code; original daily ERA5 files are never hashed.
 "$PYTHON" -m climate_manifold.fusion_run --archive "$ARCHIVE" --information "$INFO" \
@@ -274,7 +286,7 @@ fi
   --setting include_legacy_dynamics "$effective_legacy_dynamics" \
   --setting dynamics_version "$DYNAMICS_VERSION" \
   --setting dynamics_information "$DYNAMICS_INFORMATION" \
-  "${consistency_settings[@]}" \
+  "${consistency_settings[@]}" "${dynamics_arms_settings[@]}" \
   --setting max_cases "${MAX_CASES:-0}" --setting origin_stride "${ORIGIN_STRIDE:-1}" \
   --setting device "$([[ "$GPU_GUARD" == 1 ]] && echo cuda:0 || echo "${DEVICE:-cpu}")" \
   -- setup "${setup[@]}" statistical "${statistical[@]}" guide "${guide_information[@]}" dynamics "${effective_dynamics[@]}" two_stage "${two_stage[@]}" \

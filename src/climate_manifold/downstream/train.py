@@ -828,7 +828,12 @@ def train(args):
             'E_d observes co-located raw surface history and actual time-aligned z500/z850 '
             'history plus fixed terrain_height; geopotential receives per-day finite differences, '
             'terrain is a static spatial condition with no time derivative; future geopotential '
-            'is label-only for transition relations and detached future latent targets')
+            'is label-only for transition relations and detached future latent targets'
+            if config.dynamics_information=='geopotential_terrain' else
+            'E_d observes co-located raw surface history and actual time-aligned pressure-level history '
+            '(z850,z500,z250,u850,v850,t850,t500) plus fixed terrain_height/terrain_slope; pressure fields '
+            'receive per-day finite differences, terrain fields are static spatial conditions with no time '
+            'derivative; future pressure fields are label-only for transition relations and detached future latent targets')
     output.parent.mkdir(parents=True,exist_ok=True)
     torch.save(payload,output)
     write_json(output.with_suffix('.manifest.json'),{'checkpoint_sha256':digest(output),'format':FORMAT})
@@ -919,8 +924,10 @@ def parser():
                    help='Optional independent temporal encoder, shared by forecast and future-label auxiliary paths')
     p.add_argument('--dynamics-version',choices=['v1','v2'],default='v1',
                    help='v2 adds training-only observed-transition distribution supervision to the same E_d')
-    p.add_argument('--dynamics-information',choices=['off','geopotential_terrain'],default=None,
-                   help='v2 default: aligned z500,z850 and fixed terrain history; off is an explicit raw-only ablation')
+    p.add_argument('--dynamics-information',choices=['off','geopotential_terrain','pressure_terrain'],default=None,
+                   help='v2 default: aligned z500,z850 and fixed terrain history; pressure_terrain: all archive '
+                        'pressure fields (z850,z500,z250,u850,v850,t850,t500) plus terrain height/slope; '
+                        'off is an explicit raw-only ablation')
     for name in ('weight','endpoint-temperature','relation-temperature','latent-temperature',
                  'history-weight','future-weight','geometry-weight'):
         p.add_argument('--transition-'+name,type=float,default=None,
